@@ -202,6 +202,7 @@ enum BrowserManagerLifecycleTests {
         await snapshotCase()
         loadingTabCase()
         themeDataCase()
+        boostAfterLateAddressCase()
         await sleepCase("an unchanged idle page sleeps", shouldSleep: true) { _, _ in }
         await sleepCase("loading started while the probe was pending stays awake") { _, rt in rt.browser.setLoading(true) }
         await sleepCase("a completed same-URL reload invalidates the old probe") { _, rt in
@@ -1109,6 +1110,56 @@ enum BrowserManagerLifecycleTests {
         expect(rt.probeWork == nil && rt.snapshotWork == nil, "unloading drops the pending probe")
         manager.closeAll()
     }
+
+    /// A boosted site's page opened from a link through a redirect (google.com/url?q=…) or as a popup gets its
+    /// boost (#869): Chromium reports the commit before the page's new address, so the page was styled for the
+    /// redirect's site (or no site at all) and the boosted site's address that came right after was ignored.
+    // promise: #869
+    @MainActor
+    private static func boostAfterLateAddressCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        // By the page's host, as BoostStore matches a boost's site.
+        BrowserManager.boostFor = { url, engineTints in
+            switch URL(string: url)?.host {
+            case "example.test": (css: "h1 { color: red }", js: "window.boosted = 1", tint: engineTints ? "0.7,0.125,0.27,0.5,0.108,0.838" : nil)
+            case "www.google.com": (css: "p { color: blue }", js: "", tint: nil)
+            default: nil
+            }
+        }
+        // The boost stylesheet a page was last given.
+        func boostSheet(_ page: CraBrowser) -> String? { page.isolatedParams.last { $0.contains("__craBoost") } }
+        defer { BrowserManager.boostFor = nil; manager.closeAll() }
+
+        // A link through Google's redirect: the commit comes while the page still shows the redirect's address.
+        let redirected = manager.ensureRuntime(for: store.createTab(url: "https://www.google.com/url?q=https://example.test/linked").id)!.browser
+        manager.browser(redirected, didChangeCommittedLoad: true)
+        redirected.navigate(to: "https://example.test/linked")
+        expect(boostSheet(redirected)?.contains("h1 { color: red }") == true && redirected.scripts == ["window.boosted = 1"],
+               "a page reached through a redirect gets its own site's boost once its address arrives")
+        expect(redirected.boostTint == "0.7,0.125,0.27,0.5,0.108,0.838", "and the engine the boosted site's colours")
+
+        // Within the page, an address of its own (pushState) styles nothing again: the boost's script runs once.
+        let sheets = redirected.isolatedParams.filter { $0.contains("adoptedStyleSheets") }.count
+        redirected.navigate(to: "https://example.test/linked#more")
+        expect(redirected.scripts == ["window.boosted = 1"] && redirected.isolatedParams.filter { $0.contains("adoptedStyleSheets") }.count == sheets,
+               "the page's own address change on its site doesn't run the boost again")
+
+        // A new load's address before it commits (a typed address) waits for that load's commit.
+        manager.browser(redirected, didChangeCommittedLoad: false)
+        redirected.navigate(to: "https://www.google.com/search?q=next")
+        expect(redirected.isolatedParams.filter { $0.contains("adoptedStyleSheets") }.count == sheets,
+               "an address that hasn't committed yet styles nothing")
+
+        // A link's popup: its host page has no address at all when its first page commits.
+        let popup = manager.ensureRuntime(for: store.createTab(url: "https://example.test/popup").id)!.browser
+        popup.currentURL = ""
+        manager.browser(popup, didChangeCommittedLoad: true)
+        popup.navigate(to: "https://example.test/popup")
+        expect(boostSheet(popup)?.contains("h1 { color: red }") == true && popup.scripts == ["window.boosted = 1"],
+               "a link's popup on a boosted site gets the boost")
+    }
+
 
     /// Arc's "Allow websites to get your theme data" (on by default): each page that commits gets the
     /// space's palette as `--arc-palette-*` variables from Cra's world; off, pages get none.

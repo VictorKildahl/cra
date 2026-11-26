@@ -130,6 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Before any page is made: an easel's tab opens its canvas.
         EaselBrowser.register()
         CaptureOverlay.easels = { EaselFiles.all().map { CaptureMenuLayout.Destination(id: $0.id, title: $0.title) } }
+        CaptureEditors.make = { frame, image in CaptureEditorView(frame: frame, image: image) }
         EaselBrowser.registerServices(self)
         // Arc's Boosts: each page on a boosted site gets its boosts; an edit shows at once.
         BrowserManager.boostFor = { [store] url, engineTints in
@@ -1316,7 +1317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         case "import":
             // Headless import (scripting): cra://import?source=arc&archive=1&settings=1, source any
-            // ImportSource id that reads from disk (arc, dia, yab, ardia, phi, chrome, zen…).
+            // ImportSource id that reads from disk (arc, dia, yab, ardia, phi, crest, chrome, zen…).
             let source = ImportSource.allCases.first { $0.id == (q("source") ?? "arc") }
             let plan = try? source.flatMap { $0.needsExportedFile ? nil : try $0.plan() }
             if let plan {
@@ -1834,6 +1835,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let history = dict["mcpHistory"] { MCPServer.shared.allowsHistory = history == "on"; return }
             // mcpStop=1: the latest pill's Stop (that agent disconnects, MCP stays on).
             if dict["mcpStop"] != nil { MCPServer.shared.stopLatestPill(); return }
+            // mcpPill=open|close|takeover: a click on the pill's face (opens the whole pill), on its ×, or ⌘.
+            if let part = dict["mcpPill"] { main.pressAgentPill(part); return }
             // mcpWatched=on|off: a shown tab counts as watched even while its window is covered.
             if let watched = dict["mcpWatched"] { MainWindowController.agentTabsWatchedUnseen = watched == "on"; return }
             // translatePrompts=never:<host>|block:<lang>|reset|state[&profile=<name>][&label=<label>]: Settings ▸

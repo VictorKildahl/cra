@@ -25,6 +25,7 @@ enum CaptureOverlayTests {
         checkOptionPicksDeeper()
         checkFieldKeepsEditingKeys()
         checkArcsColours()
+        checkEditRow()
         print("Capture overlay: \(checks) checks, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
     }
@@ -115,6 +116,63 @@ enum CaptureOverlayTests {
         expect([ring.redComponent, ring.greenComponent, ring.blueComponent].map { Int(($0 * 255).rounded()) } == [22, 28, 47],
                "the ring is Arc's #161C2F")
         expect(CaptureStyle.dim == 0.75, "the page around the selection is dimmed as Arc dims it (243 → 181)")
+    }
+
+    /// Arc's Edit row (#851): the capture opens in the image editor over the page, Escape and ⌘ keys stay in it
+    /// rather than ending the capture, and once it closes the menu's rows take the edited capture. The editor here
+    /// is a stand-in that paints the capture blue; the real one's drawing is checked in the easel canvas harness.
+    // promise: #851
+    @MainActor
+    private static func checkEditRow() {
+        let fixture = Fixture()
+        weak var made: StandInEditor?
+        CaptureEditors.make = { frame, image in
+            let editor = StandInEditor(frame: frame, image: image)
+            made = editor
+            return editor
+        }
+        defer {
+            fixture.close()
+            CaptureEditors.make = { _, _ in nil }
+        }
+        var captured: Data?
+        fixture.main.onCaptureFinished = { action, png in
+            if action == .copy { captured = png }
+        }
+        pressCapture(fixture)
+        fixture.answerScreenshots()
+        let panel = fixture.peekPanel()
+        let view = panel.contentView!
+        let start = NSPoint(x: 30, y: 30), end = NSPoint(x: 190, y: 150)
+        for (type, point) in [(NSEvent.EventType.leftMouseDown, start), (.leftMouseDragged, end), (.leftMouseUp, end)] {
+            let event = NSEvent.mouseEvent(with: type, location: view.convert(point, to: nil), modifierFlags: [],
+                                          timestamp: 1, windowNumber: panel.windowNumber, context: nil,
+                                          eventNumber: 0, clickCount: 1, pressure: 0)!
+            switch type {
+            case .leftMouseDown: view.mouseDown(with: event)
+            case .leftMouseDragged: view.mouseDragged(with: event)
+            default: view.mouseUp(with: event)
+            }
+        }
+        guard let overlay = fixture.main.captureOverlay else { fatalError("no capture overlay") }
+        expect(overlay.debugMenu(typed: "", run: "Edit").contains("Edit"), "the menu has Arc's Edit row")
+        spin { overlay.editor != nil }
+        expect(overlay.editor != nil && made?.superview === view, "Edit opens the editor over the capture")
+        view.keyDown(with: key("\u{1b}", code: 53, in: panel))
+        view.cancelOperation(nil)
+        expect(overlay.isOpen && overlay.editor != nil, "Escape leaves the editor open, as in Arc")
+        _ = view.performKeyEquivalent(with: key("z", code: 6, modifiers: .command, in: panel))
+        expect(overlay.isOpen && overlay.editor != nil, "a ⌘ key in the editor doesn't end the capture")
+        overlay.editor?.finish()
+        expect(overlay.editor == nil && made?.superview == nil, "closing the editor brings the capture and its menu back")
+        expect(view.performKeyEquivalent(with: key("c", code: 8, modifiers: .command, in: panel)), "Command-C copies the capture")
+        guard let captured, let image = NSBitmapImageRep(data: captured)?.cgImage,
+              let color = NSBitmapImageRep(cgImage: image).colorAt(x: image.width / 2, y: image.height / 2)?.usingColorSpace(.deviceRGB)
+        else { return expect(false, "Copy after Edit produced a PNG") }
+        expect(color.blueComponent > 0.95 && color.redComponent < 0.05, "Copy takes the edited capture, not the page as taken")
+        let expected = ContentCapture.pixelRect(for: NSRect(x: 30, y: 30, width: 160, height: 120),
+                                               pageSize: view.bounds.size, imageSize: NSSize(width: 640, height: 480))
+        expect(image.width == Int(expected.width) && image.height == Int(expected.height), "the edited capture keeps its size")
     }
 
     /// The "Send To…" field holding the keyboard keeps ⌘A ⌘V ⌘X ⌘Z for its text: they ended the capture,
@@ -563,5 +621,30 @@ private final class Fixture {
         mainWindow.removeChildWindow(peekWindow)
         peekWindow.close()
         mainWindow.close()
+    }
+}
+
+/// Capture's editor in this harness: closing paints the capture blue, so the test can tell an edited capture.
+@MainActor
+private final class StandInEditor: NSView, CaptureEditing {
+    var onDone: (CGImage) -> Void = { _ in }
+    private let image: CGImage
+
+    init(frame: NSRect, image: CGImage) {
+        self.image = image
+        super.init(frame: frame)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func focus() {}
+
+    func finish() {
+        let ctx = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        removeFromSuperview()
+        onDone(ctx.makeImage()!)
     }
 }

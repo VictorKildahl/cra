@@ -1,0 +1,44 @@
+# promise: #854
+# Balaji's own search engines, added where Arc adds them (Settings ▸ Profiles ▸ Search Settings…, Chromium's
+# chrome://settings/searchEngines): GitHub as "gh", Wikipedia as the one-letter "w", Brave Search as "br" and made the
+# default. Typing a keyword and pressing Tab scopes ⌘T to that engine with its pill ("Search GitHub"), and the search
+# goes to its URL. Arc takes Tab only (its space trigger is off), so "gh swift" is a search of those words, which goes
+# to the default engine, Brave. Proves #854's ask works as Arc's did; nothing was missing on the Mac.
+budget rss=650 stalls50=12
+seed settings.json {"hasSeenImportPrompt":true,"toolbarDefaultMigrated":true,"showToolbar":false,"searchSuggestions":false}
+cra://open?url=chrome%3A%2F%2Fsettings%2FsearchEngines
+expect-log loaded settings \(HTTP 200\)
+wait 2
+cra://debug?cdp=Runtime.evaluate&params=%7B%22expression%22%3A%22for%20%28const%20%5Bn%2Ck%2Curl%5D%20of%20%5B%5B%27GitHub%27%2C%27gh%27%2C%27https%3A%2F%2Fgithub.com%2Fsearch%3Fq%3D%25s%27%5D%2C%5B%27Wikipedia%27%2C%27w%27%2C%27https%3A%2F%2Fen.wikipedia.org%2Fw%2Findex.php%3Fsearch%3D%25s%27%5D%2C%5B%27Brave%20Search%27%2C%27br%27%2C%27https%3A%2F%2Fsearch.brave.com%2Fsearch%3Fq%3D%25s%27%5D%5D%29%20%7Bchrome.send%28%27searchEngineEditStarted%27%2C%5Bnull%5D%29%3Bchrome.send%28%27searchEngineEditCompleted%27%2C%5Bn%2Ck%2Curl%5D%29%3B%7D%20%27saved-854%27%22%2C%22returnByValue%22%3Atrue%7D
+expect-log Cra cdp Runtime.evaluate.*saved-854
+wait 1
+cra://debug?cdp=Runtime.evaluate&params=%7B%22expression%22%3A%22import%28%27chrome%3A%2F%2Fresources%2Fjs%2Fcr.js%27%29.then%28cr%3D%3Ecr.sendWithPromise%28%27getSearchEnginesList%27%29%29.then%28l%3D%3E%7Bconst%20b%3D%5B...l.defaults%2C...l.actives%2C...l.others%5D.find%28e%3D%3Ee.keyword%3D%3D%3D%27br%27%29%3Bchrome.send%28%27setDefaultSearchEngine%27%2C%5Bb.id%2C2%2Cnull%5D%29%3Breturn%20%27brave-default%20%27%2Bb.name%3B%7D%29%22%2C%22returnByValue%22%3Atrue%2C%22awaitPromise%22%3Atrue%7D
+expect-log Cra cdp Runtime.evaluate.*brave-default Brave Search
+# Chromium batches keyword database writes for five seconds.
+wait 6
+cra://commandbar?query=gh
+wait 1
+cra://debug?commandBarScope=enter
+expect-log command bar scope enter: GitHub,
+cra://commandbar?query=swift%20testing
+wait 1
+cra://debug?commandBarRows=gh
+expect-log Cra command bar rows gh: open=1 .*other:https://github.com/search\?q=swift%20testing
+cra://debug?commandBarScope=leave
+expect-log command bar scope leave: none,
+cra://commandbar?query=w
+wait 1
+cra://debug?commandBarScope=enter
+expect-log command bar scope enter: Wikipedia,
+cra://commandbar?query=swift
+wait 1
+cra://debug?commandBarRows=w
+expect-log Cra command bar rows w: open=1 .*other:https://en.wikipedia.org/w/index.php\?search=swift
+cra://debug?commandBarScope=leave
+# Space after a keyword: the words, searched with the default engine, no scope.
+cra://commandbar?query=gh%20swift
+wait 1
+cra://debug?commandBarScope=enter
+expect-log command bar scope enter: none,
+cra://debug?commandBarRows=space
+expect-log Cra command bar rows space: open=1 .*https://search.brave.com/search\?q=gh%20swift

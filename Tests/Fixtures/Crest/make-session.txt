@@ -1,0 +1,11 @@
+Tests/Fixtures/Crest is a made-up Crest profile in Crest's own format (CrestCore's SessionStorage and
+StoredSessionCodec, github.com/pauljoda/Crest, Nov 2026): ControlPlane/session.sqlite holds one
+`checkpoint` table of parts, `core` the session as JSON and `history.<SPACE ID>` each Space's history.
+core.json is its `core` part. To rebuild the file after changing it, from this folder:
+
+rm -f ControlPlane/session.sqlite && sqlite3 ControlPlane/session.sqlite \
+  "PRAGMA user_version=1; CREATE TABLE checkpoint (part TEXT PRIMARY KEY, data BLOB NOT NULL);
+   INSERT INTO checkpoint VALUES ('core', CAST(readfile('core.json') AS BLOB));
+   INSERT INTO checkpoint VALUES ('history.5A000000-0000-4000-8000-000000000001', CAST('[]' AS BLOB));
+   INSERT INTO checkpoint VALUES ('history.5A000000-0000-4000-8000-000000000002', CAST('[]' AS BLOB));
+   INSERT INTO checkpoint VALUES ('history.5A000000-0000-4000-8000-000000000003', CAST('[]' AS BLOB));"

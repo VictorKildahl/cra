@@ -1,0 +1,28 @@
+# promise: #869
+# A boosted site's page reached from another site's link, in the same tab or as a popup, gets the boost as a
+# page opened straight on the site does (Arc's boosts belong to the site, not to the page they were made on). Chromium
+# reports such a page committing before its address, so Cra styled it for the linking site (or no site, in a
+# popup) and the boost never came (GitHub #869). nas.local is the fixture server under another name.
+budget rss=900 stalls50=20
+arg --host-resolver-rules=MAP nas.local 127.0.0.1
+seed boosts.json [{"id":"0E5B6E0A-5C3B-4F8D-9C55-4A7C5F2B9E11","host":"127.0.0.1","name":"Test Boost","enabled":true,"hue":0,"strength":0,"invert":false,"contrast":50,"brightness":50,"saturation":50,"textScale":1,"textCase":"none","zapped":["#zapme"],"css":"body { background: rgb(1, 2, 3) !important; }","js":"window.boosted = 'yes'"}]
+
+# A link on another site, followed in the same tab.
+cra://open?url=${LOCALNET}/page.html?n=linking
+expect-log loaded nas\.local \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(location.href='${PAGE}?n=linked','followed')","userGesture":true}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const z=document.createElement('div');z.id='zapme';document.body.append(z);return 'linked-'+location.search+'-'+getComputedStyle(document.body).backgroundColor+'-'+getComputedStyle(z).display+'-'+window.boosted})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"linked-\?n=linked-rgb\(1, 2, 3\)-none-yes"
+
+# A link's popup (window.open) from another site: a new tab whose page had no address when it committed.
+cra://open?url=${LOCALNET}/page.html?n=opener
+expect-log loaded nas\.local \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=popup'))","userGesture":true}
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const z=document.createElement('div');z.id='zapme';document.body.append(z);return 'popup-'+location.search+'-'+getComputedStyle(document.body).backgroundColor+'-'+getComputedStyle(z).display+'-'+window.boosted})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"popup-\?n=popup-rgb\(1, 2, 3\)-none-yes"

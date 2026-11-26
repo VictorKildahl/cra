@@ -179,7 +179,7 @@ final class AgentFaceView: NSView {
 /// The agent's cursor: the face over the tab's page, gliding where the agent's pointer goes and
 /// squishing when it clicks, only while the user is on that tab (MCPServer asks isWatched). It
 /// lives in a click-through panel over the page, like the permission card, and fades
-/// MCPAgentPresence.cursorLingers after its last move.
+/// MCPServer.linger after its last move (Settings ▸ Advanced ▸ Agents).
 @MainActor
 final class AgentCursor {
     static let side: CGFloat = 24
@@ -325,7 +325,7 @@ final class AgentCursor {
         fade?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.hide() }
         fade = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + MCPAgentPresence.cursorLingers, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + MCPServer.shared.linger.seconds, execute: work)
         if watch == nil {
             watch = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated {

@@ -37,4 +37,19 @@ struct MCPAgentsTests {
         let settings = MCPSettings(allowsScripts: true, agents: [MCPAgent(id: "a|team:T", name: "A", via: "", allowed: true, decided: date)])
         #expect(MCPSettings.decode(settings.encoded()) == settings)
     }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/discussions/862"))
+    func howLongTheAgentStaysIsKeptInMCPJSON() throws {
+        // mcp.json from before the setting keeps its answers and gets the standard.
+        let older = Data(#"{"agents":[],"allowsHistory":true,"allowsScripts":false}"#.utf8)
+        let loaded = MCPSettings.decode(older)
+        #expect(loaded.allowsHistory && loaded.linger == .standard)
+        // A choice round-trips as seconds; a number that isn't a choice doesn't lose the rest.
+        let chosen = MCPSettings(allowsHistory: true, linger: .thirty)
+        #expect(MCPSettings.decode(chosen.encoded()) == chosen)
+        let object = try #require(try JSONSerialization.jsonObject(with: chosen.encoded()) as? [String: Any])
+        #expect(object["lingerSeconds"] as? Int == 30)
+        let odd = MCPSettings.decode(Data(#"{"allowsHistory":true,"lingerSeconds":"soon"}"#.utf8))
+        #expect(odd.allowsHistory && odd.linger == .standard)
+    }
 }

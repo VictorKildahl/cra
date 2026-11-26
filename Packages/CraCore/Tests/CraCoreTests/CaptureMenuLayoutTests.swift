@@ -12,9 +12,18 @@ struct CaptureMenuLayoutTests {
 
     @Test func theEaselsAreRowsOfTheMenuAfterNewEasel() {
         let s = CaptureMenuLayout.sections(easels: [test, movies])
-        let expected: [[String]] = [["Copy", "Save...", "Send via iMessage..."], ["Retake"], ["New Easel", "Test", "Movies"]]
+        let expected: [[String]] = [["Copy", "Save...", "Send via iMessage..."], ["Edit", "Retake"], ["New Easel", "Test", "Movies"]]
         #expect(titles(s) == expected)
         #expect(s[2][1].item == .easel(test.id) && s[2][2].item == .easel(movies.id))
+    }
+
+    /// Arc's Edit row (#851): the capture opens in Arc's image editor, Easel's tools over it. It sits with Retake,
+    /// above it, as in Arc 1.174 (26 Nov 2026, live).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/851"))
+    func editSitsAboveRetakeAsInArc() {
+        let s = CaptureMenuLayout.sections(easels: [])
+        #expect(s[1].map(\.item) == [.edit, .retake])
+        #expect(s[1][0].title == "Edit")
     }
 
     @Test func withNoEaselThereIsStillNewEasel() {
@@ -33,7 +42,7 @@ struct CaptureMenuLayoutTests {
         let onlyMovies: [[String]] = [["Movies"]]
         #expect(narrowed == onlyMovies)
         let withE: [[String]] = titles(CaptureMenuLayout.sections(easels: [test, movies], filter: "E"))
-        let expected: [[String]] = [["Save...", "Send via iMessage..."], ["Retake"], ["New Easel", "Test", "Movies"]]
+        let expected: [[String]] = [["Save...", "Send via iMessage..."], ["Edit", "Retake"], ["New Easel", "Test", "Movies"]]
         #expect(withE == expected)
         #expect(CaptureMenuLayout.sections(easels: [test], filter: "zzz").isEmpty)
     }
@@ -73,10 +82,10 @@ struct CaptureMenuLayoutTests {
 
     @Test func itsHeightFollowsItsRows() {
         // Arc's menu with two easels is 433 pt (866 px at 2x): the field, nine rows, two lines and
-        // the bottom. Cra's has seven rows there, without Save to Library and Edit.
+        // the bottom. Cra's has eight rows there, without Save to Library: 40 pt less.
         let s = CaptureMenuLayout.sections(easels: [test, movies])
-        let seven: CGFloat = 49.5 + 280 + 18 + 5.5
-        #expect(CaptureMenuLayout.height(s) == seven)
+        let eight: CGFloat = 49.5 + 320 + 18 + 5.5
+        #expect(CaptureMenuLayout.height(s) == eight)
         let none: CGFloat = 55
         #expect(CaptureMenuLayout.height([]) == none)
     }

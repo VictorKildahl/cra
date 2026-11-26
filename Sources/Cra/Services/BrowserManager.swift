@@ -8,6 +8,9 @@ final class TabRuntime {
     let tabID: UUID
     let browser: CraBrowser
     var hasElementHidingStyle = false
+    /// The site (host) the committed page was styled for (list filters, boost), nil until it commits.
+    /// Chromium reports a link's or redirect's page committing before its address (#869).
+    var styledSite: String?
     var progress: Double = 0
     /// The toolbar's colour as read off the page (ToolbarSampler), "" until read.
     var themeColor: String = ""
@@ -1605,6 +1608,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         if !browser.isAudible { nowPlaying?.remove(id) }
         // Our own error page is a data: URL; keep the real address in the model.
         if url.hasPrefix("data:text/html;base64,") { return }
+        if let runtime = runtimes[id] { restyleCommittedPage(runtime, url: url) }
         // A restored page has no address yet when it is shown.
         if id == visibleTabID { Perf.visibleSite(browser.isIncognito ? nil : SiteNames.siteHost(of: url)) }
         store.updateTab(id, url: url)
@@ -1660,13 +1664,31 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         if committed {
             if let runtime = runtimes[id] {
                 runtime.hasElementHidingStyle = false
+                runtime.styledSite = Self.styledSite(of: browser.currentURL)
                 applyElementHiding(to: runtime)
             }
             shareTheme(id, with: browser)
             applyBoost(to: browser, clearing: false)
             if !BlockLists.shared.isPaused(url: browser.currentURL), let css = store.cookieBannerCSS(item: id) { adopt(css, as: "__craCookieBanners", in: browser) }
+        } else {
+            runtimes[id]?.styledSite = nil
         }
         delegate?.browserManagerDidUpdate(id)
+    }
+
+    private static func styledSite(of url: String) -> String { URL(string: url)?.host?.lowercased() ?? "" }
+
+    /// A committed page whose address names another site than the one it was styled for: a link's popup (no
+    /// address yet) or a page reached through a redirect (google.com/url?q=…), whose address Chromium reports
+    /// just after the commit. It gets that site's list filters and boost, replacing what the first guess put on
+    /// it (#869). A page's own address change (pushState) stays on its site and styles nothing again.
+    private func restyleCommittedPage(_ runtime: TabRuntime, url: String) {
+        guard let styled = runtime.styledSite else { return }
+        let site = Self.styledSite(of: url)
+        guard site != styled, !site.isEmpty else { return }
+        runtime.styledSite = site
+        applyElementHiding(to: runtime)
+        applyBoost(to: runtime.browser)
     }
 
     func refreshElementHiding() {
