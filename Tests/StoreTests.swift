@@ -107,6 +107,7 @@ enum StoreTests {
         closeSuccessor()
         favoritesEmptyState()
         sharedFavorites()
+        selectSharedFavoriteInSpace()
         removedFavoriteComesBackOnUndo()
         profileTabsSpaceBySpace()
         newDocumentApps()
@@ -3097,6 +3098,62 @@ enum StoreTests {
                "a tab in a space reads back its space's profile and folder (#172)")
         store.deleteSpace(pathSpace)
         store.deleteProfile(paths.id)
+    }
+
+    // promise: #843
+    /// Selecting a shared favorite with an explicit origin space (Picture in Picture's Back to Tab,
+    /// #843) focuses that space instead of staying in the current space or falling back to the
+    /// first space in sidebar order, while falling back cleanly if the space no longer holds it.
+    @MainActor
+    private static func selectSharedFavoriteInSpace() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.focusedSpaceID
+        for s in store.orderedSpaces where s.id != home { store.deleteSpace(s.id) }
+        store.setProfile(nil, forSpace: home)
+        let entertainment = store.createSpace(title: "Entertainment", emoji: "🎬", focus: false).id
+        let workProfile = store.createProfile(name: "PiP Work")
+        let work = store.createSpace(title: "Work", emoji: "💼", focus: false).id
+        store.setProfile(workProfile.id, forSpace: work)
+        store.setFavoritesShared(true)
+
+        let video = store.createTab(url: "https://example.com/pip-video", in: entertainment, select: false).id
+        store.addToFavorites(video, in: entertainment)
+
+        // Baseline: without an origin space, selecting a shared favorite from another profile's
+        // space lands on Home (the first space in sidebar order that shares it).
+        store.focusSpace(work)
+        store.selectTab(video)
+        expect(store.focusedSpaceID == home && store.selectedTabID == video,
+               "without an origin space, a shared favorite falls back to the first space that shares it")
+
+        // From a space on a different profile: with `in: entertainment`, it returns to Entertainment.
+        store.focusSpace(work)
+        store.selectTab(video, in: entertainment)
+        expect(store.focusedSpaceID == entertainment && store.selectedTabID == video,
+               "selecting a shared favorite with its origin space returns there from another profile's space")
+
+        // From another space on the same profile (Home also shares the favorite): returns to Entertainment.
+        store.focusSpace(home)
+        store.selectTab(video, in: entertainment)
+        expect(store.focusedSpaceID == entertainment && store.selectedTabID == video,
+               "selecting a shared favorite with its origin space returns there even when the current space shares it")
+
+        // If the origin space no longer lists the favorite (different profile or deleted), fall back cleanly.
+        store.focusSpace(work)
+        store.selectTab(video, in: work)
+        expect(store.focusedSpaceID == home && store.selectedTabID == video,
+               "a space that no longer shares the favorite falls back to the default space lookup")
+
+        store.deleteSpace(entertainment)
+        store.focusSpace(work)
+        store.selectTab(video, in: entertainment)
+        expect(store.focusedSpaceID == home && store.selectedTabID == video,
+               "a deleted origin space falls back cleanly instead of focusing a missing space")
+
+        store.removeFromFavorites(video)
+        store.setFavoritesShared(false)
+        store.deleteSpace(work)
+        store.deleteProfile(workProfile.id)
     }
 
     // promise: #86

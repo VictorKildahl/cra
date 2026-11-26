@@ -122,11 +122,13 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         guard screen.width > 0 else { return }
         let bottom = pageBottom ?? screen.height
         let expandedIndex = cards.firstIndex { $0.tabID == expandedID }
+        let centring = MobileTabCarousel.endCentring(position: position, count: cards.count)
         var frames: [(frame: CGRect, placement: MobileTabCarousel.Placement)] = []
         var fills: [CGFloat] = []
         for (index, card) in cards.enumerated() {
             let relative = CGFloat(index) - position
-            let placement = MobileTabCarousel.placement(relative: relative, in: screen, sideInsets: sideInsets, alone: cards.count == 1)
+            let placement = MobileTabCarousel.placement(relative: relative, in: screen, sideInsets: sideInsets,
+                                                        alone: cards.count == 1, centring: centring)
             var frame = placement.frame
             frame = frame.insetBy(dx: frame.width * (1 - placement.scale) / 2, dy: frame.height * (1 - placement.scale) / 2)
             if row.isThrown(card.tabID) {

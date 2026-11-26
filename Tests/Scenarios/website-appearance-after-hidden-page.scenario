@@ -1,0 +1,22 @@
+# promise: crash-website-appearance-closed-page
+# View ▸ Appearance after a hidden page closed (a Gmail, Calendar or Outlook favorite's preview reads its page in
+# one, then closes it and lets it go). 0.1.56 and 0.1.57 crash reports: the engine walks every page it has to give
+# it the new canvas, and still had the closed preview's page there after Chrome deleted it, so it read freed
+# memory (+[CraCEFRuntime setWebsiteAppearance:] → RenderFrameHostManager::GetRenderWidgetHostView).
+budget rss=700
+cra://open?url=${PAGE}?n=first
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://debug?hiddenPageSignIn=${ORIGIN}/page.html%3Fn%3Dsign-in
+expect-log hidden page answered \{"status":401\}
+expect-log hidden page closed
+cra://debug?hiddenPageScript=${PAGE}%3Fn%3Dpreview
+expect-log hidden page script answered 127\.0\.0\.1
+wait 2
+cra://action/appearanceDark
+wait 1
+cra://action/appearanceLight
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'still-'+matchMedia('(prefers-color-scheme: dark)').matches"}
+expect-log Cra cdp Runtime.evaluate .*"value":"still-false"
+cra://action/appearanceAutomatic
+wait 1

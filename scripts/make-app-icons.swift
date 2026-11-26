@@ -2,6 +2,7 @@
 // (brand/*.svg) into resources/app-icons/<id>.png, 512 px (Dock tiles top out at 128 pt), on Apple's icon grid:
 // the tile is 824 of 1024 px, centred, with a transparent margin round it.
 // segments.png is only the picker's preview of the bundled icon.
+// On macOS 26 the picker shows segments-glass.png instead, the Icon Composer icon: scripts/render-app-icon-preview.sh.
 // With --icns it renders segments the same way at 1024 px into resources/AppIcon.icns, the icon the app is
 // bundled with. On the grid, macOS can draw it in the Dark, Clear and Tinted icon styles; an icon that fills its
 // canvas edge to edge is drawn as it is in every style (#739).

@@ -755,6 +755,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Arc: a tab switch puts a playing video in Picture in Picture, a space switch doesn't (#703).
             let autoPiP = AutoPictureInPictureMoment.opensOnLeaving(from: pagesShownForSpace, to: focusedSpaceID)
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen, autoPictureInPicture: autoPiP)
+        } else if pagesShownForSpace != focusedSpaceID {
+            browsers.spaceChanged(to: focusedSpaceID)
         }
         pagesShownForSpace = focusedSpaceID
         if overlay.findVisible { syncAskOnPage() } else { askOnPage.service.refresh() }
@@ -3464,13 +3466,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .save?:
             if let png { saveCapture(png, over: peek?.window) }
         case .message?:
-            if let png { sendCaptureViaMessages(png) }
+            if let png { sendCaptureViaMessages(png, in: peek) }
         case .newEasel?:
             guard let png, let easel = EaselFiles.create(withPicture: png, source: source) else { return }
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID)
+            revealForLittleWindowEasel(from: peek)
         case .sendToEasel(let id)?:
             guard let png else { return }
             sendCapture(png, toEasel: id, source: source)
+            revealForLittleWindowEasel(from: peek)
         case .retake?:
             capturePage(in: peek)
         case nil:
@@ -3479,13 +3483,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// Arc's "Send via iMessage…": Messages' compose sheet with the capture attached.
-    private func sendCaptureViaMessages(_ png: Data) {
+    private func sendCaptureViaMessages(_ png: Data, in peek: LittleWindowController? = nil) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Cra Captures", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent(PageCommands.captureFileName())
         guard (try? png.write(to: url)) != nil, let service = NSSharingService(named: .composeMessage),
               service.canPerform(withItems: [url]) else {
-            showToast("Messages Isn't Available")
+            showCaptureToast("Messages Isn't Available", in: peek)
             return
         }
         service.perform(withItems: [url])

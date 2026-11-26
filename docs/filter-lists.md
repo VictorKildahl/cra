@@ -19,6 +19,8 @@ Choose one HaGeZi list to suit your browsing. **Multi NORMAL** is a starting poi
 
 **Update Enabled Lists** refreshes the subscriptions you have switched on. At launch, Cra updates missing copies and copies at least 24 hours old. While running, it checks every six hours for missing copies or copies at least seven days old. A failed update keeps the previous working copy.
 
+Site-specific cosmetic rules can hide an entire advertising container based on what it contains. For example, `news.example##aside:has(> div[data-ad-unit-id])` also applies to matching containers added after the page loads. A simple selector can also use `:empty` or exclude classes and attributes with `:not()`. For example, `##.ad-slot:not(.adsbygoogle)` hides matching slots while preserving the excluded class.
+
 **Use my filters** switches personal rules off or on while keeping the saved text. **My filters** accepts one rule per line. For example, `ads.example.org` blocks third-party requests to that domain, `example.org##.sponsored-card` hides that class on example.org and its subdomains, and `news.example.org#@#.sponsored-card` makes an exception on news.example.org. Save changes to apply them to open Chromium pages. On Chromium, subscriptions can match URL paths, wildcards, separators, resource types, first or third party, and the initiating site. Network exceptions apply across subscriptions and the bundled domain list. For example:
 
 ```text

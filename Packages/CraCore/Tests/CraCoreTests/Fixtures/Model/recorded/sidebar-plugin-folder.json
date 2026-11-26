@@ -219,10 +219,29 @@
             "items" : [
               {
                 "createdAt" : "2026-10-30T10:00:00Z",
+                "details" : {
+                  "commentCount" : 2,
+                  "draft" : true,
+                  "labels" : [
+                    {
+                      "color" : "D97757",
+                      "name" : "ui"
+                    },
+                    {
+                      "name" : "tests"
+                    }
+                  ],
+                  "tasks" : {
+                    "done" : 2,
+                    "total" : 4
+                  }
+                },
                 "group" : "example\/app",
                 "id" : "https:\/\/github.com\/example\/app\/pull\/9",
+                "revision" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 "subtitle" : "someone",
                 "title" : "Fix the thing",
+                "updatedAt" : "2026-11-24T09:00:00Z",
                 "url" : "https:\/\/github.com\/example\/app\/pull\/9"
               }
             ],

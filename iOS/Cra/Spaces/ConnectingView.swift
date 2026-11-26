@@ -12,7 +12,6 @@ struct ConnectingView: View {
         GeometryReader { geometry in
             let middle = geometry.size.height / 2
             ZStack(alignment: .topLeading) {
-                SyncGlow(background: SyncGlow.connectingBackground)
                 CloudWaves()
                     .stroke(Self.iconBlue, style: StrokeStyle(lineWidth: 9.7, lineCap: .round, lineJoin: .round))
                     .frame(width: CloudWaves.size.width, height: CloudWaves.size.height)
@@ -26,6 +25,9 @@ struct ConnectingView: View {
             }
         }
         .ignoresSafeArea(edges: .bottom)
+        .background {
+            SyncGlow(background: SyncGlow.connectingBackground).ignoresSafeArea(edges: [.horizontal, .bottom])
+        }
         .environment(\.colorScheme, .light)
     }
 }

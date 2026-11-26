@@ -108,6 +108,8 @@ Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <t
 
 ### On the iPhone Duo
 
+On the Duo, the Spaces sheet's backgrounds (sync intro, Connecting, share prompt, icon bar) run under the status column, while its content stays in the safe area.
+
 On the closed screen, the search field and the tab switcher’s cards stay left of the status column; the rule applies only to a portrait-shaped window with a side inset, so iPhones keep their layout.
 
 The icon grid's width cap (54074522) already fixed the open-screen icon-step overflow; the onboarding fit rule fixes the demo steps.
@@ -139,7 +141,7 @@ the inner screen; `CRA_IOS_SIM="Cra Duo" scripts/ios.sh shot /tmp/duo.png` is th
 trust. Pass `--display` to `simctl io screenshot` too, or it can return the Duo's unlit display.
 On the open screen, `app.windows.firstMatch.screenshot()` produces pixels. The colour check
 tries screen, window, then app captures and reports which produced pixels. If all are blank,
-it skips.
+it skips, except the promised Spaces background test, which fails on blank or mismatched captures.
 
 StatusBandTests skips on the Duo: the right-hand column or
 top-right status cluster has no top safe area, and band placement is an open product question
@@ -174,6 +176,7 @@ Expected failures on the **open and half-open** Duo:
 | `LinkMenuTests/testAPrivateBackgroundTabWaitsInTheRow` | Title never arrives |
 | `PageBasicsTests/testADownloadIsSavedAnnouncedAndListed` | Download name numbering |
 | `SpacesTests/testTheMacsSpacesOpenFromTheTabRow` | Synced Spaces unresolved |
+| `SpacesTests/testSpacesBackgroundsReachTheWindowEdges` | XCTest inner-screen capture does not match the window |
 | `CustomSearchEngineTests/testACustomEngineTakesTheSearch` | Alert Save |
 
 These lists record the research expectations, not exemptions in the harness. Other failures
