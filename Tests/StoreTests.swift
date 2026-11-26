@@ -53,6 +53,8 @@ enum StoreTests {
         iconFilesAreDecodedSmall()
         faviconDatabaseLookup()
         try chromiumAndFirefoxPlansBringIcons()
+        plansReadOffTheMainThread()
+        planLoaderReadsOffMainAndKeepsTheLastPick()
         try yabKeepsAnyAddress()
         chromiumProfile()
         try firefoxImport()
@@ -1259,6 +1261,77 @@ enum StoreTests {
         let second = try ChromiumImporter.plan(browser: "Brave", userData: other)
         expect(pixelsWide(second.spaces.first?.pinned.first?.faviconPath) == 12 && pixelsWide(plans[0].1.spaces.first?.pinned.first?.faviconPath) == 11,
                "a second browser's plan leaves the first one's icon files alone")
+    }
+
+    /// The import window reads the picked browser's plan on a background thread (#748 made it slow
+    /// with icons): each fixture browser's plan reads there without the main thread, as it does on main.
+    private static func plansReadOffTheMainThread() {
+        func lines(_ plan: ImportPlan?) -> [String] {
+            func icon(_ path: String?) -> String { path.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) }?.base64EncodedString() ?? "-" }
+            func items(_ list: [ImportedItem]) -> [String] {
+                list.flatMap { ["\($0.customTitle ?? $0.pageTitle) \($0.url ?? "folder") \(icon($0.faviconPath))"] + items($0.children) }
+            }
+            guard let plan else { return [] }
+            return items(plan.favorites) + plan.spaces.flatMap { ["space \($0.title)"] + items($0.favorites + $0.pinned + $0.today) }
+                + plan.archive.map { "archive \($0.url) \(icon($0.faviconPath))" }
+        }
+        for source in ImportSource.allCases where [.arc, .dia, .yab, .ardia, .phi].contains(source.kind) {
+            let onMain = lines(try? source.plan())
+            var offMain: [String] = []
+            let done = DispatchSemaphore(value: 0)
+            DispatchQueue.global(qos: .userInitiated).async { offMain = lines(try? source.plan()); done.signal() }
+            expect(done.wait(timeout: .now() + 60) == .success, "\(source.name): its plan reads on a background thread without waiting for the main thread")
+            expect(!onMain.isEmpty && offMain == onMain, "\(source.name): read on a background thread, the plan is the one read on main")
+            expect(source.kind != .arc || offMain.contains { !$0.hasSuffix(" -") && !$0.hasPrefix("space ") }, "Arc's plan read there brings its icons")
+        }
+    }
+
+    /// Picking a browser reads its plan through ImportPlanLoader: off the main thread, and a read for
+    /// an earlier pick never lands after a later one, slow archive or not.
+    @MainActor
+    private static func planLoaderReadsOffMainAndKeepsTheLastPick() {
+        let loader = ImportPlanLoader()
+        var delivered: [String] = []
+        func record(_ result: Result<ImportPlan, Error>) { delivered.append((try? result.get().source) ?? "error") }
+        func spin(until done: () -> Bool) {
+            let deadline = Date().addingTimeInterval(10)
+            while !done() && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+        }
+        /// A read that waits for `gate`, then signals `finished` once its result is on its way.
+        func slowRead(_ gate: DispatchSemaphore, _ finished: DispatchSemaphore) -> @Sendable () throws -> ImportPlan {
+            { gate.wait(); defer { finished.signal() }; return ImportPlan(source: "slow") }
+        }
+        /// Lets the main actor take a dropped result, if it were to take one.
+        func settle() { RunLoop.main.run(until: Date().addingTimeInterval(0.2)) }
+
+        loader.load({ ImportPlan(source: Thread.isMainThread ? "main thread" : "background") }, done: record)
+        spin { !delivered.isEmpty }
+        expect(delivered == ["background"], "the plan is read off the main thread")
+
+        delivered = []
+        loader.load({ throw CocoaError(.fileReadNoPermission) }, done: record)
+        spin { !delivered.isEmpty }
+        expect(delivered == ["error"], "a read that fails hands over its error")
+
+        delivered = []
+        var gate = DispatchSemaphore(value: 0), finished = DispatchSemaphore(value: 0)
+        loader.load(slowRead(gate, finished), done: record)
+        loader.load({ ImportPlan(source: "fast") }, done: record)
+        spin { !delivered.isEmpty }
+        gate.signal()
+        spin { finished.wait(timeout: .now()) == .success }
+        settle()
+        expect(delivered == ["fast"], "a slow read for an earlier pick is dropped once a later pick's plan is in")
+
+        delivered = []
+        gate = DispatchSemaphore(value: 0)
+        finished = DispatchSemaphore(value: 0)
+        loader.load(slowRead(gate, finished), done: record)
+        loader.cancel()
+        gate.signal()
+        spin { finished.wait(timeout: .now()) == .success }
+        settle()
+        expect(delivered.isEmpty, "a later pick that reads nothing (Full Disk Access, Safari's export) drops the read in flight")
     }
 
     /// A Chrome-family "User Data" folder whose Default profile has `bookmarks` on its bar and an icon
