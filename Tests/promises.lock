@@ -1890,6 +1890,7 @@
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::theSegmentsTileIsTheIconTheDockShows  fa64d566596d
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconGridTests.swift::theGlassSegmentsTileSitsOnTheGrid  69a07833b8a8
 #869   Tests/BrowserManagerLifecycleTests.swift::boostAfterLateAddressCase  5bebee9b1ade
+#869   Tests/BrowserManagerLifecycleTests.swift::boostAfterRedirectCase  ab4f48434aa9
 #869   Tests/Scenarios/boost-linked-pages.scenario  97187a77dc15
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
