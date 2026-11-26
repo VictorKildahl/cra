@@ -18,6 +18,12 @@ final class TabRuntime {
     var infoBars: [PageInfoBar] = []
     /// What the page paints behind its content ("#RRGGBB", "" until reported).
     var backgroundColor: String = ""
+    /// Whether this document needs Cra's fallback Canvas background, nil until probed (#846).
+    var boostCanvasNeedsFallback: Bool?
+    /// Whether the fallback stylesheet is currently on this page.
+    var boostCanvasFallbackOn = false
+    /// The stylesheet last adopted for this page's Boost, so live edits with unchanged CSS don't repaint.
+    var boostCSS = ""
     /// Cra popped this tab's video out because the user left the tab (Arc's
     /// auto Picture in Picture); coming back brings the video home.
     var autoPictureInPicture = false
@@ -1627,6 +1633,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         if committed {
             if let runtime = runtimes[id] {
                 runtime.hasElementHidingStyle = false
+                runtime.boostCanvasNeedsFallback = nil
+                runtime.boostCanvasFallbackOn = false
+                runtime.boostCSS = ""
                 applyElementHiding(to: runtime)
             }
             shareTheme(id, with: browser)
@@ -1672,8 +1681,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         let boost = Self.boostFor?(browser.currentURL, engineTints)
         // A new document has nothing adopted: no call unless there is a boost to put on it.
         guard boost != nil || clearing else { return }
-        adopt(boost?.css ?? "", as: "__craBoost", in: browser)
-        applyBoostCanvasFallback(boost?.css.contains("filter:") == true, in: browser)
+        let css = boost?.css ?? ""
+        let rt = tabID(of: browser).flatMap { runtimes[$0] }
+        // A colour drag with the engine drawing the tint leaves this CSS unchanged; replacing an
+        // identical sheet would invalidate paint and flash the page's dark background (#846).
+        let reused = clearing && rt?.boostCSS == css
+        if !reused {
+            adopt(css, as: "__craBoost", in: browser)
+            rt?.boostCSS = css
+        }
+        applyBoostCanvasFallback(css.contains("filter:") == true, in: browser)
         if engineTints { browser.setBoostTint(boost?.tint) }
         if let js = boost?.js, !js.isEmpty { browser.executeJavaScript(js) }
     }
@@ -1683,17 +1700,38 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     /// colours. Both `html` and `body` must compute transparent; a tint-only boost has no CSS filter
     /// and is left alone (#846).
     private func applyBoostCanvasFallback(_ needed: Bool, in browser: CraBrowser) {
-        guard !(browser is NativePage), PageEngines.engine(of: browser) == .chromium else { return }
-        adopt("", as: "__craBoostCanvas", in: browser)
-        guard needed else { return }
-        let js = "(()=>{const h=getComputedStyle(document.documentElement).backgroundColor;"
+        guard let id = tabID(of: browser), let rt = runtimes[id],
+              !(browser is NativePage), PageEngines.engine(of: browser) == .chromium else { return }
+        guard needed else {
+            if rt.boostCanvasFallbackOn {
+                adopt("", as: "__craBoostCanvas", in: browser)
+                rt.boostCanvasFallbackOn = false
+            }
+            return
+        }
+        // The probe must run once per document: once Cra's Canvas background is adopted, reading it
+        // back would see it as the page's own background and toggle the fallback off on every edit.
+        if let needs = rt.boostCanvasNeedsFallback {
+            if needs != rt.boostCanvasFallbackOn {
+                adopt(needs ? "html { background-color: Canvas !important; }" : "",
+                      as: "__craBoostCanvas", in: browser)
+                rt.boostCanvasFallbackOn = needs
+            }
+            return
+        }
+        let js = "/*__craBoostCanvas*/(()=>{const h=getComputedStyle(document.documentElement).backgroundColor;"
             + "const b=getComputedStyle(document.body||document.documentElement).backgroundColor;"
             + "const clear=s=>!s||s==='transparent'||s==='rgba(0, 0, 0, 0)';"
             + "return clear(h)&&clear(b)?'yes':'no';})()"
-        browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { result, _ in
+        browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { [weak self, weak rt] result, _ in
             DispatchQueue.main.async {
-                guard Self.stringResult(result) == "yes" else { return }
-                self.adopt("html { background-color: Canvas !important; }", as: "__craBoostCanvas", in: browser)
+                guard let self, let rt, self.runtimes[id] === rt else { return }
+                let needs = Self.stringResult(result) == "yes"
+                rt.boostCanvasNeedsFallback = needs
+                if needs {
+                    self.adopt("html { background-color: Canvas !important; }", as: "__craBoostCanvas", in: browser)
+                    rt.boostCanvasFallbackOn = true
+                }
             }
         }
     }
