@@ -23,6 +23,8 @@ public struct DesktopFilterList: Identifiable {
     static let proAddress = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt"
     static let proMiniAddress = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.mini-onlydomains.txt"
 
+    public static let warningListAddress = "https://easylist-downloads.adblockplus.org/antiadblockfilters.txt"
+
     public static let catalog = [
         Self("EasyList", "Ads on international sites", "https://easylist.to/easylist/easylist.txt", category: .ads),
         Self("EasyPrivacy", "Tracking and analytics", "https://easylist.to/easylist/easyprivacy.txt", category: .tracking),
@@ -31,7 +33,7 @@ public struct DesktopFilterList: Identifiable {
         Self("Fanboy’s Social Blocking List", "Social sharing buttons and widgets", "https://easylist-downloads.adblockplus.org/fanboy-social.txt", category: .annoyances),
         Self("AdGuard Popups", "Promotional popups and overlays", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_19_Annoyances_Popups/filter.txt", category: .annoyances),
         Self("AdGuard Widgets", "Third-party widgets, including support chats", "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_22_Annoyances_Widgets/filter.txt", category: .annoyances),
-        Self("Adblock Warning Removal List", "Anti-adblock notices", "https://easylist-downloads.adblockplus.org/antiadblockfilters.txt", category: .ads),
+        Self("Adblock Warning Removal List", "Anti-adblock notices", warningListAddress, category: .ads),
         Self("StevenBlack Unified Hosts", "Advertising and tracking domains", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", category: .ads),
         Self("HaGeZi Multi NORMAL", "For everyday browsing. Blocks ad, tracker, phishing and malware domains while allowing crash reports.", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt", category: .mixed),
         Self("HaGeZi Multi PRO Mini", "A smaller download for everyday sites, including common crash trackers. Its domains are included in full PRO.", proMiniAddress, category: .mixed),
