@@ -194,6 +194,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     let container: NSView
     weak var delegate: BrowserManagerDelegate?
     private(set) var runtimes: [UUID: TabRuntime] = [:]
+    /// Tabs a page's link opened whose first page hasn't loaded yet: Air Traffic Control may still move them (#868).
+    private var linkTabsToRoute: Set<UUID> = []
     /// The focused pane's tab (the one toolbar actions and DevTools apply to).
     private(set) var visibleTabID: UUID?
     /// Stops an Ask snapshot from surviving a focus switch away and back to the same document.
@@ -374,6 +376,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     func release(_ tabID: UUID) -> TabRuntime? {
         invalidateAskOnPageDocument(for: tabID)
         if findOwner?.tabID == tabID { stopFinding(false) }
+        linkTabsToRoute.remove(tabID)
         guard let rt = runtimes.removeValue(forKey: tabID) else { return nil }
         nowPlaying?.remove(tabID)
         nowPlaying?.pictureInPicture.remove(tabID)
@@ -1622,7 +1625,19 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         scheduleHistorySave(id)
         if !browser.isIncognito { LiveFolderManager.shared.pageChanged(tab: id, to: url) }
         protectedVideoPageChanged(id, browser, url: url)
+        routeLinkTab(id, incognito: browser.isIncognito, url: url)
         delegate?.browserManagerDidUpdate(id)
+    }
+
+    /// Air Traffic Control for a link opened in a new tab, as for one from another app: when the new page's
+    /// address (after Google's /url?q= hop or a redirect, too) matches a route to another space, the tab
+    /// goes there, the window with it when it's in front. The page that opened the link stays (#868).
+    /// A link straight to the routed site is checked as its tab is made: no address change follows it.
+    private func routeLinkTab(_ id: UUID, incognito: Bool, url: String) {
+        guard linkTabsToRoute.contains(id), !incognito,
+              let space = store.settings.space(forTypedURL: url), space != store.spaceID(ofItem: id) else { return }
+        linkTabsToRoute.remove(id)
+        store.moveTab(id, toSpace: space, window: windowID)
     }
 
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool) {
@@ -1638,6 +1653,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             Perf.end(.tabWake, id.uuidString)
         }
         if !loading { runtimes[id]?.progress = 0 }
+        // A link's tab is routed only on its way to its first page.
+        if !loading, linkTabsToRoute.contains(id), browser.currentURL.hasPrefix("http") { linkTabsToRoute.remove(id) }
         if !loading { scheduleHistorySave(id) }
         // Two seconds on, the page (a video player especially) has settled before it is captured.
         if !loading { scheduleSnapshot(id, after: 2) }
@@ -2046,11 +2063,13 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         }
         let tab = store.createTab(url: url, in: sourceSpace, select: !background,
                                   parent: slot?.parent, index: slot?.index, window: windowID, referrer: source)
+        linkTabsToRoute.insert(tab.id)
         if background {
             store.markUnread(tab.id, true)
             loadBehind(tab.id)  // load it so the title and favicon fill in
             delegate?.browserManagerOpenedInBackground(tab.id)
         }
+        routeLinkTab(tab.id, incognito: source.flatMap { runtimes[$0]?.browser.isIncognito } ?? false, url: url)
     }
 
     func browser(_ browser: CraBrowser, popupHostForURL url: String, inBackground background: Bool) -> CraBrowser? {
@@ -2075,8 +2094,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         let tab = store.createTab(url: url, in: sourceSpace, select: !background, parent: slot?.parent, index: slot?.index,
                                   window: windowID, referrer: source)
         if background { store.markUnread(tab.id, true) }
+        linkTabsToRoute.insert(tab.id)
         let host = makePopupHost(for: tab.id, opener: browser)
         if background { delegate?.browserManagerOpenedInBackground(tab.id) } else { show(tab.id, focus: true) }
+        routeLinkTab(tab.id, incognito: browser.isIncognito, url: url)
         return host
     }
 

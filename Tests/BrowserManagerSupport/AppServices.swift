@@ -70,6 +70,9 @@ enum TestRoot { case today }
         /// Settings ▸ Tabs ▸ "Always keep these sites active" (#458), by host; AppSettings matches subdomains.
         var keepActiveHosts: Set<String> = []
         func keepsActive(url: String) -> Bool { keepActiveHosts.contains(URL(string: url)?.host ?? "") }
+        /// Air Traffic Control's routes to a space, by host; AppSettings matches them (LinkRoutingTests).
+        var linkRoutes: [String: UUID] = [:]
+        func space(forTypedURL url: String) -> UUID? { linkRoutes[URL(string: url)?.host ?? ""] }
     }
     func cookieBannerCSS(item: UUID) -> String? { settings.blockCookieBanners ? "#onetrust-banner-sdk { display: none !important; }" : nil }
     func themeDataCSS(item: UUID, systemDark: Bool) -> String? {
@@ -86,7 +89,9 @@ enum TestRoot { case today }
     func profilePath(item: UUID) -> String? { profilePaths[item] }
     func profileDirectoryName(item: UUID) -> String { "Default" }
     func profileID(item: UUID) -> UUID? { nil }
-    func spaceID(ofItem: UUID) -> UUID? { nil }
+    var spaces: [UUID: UUID] = [:]
+    func spaceID(ofItem id: UUID) -> UUID? { spaces[id] }
+    func moveTab(_ id: UUID, toSpace sid: UUID, window: UUID?) { spaces[id] = sid }
     func splitContaining(_ id: UUID) -> TestItem? {
         guard let p = items[id]?.parentID, let parent = items[p], parent.isSplit else { return nil }
         return parent
@@ -133,6 +138,7 @@ enum TestRoot { case today }
                    parent: UUID? = nil, index: Int? = nil, window: UUID? = nil, referrer: UUID? = nil) -> TestItem {
         let item = TestItem(id: UUID(), tab: TestTab(url: url))
         items[item.id] = item
+        spaces[item.id] = space
         return item
     }
 }
