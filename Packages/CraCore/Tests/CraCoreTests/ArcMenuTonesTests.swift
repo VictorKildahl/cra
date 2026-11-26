@@ -29,6 +29,16 @@ struct ArcMenuTonesTests {
         #expect(Self.gap(Self.arcDefault.shortcut, (118, 119, 128)) <= 2, "default: \(Self.arcDefault.shortcut)")
     }
 
+    /// #822: the + menu is dark on a plain grey space with macOS in light mode. That is Arc's menu:
+    /// measured live on Arc 1.172.1 it takes the space's dark palette whatever the space or the
+    /// Mac's appearance, unlike the extensions popover (a system popover, light in light mode).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/822")) func aGreySpaceInLightModeGetsArcsDarkMenu() {
+        let grey = ArcMenuTones(theme: SpaceTheme(colors: ["#D1D1D6"], intensity: 0, noise: 0, appearance: "light"))
+        #expect(max(grey.fill.r, grey.fill.g, grey.fill.b) < 0.12, "dark fill, as in Arc: \(grey.fill)")
+        #expect(grey.shortcut.r > grey.fill.r + 0.2, "shortcuts read on the dark fill: \(grey.shortcut)")
+        #expect(grey.disabled == ArcMenuTones.disabledInk)
+    }
+
     @Test func aLightSpaceStillGetsADarkMenu() {
         let pale = ArcMenuTones(theme: SpaceTheme(colors: ["#FFF6D8"], intensity: 0.2, noise: 0, appearance: "light"))
         #expect(pale.fill.r < 0.1 && pale.fill.g < 0.1 && pale.fill.b < 0.1, "Arc's menu is dark on light spaces: \(pale.fill)")
