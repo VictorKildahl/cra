@@ -70,6 +70,23 @@ struct PullRequestPreviewTests {
         #expect({ cache.begin(.init(item)) }())
     }
 
+    /// A plugin's checks answer is untrusted: counts below zero or too big to add up are refused
+    /// (as no checks), so the card never overflows `passed + skipped` and crashes.
+    @Test func outOfRangeCheckCountsAreRefused() throws {
+        let big = Int.max / 2 + 1
+        for bad in [#"{"passed":-1,"failed":0,"pending":0,"skipped":0,"failing":[]}"#,
+                    #"{"passed":\#(big),"failed":0,"pending":0,"skipped":\#(big),"failing":[]}"#,
+                    #"{"passed":0,"failed":\#(PullRequestChecks.maxCount + 1),"pending":0,"skipped":0,"failing":[]}"#] {
+            #expect(throws: DecodingError.self) { try JSONDecoder().decode(PullRequestChecks.self, from: Data(bad.utf8)) }
+        }
+        let good = #"{"passed":3,"failed":1,"pending":0,"skipped":2,"failing":["lint"]}"#
+        let checks = try JSONDecoder().decode(PullRequestChecks.self, from: Data(good.utf8))
+        #expect(checks == .init(passed: 3, failed: 1, skipped: 2, failing: ["lint"]))
+        let item = LiveFolderPluginItem(id: "pr", url: "https://github.com/a/b/pull/3", title: "PR")
+        let card = PullRequestPreview.card(item: item, checks: checks, now: now)
+        #expect(card.checks?.state == .failed && card.checks?.passed == 5 && card.checks?.total == 6)
+    }
+
     @Test func checksSlotIsReleasedAfterEmptyAnswer() {
         let item = LiveFolderPluginItem(id: "pr", url: "https://github.com/a/b/pull/3", title: "PR")
         let key = PullRequestChecksCache.Key(item)

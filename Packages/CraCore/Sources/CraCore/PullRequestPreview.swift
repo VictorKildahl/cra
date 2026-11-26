@@ -6,9 +6,26 @@ public struct PullRequestChecks: Codable, Equatable {
     public var pending: Int
     public var skipped: Int
     public var failing: [String]
+    /// The most a count may be; GitHub's checks page lists far fewer jobs.
+    public static let maxCount = 100_000
 
     public init(passed: Int = 0, failed: Int = 0, pending: Int = 0, skipped: Int = 0, failing: [String] = []) {
         self.passed = passed; self.failed = failed; self.pending = pending; self.skipped = skipped; self.failing = failing
+    }
+
+    private enum CodingKeys: String, CodingKey { case passed, failed, pending, skipped, failing }
+    /// A plugin's answer: a count below zero or above `maxCount` is refused, so the card's sums can't overflow.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func count(_ key: CodingKeys) throws -> Int {
+            let value = try c.decode(Int.self, forKey: key)
+            guard (0...Self.maxCount).contains(value) else {
+                throw DecodingError.dataCorruptedError(forKey: key, in: c, debugDescription: "Check count out of range")
+            }
+            return value
+        }
+        passed = try count(.passed); failed = try count(.failed); pending = try count(.pending); skipped = try count(.skipped)
+        failing = try c.decode([String].self, forKey: .failing)
     }
 }
 
