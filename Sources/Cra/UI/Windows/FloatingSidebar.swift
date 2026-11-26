@@ -54,6 +54,9 @@ final class FloatingSidebarController {
     private var offEdge = FloatingSidebarOffEdge()
     /// The clock the wait runs on; the tests stand one in.
     var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    /// The mouse buttons held now (a held button keeps the sidebar out, as for a drag). Tests set it: the real one is
+    /// whatever another app or test on the Mac is pressing.
+    var pressedMouseButtons: () -> Int = { NSEvent.pressedMouseButtons }
     /// The sidebar's rounded body; it slides inside the panel (see `panelFrame`).
     private let slider = NSView()
     private let blur = NSVisualEffectView()
@@ -198,7 +201,7 @@ final class FloatingSidebarController {
             wait(atEdge: inStrip || off != .away, over: stripOver || off == .reveal,
                  why: stripOver ? "the edge strip" : "past the window's edge", at: p)
         } else if FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
-                                                     pressedMouseButtons: NSEvent.pressedMouseButtons, edgeToEdge: shell.fillsWindow,
+                                                     pressedMouseButtons: pressedMouseButtons(), edgeToEdge: shell.fillsWindow,
                                                      side: side, pageMargin: shell.pageMargin) {
             requestAutomaticHide()
         }
