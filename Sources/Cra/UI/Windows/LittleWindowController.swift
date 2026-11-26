@@ -85,35 +85,13 @@ enum LittleMetrics {
     static let openDuration: TimeInterval = 0.12
 }
 
-/// Arc renders Little Arc with the default profile's dark palette whatever the
-/// focused space's theme is (observed with the light "Victor" space focused; kept for #549).
+/// The Little Window's fixed colours: its tips, toast and ⌥⌘N's card, and the padlock. The strip and the
+/// "Open in" menu take theirs from the page and the Mac's appearance (CraCore LittleChromeTones).
 enum LittlePalette {
-    /// The strip, left to right: one gradient in every space (CraCore LittleStripTones, #329 #549).
-    /// The measured values wobble by a few units rather than rise, so two stops stay within them;
-    /// 1.168's flat #0C091C is gone (#329).
-    static let stripLeft = NSColor(LittleStripTones.stripLeft)
-    static let stripRight = NSColor(LittleStripTones.stripRight)
-    /// The address pill is a lighter wash over the strip (about #38394A on the left, #43394B on the
-    /// right, which is white at 9–10 %), so it follows the gradient. The hover is not measured.
-    static let pill = Color.white.opacity(0.09)
-    static let pillHover = Color.white.opacity(0.14)
     /// The open padlock for an http page (Arc's `hasInsecureContext`): orange on a pale orange wash.
     /// From the capture attached to #330: strokes about #E93700, and a tile that reads #4B3B45 over the
     /// pill's #3A3A4B, which is that orange at about 10 %.
     static let insecure = NSColor(srgbRed: 233 / 255, green: 55 / 255, blue: 0, alpha: 1)
-    static let iconHover = Color(red: 65 / 255, green: 57 / 255, blue: 70 / 255)
-    static let icon = Color(red: 110 / 255, green: 111 / 255, blue: 128 / 255)
-    static let iconHot = Color(red: 170 / 255, green: 168 / 255, blue: 180 / 255)
-    static let text = Color(red: 163 / 255, green: 161 / 255, blue: 169 / 255)
-    static let label = Color(red: 130 / 255, green: 131 / 255, blue: 146 / 255)
-    static let button = Color(red: 5 / 255, green: 6 / 255, blue: 37 / 255)
-    static let buttonBorder = Color(red: 29 / 255, green: 30 / 255, blue: 55 / 255)
-    static let buttonHover = Color(red: 22 / 255, green: 23 / 255, blue: 52 / 255)
-    static let badge = Color(red: 23 / 255, green: 24 / 255, blue: 50 / 255)
-    static let badgeText = Color(red: 139 / 255, green: 140 / 255, blue: 153 / 255)
-    /// The "Open in" menu's magnifier, ∧ and "No results", and its placeholder (Arc 1.172.1, #331).
-    static let moveMenuGlyph = Color(red: 80 / 255, green: 81 / 255, blue: 102 / 255)
-    static let moveMenuPlaceholder = Color(red: 142 / 255, green: 143 / 255, blue: 157 / 255)
     // Hover tips (measured): navy pill, lavender-white text, pale key caps with blue glyphs.
     static let tooltip = Color(red: 10 / 255, green: 13 / 255, blue: 75 / 255)
     static let tooltipText = Color(red: 222 / 255, green: 223 / 255, blue: 253 / 255)
@@ -136,17 +114,27 @@ enum LittlePalette {
     static let cardCloseGlyph = NSColor(srgbRed: 0x9C / 255, green: 0x9A / 255, blue: 0x9E / 255, alpha: 1)
     static let cardTopLeft = NSColor(srgbRed: 0x0D / 255, green: 0x0B / 255, blue: 0x1B / 255, alpha: 1)
     static let cardBottomRight = NSColor(srgbRed: 0x1C / 255, green: 0x0A / 255, blue: 0x20 / 255, alpha: 1)
-    /// Behind the strip and around the page, where no gradient is drawn.
-    static let barNS = stripLeft
-    static let buttonNS = NSColor(red: 5 / 255, green: 6 / 255, blue: 37 / 255, alpha: 1)
+    /// Behind a Peek's bar and page, and a Little Window's until its strip has its colours.
+    static let barNS = NSColor(LittleStripTones.stripLeft)
 
     /// The space name in "Open in Victor": the target theme's light foreground
     /// (Arc: semanticColorPalette.dark.foregroundPrimary; Victor → #FCEDBC).
-    static func spaceName(_ theme: SpaceTheme) -> Color { Color(tones(theme).spaceName) }
+    static func spaceName(_ theme: SpaceTheme) -> Color {
+        Color(LittleStripTones(target: theme, systemDark: SystemAppearance.shared.isDark).spaceName)
+    }
+}
 
-    /// The strip's colours for the space "Open in" names (CraCore LittleStripTones).
-    static func tones(_ theme: SpaceTheme) -> LittleStripTones {
-        LittleStripTones(target: theme, systemDark: SystemAppearance.shared.isDark)
+/// `NSColor` for a white or black wash over the strip.
+private extension NSColor {
+    convenience init(_ wash: LittleChromeTones.Wash) { self.init(white: wash.white, alpha: wash.alpha) }
+}
+
+extension LittleWindowState {
+    /// The strip's and the "Open in" menu's colours now: the page's colour, the space "Open in" names
+    /// and the Mac's appearance.
+    func chromeTones(store: SidebarStore) -> LittleChromeTones {
+        let space = store.space(targetSpaceID) ?? store.focusedSpace
+        return LittleChromeTones(page: themeColor, target: space.theme, systemDark: SystemAppearance.shared.isDark)
     }
 }
 
@@ -323,7 +311,17 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
             bar.onCopy = { [weak self] in self?.copyURL() }
             shell.setPeekBar(bar)
         } else {
-            shell.setToolbar(LittleToolbarView(state: state, actions: actions, store: app.store))
+            let bar = LittleToolbarView(state: state, actions: actions, store: app.store)
+            bar.onStrip = { [weak self] tones in
+                guard let self, let window = self.window else { return }
+                // The strip's colour runs on behind the page's rim.
+                let color = NSColor(tones.left)
+                window.backgroundColor = color
+                self.shell.stripColor = color
+                // The grey traffic lights are drawn for the strip: dark aqua's pale discs vanish on a light one.
+                window.standardWindowButton(.closeButton)?.superview?.appearance = NSAppearance(named: tones.light ? .aqua : .darkAqua)
+            }
+            shell.setToolbar(bar)
         }
         shell.onHover = { [weak self] h in
             guard let self, self.state.hover != h else { return }
@@ -1546,13 +1544,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         switch step {
         case "open": if popup == nil { openPopup() }
         case "close": closePopup()
-        case let s where s.hasPrefix("down"): (popup?.contentView as? LittleSpacesPopup)?.debugMove(down: Int(s.dropFirst(4)) ?? 1)
-        case let s where s.hasPrefix("type:"): (popup?.contentView as? LittleSpacesPopup)?.debugType(String(s.dropFirst(5)))
+        case let s where s.hasPrefix("down"): popup?.spaces?.debugMove(down: Int(s.dropFirst(4)) ?? 1)
+        case let s where s.hasPrefix("type:"): popup?.spaces?.debugType(String(s.dropFirst(5)))
         default: break
         }
         var line = "chevron=\(state.showsChevron ? 1 : 0)"
-        if let panel = popup, let window, let menu = panel.contentView as? LittleSpacesPopup {
-            let f = panel.frame, w = window.frame
+        if let panel = popup, let window, let menu = panel.spaces {
+            let f = panel.menuFrame, w = window.frame
             line += String(format: " menu=%.0fx%.0f top=%.0f right=%.0f ", f.width, f.height, w.maxY - f.maxY, w.maxX - f.maxX) + menu.debugState
         } else {
             line += " menu=closed"
@@ -1629,11 +1627,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         tooltipTimer?.invalidate(); hideTooltip()
         commandBar.close()
         let panel = LittlePopupPanel()
-        panel.contentView = LittleSpacesPopup(state: state, store: store,
+        // The search field's caret: dark in Arc's light menu.
+        panel.appearance = NSAppearance(named: state.chromeTones(store: store).light ? .aqua : .darkAqua)
+        panel.spaces = LittleSpacesPopup(state: state, store: store,
                                               onPick: { [weak self] sid in self?.closePopup(); self?.promote(to: sid) },
                                               onClose: { [weak self] in self?.closePopup() })
         panel.delegate = self
-        panel.setFrame(LittleMoveMenu.frame(rows: store.orderedSpaces.count, in: window.frame), display: true)
+        panel.menuFrame = LittleMoveMenu.frame(rows: store.orderedSpaces.count, in: window.frame)
         window.addChildWindow(panel, ordered: .above)
         popup = panel
         state.popupOpen = true
@@ -2170,13 +2170,15 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if !loading, browser === self.browser {
             ToolbarSampler.sample(browser, background: { [weak self] in self?.pageBackground }) { [weak self, weak browser] hex in
                 guard let self, let browser, browser === self.browser, !browser.isLoading else { return }
-                self.state.themeColor = hex
+                self.stripColor.sampled(hex)
+                self.state.themeColor = self.stripColor.hex
             }
         }
         syncSlowResponse(browser)
     }
 
     func browser(_ browser: CraBrowser, didChangeCommittedLoad committed: Bool) {
+        if committed, browser === self.browser { stripColor.committed() }
         if committed { AppLinkPrompt.pageLoaded(browser) }
         syncSlowResponse(browser)
     }
@@ -2234,13 +2236,22 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         if let key = FaviconKey.key(for: browser.currentURL) { app.favicons.store(image, forKey: key) }
     }
 
-    func browser(_ browser: CraBrowser, didReportThemeColor hex: String) { state.themeColor = hex }
+    func browser(_ browser: CraBrowser, didReportThemeColor hex: String) {
+        stripColor.sampled(hex)
+        state.themeColor = stripColor.hex
+    }
+    /// The strip's page colour: the page's background as soon as it is reported, then its corner's reading.
+    private var stripColor = LittleStripColor()
     /// The page's own background as the engine last reported it ("" while a new page has none), for the bar's sample.
     private var pageBackground = ""
     /// The page window trails the shell during a fast resize; the gap shows the page's colour
     /// (Arc's canvas while a new page has none yet).
     func browser(_ browser: CraBrowser, didReportBackgroundColor hex: String) {
-        if browser === self.browser { pageBackground = hex }
+        if browser === self.browser {
+            pageBackground = hex
+            stripColor.background(hex)
+            if state.themeColor != stripColor.hex { state.themeColor = stripColor.hex }
+        }
         shell.page.layer?.backgroundColor = (hex.isEmpty ? CraBrowser.pageCanvasColor : NSColor(Color(hex: hex))).cgColor
     }
     func browser(_ browser: CraBrowser, didChangeStatusMessage message: String) {}
@@ -2710,11 +2721,13 @@ final class LittleShellView: NSView {
     }
     private let cardBackground = CAGradientLayer()
     private var trackingArea: NSTrackingArea?
+    /// Behind the strip and around the page: the strip's left colour.
+    var stripColor = LittlePalette.barNS { didSet { layer?.backgroundColor = stripColor.cgColor } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.backgroundColor = LittlePalette.barNS.cgColor
+        layer?.backgroundColor = stripColor.cgColor
         // Top left to bottom right (the layer's y runs up).
         cardBackground.colors = [LittlePalette.cardTopLeft.cgColor, LittlePalette.cardBottomRight.cgColor]
         cardBackground.startPoint = CGPoint(x: 0, y: 1)
@@ -3063,6 +3076,26 @@ final class LittleTooltipView: NSView {
 final class LittlePopupPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+    /// Room round the menu for its shadow. Arc draws the menu in a transparent window with a soft shadow and no
+    /// rim; the window server's shadow drew a grey rim round Arc's light menu.
+    static let shadowMargin: CGFloat = 12
+    private let menuShadow = CALayer()
+    /// The menu, inset by the shadow's margin.
+    var spaces: LittleSpacesPopup? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            guard let spaces, let host = contentView else { return }
+            spaces.frame = host.bounds.insetBy(dx: Self.shadowMargin, dy: Self.shadowMargin)
+            spaces.autoresizingMask = [.width, .height]
+            host.addSubview(spaces)
+        }
+    }
+    /// The menu's own frame on screen (the window is larger by the shadow's margin).
+    var menuFrame: NSRect {
+        get { frame.insetBy(dx: Self.shadowMargin, dy: Self.shadowMargin) }
+        set { setFrame(newValue.insetBy(dx: -Self.shadowMargin, dy: -Self.shadowMargin), display: true) }
+    }
+
     init() {
         super.init(contentRect: NSRect(x: 0, y: 0, width: LittleMoveMenu.width, height: 150),
                    styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
@@ -3070,11 +3103,48 @@ final class LittlePopupPanel: NSPanel {
         level = .floating
         backgroundColor = .clear
         isOpaque = false
-        hasShadow = true
+        hasShadow = false
+        let host = LittlePopupShadowView(shadowLayer: menuShadow)
+        host.wantsLayer = true
+        menuShadow.shadowColor = NSColor.black.cgColor
+        menuShadow.shadowOpacity = 0.2
+        menuShadow.shadowRadius = 5
+        menuShadow.shadowOffset = CGSize(width: 0, height: -2)
+        host.layer?.addSublayer(menuShadow)
+        contentView = host
         hidesOnDeactivate = false
         // Arc's menu is whole in the first frame after the click (#331): no system fade.
         animationBehavior = .none
         collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
+    }
+}
+
+/// The menu's window behind it: transparent, with the menu's shadow, which follows its size.
+private final class LittlePopupShadowView: NSView {
+    private let shadowLayer: CALayer
+
+    init(shadowLayer: CALayer) {
+        self.shadowLayer = shadowLayer
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        let menu = bounds.insetBy(dx: LittlePopupPanel.shadowMargin, dy: LittlePopupPanel.shadowMargin)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        shadowLayer.frame = bounds
+        shadowLayer.shadowPath = CGPath(roundedRect: menu, cornerWidth: LittleMoveMenu.cornerRadius, cornerHeight: LittleMoveMenu.cornerRadius,
+                                   transform: nil)
+        CATransaction.commit()
+    }
+
+    /// Only the menu takes clicks; its shadow doesn't.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
     }
 }
 
@@ -3095,8 +3165,9 @@ final class LittleToolbarView: NSView {
     /// The magnifier, or the open padlock for a page that isn't served over https (#330).
     private let search = NSImageView()
     private var isInsecure = false
-    /// For `cra://debug?littleShown`: the strip's gradient ends and the space name's colour as drawn
-    /// (#549), the padlock and the pill's text.
+    /// For `cra://debug?littleShown`: whether the strip is drawn as light, the traffic lights' appearance, the
+    /// address's colour, the strip's gradient ends and the space name's colour as drawn (#549), the padlock and the
+    /// pill's text.
     var debugReadout: String {
         func hex(_ c: Any?) -> String {
             guard let c, CFGetTypeID(c as CFTypeRef) == CGColor.typeID else { return "-" }
@@ -3104,9 +3175,16 @@ final class LittleToolbarView: NSView {
         }
         let label = openLabel.attributedStringValue
         let name = label.length > 0 ? label.attribute(.foregroundColor, at: label.length - 1, effectiveRange: nil) as? NSColor : nil
-        return "gradient=\(hex(gradient.colors?.first))-\(hex(gradient.colors?.last)) name=\(name.map { Color(nsColor: $0).hexString } ?? "-") "
+        let lights = window?.standardWindowButton(.closeButton)?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+        return "light=\(tones?.light == true ? 1 : 0) buttons=\(lights == .aqua ? "light" : lights == .darkAqua ? "dark" : "-") "
+            + "text=\(urlLabel.textColor.map { Color(nsColor: $0).hexString } ?? "-") "
+            + "gradient=\(hex(gradient.colors?.first))-\(hex(gradient.colors?.last)) name=\(name.map { Color(nsColor: $0).hexString } ?? "-") "
             + "padlock=\(isInsecure ? 1 : 0) address=\(urlLabel.stringValue)"
     }
+    /// The colours the strip is drawn in, from the page's colour and the Mac's appearance.
+    private var tones: LittleChromeTones?
+    /// Told the strip's colours, for the window behind the page's rim and its traffic lights; at once when set.
+    var onStrip: ((LittleChromeTones) -> Void)? { didSet { if let tones { onStrip?(tones) } } }
     private let urlLabel = NSTextField.sidebarLabel(size: 13)
     private let puzzle = LittleIconView(symbol: "puzzlepiece.extension", size: 15)
     private let link = LittleIconView(symbol: "link", size: 14)
@@ -3141,19 +3219,16 @@ final class LittleToolbarView: NSView {
         search.imageScaling = .scaleNone
         showSecurity(insecure: false)
         pill.addSubview(search)
-        urlLabel.textColor = NSColor(LittlePalette.text)
         urlLabel.alignment = .center
         pill.addSubview(urlLabel)
         pill.addSubview(puzzle)
         pill.addSubview(link)
         pill.addSubview(profileChip)
         openButton.wantsLayer = true
-        openButton.layer?.backgroundColor = LittlePalette.buttonNS.cgColor
         openButton.layer?.cornerRadius = 7
         openButton.layer?.cornerCurve = .continuous
         openButton.layer?.masksToBounds = true
         openButton.layer?.borderWidth = 1
-        openButton.layer?.borderColor = NSColor(LittlePalette.buttonBorder).cgColor
         addSubview(openButton)
         openPart.wantsLayer = true
         openButton.addSubview(openPart)
@@ -3161,17 +3236,13 @@ final class LittleToolbarView: NSView {
         badge.wantsLayer = true
         badge.layer?.cornerRadius = 4
         badge.layer?.cornerCurve = .continuous
-        badge.layer?.backgroundColor = NSColor(LittlePalette.badge).cgColor
         badgeLabel.stringValue = "⌘O"
-        badgeLabel.textColor = NSColor(LittlePalette.badgeText)
         badge.addSubview(badgeLabel)
         openPart.addSubview(badge)
         divider.wantsLayer = true
-        divider.layer?.backgroundColor = NSColor(LittlePalette.buttonBorder).cgColor
         openButton.addSubview(divider)
         chevronPart.wantsLayer = true
         chevron.imageScaling = .scaleNone
-        chevron.contentTintColor = NSColor(LittlePalette.label)
         chevronPart.addSubview(chevron)
         openButton.addSubview(chevronPart)
         observe()
@@ -3182,13 +3253,15 @@ final class LittleToolbarView: NSView {
     override var isFlipped: Bool { true }
 
     private func observe() {
-        let (url, hover, popupOpen, space, spaces, profile, waiting) = withObservationTracking {
+        let (url, hover, popupOpen, space, spaces, profile, waiting, tones) = withObservationTracking {
             (state.url, state.hover, state.popupOpen, store.space(state.targetSpaceID) ?? store.focusedSpace, store.spaceOrder.count,
              // Arc's shouldShowProfileIndicators: only once there is a profile besides Default.
-             store.profiles.isEmpty ? nil : store.profileName(state.profileID), state.awaitsFirstResponse)
+             store.profiles.isEmpty ? nil : store.profileName(state.profileID), state.awaitsFirstResponse,
+             state.chromeTones(store: store))
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
+        if tones != self.tones { paint(tones) }
         let chevronShown = LittleMoveMenu.showsChevron(spaces: spaces)
         if state.showsChevron != chevronShown { state.showsChevron = chevronShown }
         divider.isHidden = !chevronShown
@@ -3198,37 +3271,55 @@ final class LittleToolbarView: NSView {
         // Arc keeps the magnifier while a first response is awaited.
         showSecurity(insecure: !waiting && LittleAddress.isInsecure(url))
         pill.toolTip = url
-        pill.layer?.backgroundColor = NSColor(hover == .pill ? LittlePalette.pillHover : LittlePalette.pill).cgColor
+        pill.layer?.backgroundColor = NSColor(hover == .pill ? tones.pillHover : tones.pill).cgColor
         puzzle.hovered = hover == .puzzle
         link.hovered = hover == .link
         profileChip.isHidden = profile == nil
         profileChip.name = profile ?? ""
         profileChip.hovered = hover == .profile
-        let tones = LittlePalette.tones(space.theme)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        gradient.colors = [NSColor(tones.left).cgColor, NSColor(tones.right).cgColor]
-        CATransaction.commit()
         let openTitle = SpaceMenuTitle.named(space.title, prefix: "Open in ")
         let text = NSMutableAttributedString(string: "Open in ", attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium),
-                                                                             .foregroundColor: NSColor(LittlePalette.label)])
+                                                                             .foregroundColor: NSColor(tones.label)])
         text.append(NSAttributedString(string: openTitle.displayedName, attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .bold),
                                                                          .foregroundColor: NSColor(tones.spaceName)]))
         openLabel.attributedStringValue = text
         openButton.toolTip = "Open this page in \(space.title) as a tab (⌘O)"
-        openPart.layer?.backgroundColor = hover == .open ? NSColor(LittlePalette.buttonHover).cgColor : nil
-        chevronPart.layer?.backgroundColor = hover == .chevron ? NSColor(LittlePalette.buttonHover).cgColor : nil
+        openPart.layer?.backgroundColor = hover == .open ? NSColor(tones.buttonHover).cgColor : nil
+        chevronPart.layer?.backgroundColor = hover == .chevron ? NSColor(tones.buttonHover).cgColor : nil
         chevron.image = SidebarSymbols.image(popupOpen ? "chevron.up" : "chevron.down", size: 10, weight: .bold)
         needsLayout = true
+    }
+
+    /// Draws the strip and its controls in `tones`: the page's colour, or Arc's strip for the Mac's
+    /// appearance before the page has one.
+    private func paint(_ tones: LittleChromeTones) {
+        self.tones = tones
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradient.colors = [NSColor(tones.left).cgColor, NSColor(tones.right).cgColor]
+        openButton.layer?.backgroundColor = NSColor(tones.button).cgColor
+        openButton.layer?.borderColor = NSColor(tones.buttonBorder).cgColor
+        badge.layer?.backgroundColor = NSColor(tones.badge).cgColor
+        divider.layer?.backgroundColor = NSColor(tones.buttonBorder).cgColor
+        CATransaction.commit()
+        urlLabel.textColor = NSColor(tones.text)
+        badgeLabel.textColor = NSColor(tones.badgeText)
+        chevron.contentTintColor = NSColor(tones.label)
+        showSecurity(insecure: isInsecure)
+        puzzle.tones = tones
+        link.tones = tones
+        profileChip.tones = tones
+        onStrip?(tones)
     }
 
     /// The pill starts with a magnifier; a page that isn't served over https gets Arc's open padlock
     /// instead, orange on a pale orange tile (#330).
     private func showSecurity(insecure: Bool) {
         isInsecure = insecure
-        search.layer?.backgroundColor = insecure ? LittlePalette.insecure.withAlphaComponent(0.10).cgColor : nil
+        let padlock = tones.map { NSColor($0.padlock) } ?? LittlePalette.insecure
+        search.layer?.backgroundColor = insecure ? padlock.withAlphaComponent(0.10).cgColor : nil
         search.image = SidebarSymbols.image(insecure ? "lock.open" : "magnifyingglass", size: 13, weight: .medium)
-        search.contentTintColor = insecure ? LittlePalette.insecure : NSColor(LittlePalette.icon)
+        search.contentTintColor = insecure ? padlock : tones.map { NSColor($0.icon) }
     }
 
     override func layout() {
@@ -3334,14 +3425,17 @@ final class LittleProfileChip: NSView {
     private let chevron = NSImageView()
     private static let font = NSFont.systemFont(ofSize: 11, weight: .medium)
     var name = "" { didSet { if name != oldValue { label.stringValue = name; needsLayout = true } } }
-    var hovered = false {
-        didSet {
-            layer?.backgroundColor = NSColor.white.withAlphaComponent(hovered ? 46 / 255 : 31 / 255).cgColor
-            let ink = NSColor(hovered ? LittlePalette.iconHot : LittlePalette.text)
-            label.textColor = ink
-            face.ink = ink
-            chevron.contentTintColor = ink
-        }
+    var hovered = false { didSet { paint() } }
+    /// The strip's colours: white at 31/255 on a dark strip as Arc draws it, black on a light one.
+    var tones: LittleChromeTones? { didSet { paint() } }
+
+    private func paint() {
+        guard let tones else { return }
+        layer?.backgroundColor = NSColor(hovered ? tones.chipHover : tones.chip).cgColor
+        let ink = NSColor(hovered ? tones.iconHot : tones.text)
+        label.textColor = ink
+        face.ink = ink
+        chevron.contentTintColor = ink
     }
 
     var fittingWidth: CGFloat {
@@ -3380,11 +3474,13 @@ final class LittleProfileChip: NSView {
 /// Icon in the pill: 26pt hover square, brighter glyph.
 private final class LittleIconView: NSView {
     private let glyph = NSImageView()
-    var hovered = false {
-        didSet {
-            glyph.contentTintColor = NSColor(hovered ? LittlePalette.iconHot : LittlePalette.icon)
-            layer?.backgroundColor = hovered ? NSColor(LittlePalette.iconHover).cgColor : nil
-        }
+    var hovered = false { didSet { paint() } }
+    var tones: LittleChromeTones? { didSet { paint() } }
+
+    private func paint() {
+        guard let tones else { return }
+        glyph.contentTintColor = NSColor(hovered ? tones.iconHot : tones.icon)
+        layer?.backgroundColor = hovered ? NSColor(tones.iconHover).cgColor : nil
     }
 
     init(symbol: String, size: CGFloat) {
@@ -3394,7 +3490,6 @@ private final class LittleIconView: NSView {
         layer?.cornerCurve = .continuous
         glyph.image = SidebarSymbols.image(symbol, size: size)
         glyph.imageScaling = .scaleNone
-        glyph.contentTintColor = NSColor(LittlePalette.icon)
         glyph.frame = bounds
         glyph.autoresizingMask = [.width, .height]
         addSubview(glyph)
@@ -3426,44 +3521,48 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
     private var iconColors: [String] = []
     private var selected = 0 { didSet { refreshSelection(); revealSelected() } }
     private var revealOnLayout = true
+    /// The strip's colours as the menu opens: Arc's light menu under a light strip, its navy one under a
+    /// dark strip.
+    private let tones: LittleChromeTones
 
     init(state: LittleWindowState, store: SidebarStore, onPick: @escaping (UUID) -> Void, onClose: @escaping () -> Void) {
         self.state = state
         self.store = store
         self.onPick = onPick
         self.onClose = onClose
+        tones = state.chromeTones(store: store)
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = LittlePalette.buttonNS.cgColor
+        layer?.backgroundColor = NSColor(tones.button).cgColor
         layer?.cornerRadius = LittleMoveMenu.cornerRadius
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
         layer?.borderWidth = LittleMoveMenu.border
-        layer?.borderColor = NSColor(LittlePalette.buttonBorder).cgColor
+        layer?.borderColor = NSColor(tones.buttonBorder).cgColor
         let h = LittleMoveMenu.headerHeight
         let glass = NSImageView(frame: NSRect(x: 16, y: 0, width: 14, height: h))
         glass.image = SidebarSymbols.image("magnifyingglass", size: 13, weight: .medium)
-        glass.contentTintColor = NSColor(LittlePalette.moveMenuGlyph)
+        glass.contentTintColor = NSColor(tones.menuGlyph)
         glass.imageScaling = .scaleNone
         addSubview(glass)
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
         field.font = .systemFont(ofSize: 13)
-        field.textColor = NSColor.white.withAlphaComponent(0.9)
+        field.textColor = tones.light ? NSColor(tones.menuTitle) : NSColor.white.withAlphaComponent(0.9)
         field.placeholderAttributedString = NSAttributedString(string: "Search Spaces...", attributes: [
-            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor(LittlePalette.moveMenuPlaceholder)])
+            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor(tones.menuPlaceholder)])
         field.usesSingleLineMode = true
         field.cell?.isScrollable = true
         field.delegate = self
         addSubview(field)
         // Arc 1.172.1: a plain ∧ after an 18 pt rule (1.168 had a filled 28 pt button).
         divider.wantsLayer = true
-        divider.layer?.backgroundColor = NSColor(LittlePalette.buttonBorder).cgColor
+        divider.layer?.backgroundColor = NSColor(tones.buttonBorder).cgColor
         addSubview(divider)
         let up = NSImageView(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
         up.image = SidebarSymbols.image("chevron.up", size: 11, weight: .semibold)
-        up.contentTintColor = NSColor(LittlePalette.moveMenuGlyph)
+        up.contentTintColor = NSColor(tones.menuGlyph)
         up.imageScaling = .scaleNone
         close.addSubview(up)
         addSubview(close)
@@ -3477,7 +3576,7 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
         addSubview(scroll)
         empty.stringValue = "No results"
         empty.alignment = .center
-        empty.textColor = NSColor(LittlePalette.moveMenuGlyph)
+        empty.textColor = NSColor(tones.menuGlyph)
         addSubview(empty)
         rebuild()
     }
@@ -3527,7 +3626,7 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
             row.addSubview(tile)
             let title = NSTextField.sidebarLabel(size: LittleMoveMenu.titleSize, weight: .semibold)
             title.stringValue = s.title
-            title.textColor = NSColor.white.withAlphaComponent(0.82)
+            title.textColor = NSColor(tones.menuTitle)
             let tx = LittleMoveMenu.textX
             title.frame = NSRect(x: tx - SidebarText.inset, y: (rh - 16) / 2,
                                  width: LittleMoveMenu.width - tx - 14 + 2 * SidebarText.inset, height: 16)
@@ -3537,9 +3636,9 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
         }
         empty.isHidden = !list.isEmpty
         // The menu grows and shrinks with the list, its top edge where it was.
-        if let window {
-            let f = window.frame, h = LittleMoveMenu.frame(rows: list.count, in: .zero).height
-            if f.height != h { window.setFrame(NSRect(x: f.minX, y: f.maxY - h, width: f.width, height: h), display: true) }
+        if let panel = window as? LittlePopupPanel {
+            let f = panel.menuFrame, h = LittleMoveMenu.frame(rows: list.count, in: .zero).height
+            if f.height != h { panel.menuFrame = NSRect(x: f.minX, y: f.maxY - h, width: f.width, height: h) }
         }
         needsLayout = true
         refreshSelection()
@@ -3547,7 +3646,7 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
 
     private func refreshSelection() {
         for (i, r) in rows.enumerated() {
-            r.layer?.backgroundColor = i == selected ? NSColor(LittlePalette.buttonHover).cgColor : nil
+            r.layer?.backgroundColor = i == selected ? NSColor(tones.buttonHover).cgColor : nil
         }
     }
 
@@ -3591,6 +3690,7 @@ final class LittleSpacesPopup: NSView, NSTextFieldDelegate {
         let name = { (i: Int) in self.list.indices.contains(i) ? self.list[i].title : "-" }
         return String(format: "rows=%d first=%@ selected=%@ scroll=%.0f inView=%d empty=%d", list.count, name(0), name(selected),
                       clip.minY, shown ? 1 : 0, empty.isHidden ? 0 : 1)
+            + " fill=\(Color(tones.button).hexString) names=\(Color(tones.menuTitle).hexString)"
             + (iconColors.isEmpty ? "" : " icons=" + iconColors.joined(separator: ","))
     }
 

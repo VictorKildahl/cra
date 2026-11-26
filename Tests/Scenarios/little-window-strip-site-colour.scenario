@@ -1,0 +1,33 @@
+# The Little Window's strip takes the page's colour, as a browser window's toolbar and Peek's bar do (#629), and its
+# address, icons, "Open in" button and menu are drawn for a light or a dark strip. Arc 1.174.3 keeps Little Arc's
+# strip off the page but follows macOS with it (a light strip on a light Mac); Cra had it dark on every Mac.
+# The strip's colour is read from the page, so these runs don't depend on the Mac's appearance.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Work","emoji":"🚀","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#6E9A72","#2E7A78"],"intensity":0.7,"noise":0.1,"appearance":"light"}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Home","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#F8D558"],"intensity":0.6,"noise":0.1,"appearance":"light"}}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+pace 0.5
+
+# A navy page: a navy strip with light ink, and the navy menu. The page is read off its pixels (ToolbarSampler), a
+# unit or two off what it set.
+cra://debug?externalURL=${PAGE}?bg=1e2a44
+wait 3
+cra://debug?littleShown=navy
+expect-log little shown navy: windows=1 space=Work .* light=0 buttons=dark text=.A3A1A9 gradient=.1[CDE]2[ABC]4[345]-.1[CDE]2[ABC]4[345] name=.D6E3D8 padlock=1
+snapshot LittleToolbarView little-strip-dark-page
+cra://debug?littleMenu=open
+expect-log little menu open: .* fill=.050625 names=.D2D2D8
+cra://debug?littleMenu=close
+expect-log little menu close: chevron=1 menu=closed
+cra://action/closeLittleWindows
+
+# A white page: a white strip with Arc's light-Mac ink, traffic lights drawn for a light strip, Work's green darkened to read on the light button (#6E9A72
+# to #577E5B), and Arc's light menu.
+cra://debug?externalURL=${PAGE}?bg=ffffff
+wait 3
+cra://debug?littleShown=white
+expect-log little shown white: windows=1 space=Work .* light=1 buttons=light text=.2F3033 gradient=.FFFFFF-.FFFFFF name=.577E5B padlock=1
+snapshot LittleToolbarView little-strip-light-page
+cra://debug?littleMenu=open
+expect-log little menu open: .* fill=.FDFDFF names=.313334
+snapshot LittleSpacesPopup little-menu-light
+cra://debug?littleMenu=close
