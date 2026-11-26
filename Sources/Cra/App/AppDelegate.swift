@@ -1942,6 +1942,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 if dict["stopSharing"] != nil { ExtensionStore.shared.stopSharing(e) } else { ExtensionStore.shared.removeShared(e) }
                 return
             }
+            // removePage=<id>[&profile=<folder>]: Settings ▸ Extensions ▸ Remove… of a Web Store install, its
+            // chrome://extensions page in a profile that has it, as Settings opens it (#842).
+            if let id = dict["removePage"] {
+                ExtensionStore.shared.reload()
+                guard let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) else {
+                    CraLog.note("extension removal \(id): not installed"); return
+                }
+                let folders = ExtensionRemoval.pageProfiles(installedIn: e.profiles, allProfiles: ExtensionStore.profileFolders)
+                CraLog.note("extension removal \(id): pages in [\(folders.joined(separator: ", "))]")
+                guard let folder = dict["profile"] ?? folders.first else { return }
+                let window = useNormalWindow()
+                openExtensionPage("chrome://extensions/?id=\(id)", window: window.windowID, profile: folder, singleton: true)
+                return
+            }
             if let id = dict["removeExtension"] {
                 if let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) { ExtensionStore.shared.remove(e) }
                 return
