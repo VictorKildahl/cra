@@ -92,7 +92,7 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     typealias FieldStyle = MobileSearchSheet.FieldStyle
 
     /// How the open address field sits on the drawer.
-    /// The drawer is grown over the tab switcher, where its field has no lift.
+    /// The drawer is grown over the tab switcher, where its field takes a fainter lift.
     var fieldOverTabRow: Bool {
         get { fieldBackground.overTabRow }
         set { fieldBackground.overTabRow = newValue }
@@ -882,7 +882,7 @@ final class FieldBackgroundView: UIView {
     var fieldStyle: SearchSheet.FieldStyle = .standard {
         didSet { if fieldStyle != oldValue { crossfadeColors() } }
     }
-    /// Grown over the tab switcher: no lift, the material alone.
+    /// Grown over the tab switcher: a fainter lift, whatever the app's appearance.
     var overTabRow = false {
         didSet { if overTabRow != oldValue { applyColors() } }
     }

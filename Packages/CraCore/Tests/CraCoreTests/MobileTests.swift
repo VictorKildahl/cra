@@ -176,10 +176,10 @@ struct MobileChromeTests {
     }
 
     /// The drawer's address field is frosted and lays a little white over its material, over a
-    /// light page or a dark one but not in incognito or over the tab switcher; the page menu's
-    /// address editor keeps the
+    /// light page or a dark one but not in incognito, and over the tab switcher fainter
+    /// still, in either appearance; the page menu's address editor keeps the
     /// sheet's own field.
-    @Test func theDrawersFieldIsLiftedOverEitherPageButNotInIncognitoOrOverTheTabRow() {
+    @Test func theDrawersFieldIsLiftedOverEitherPageAndTheTabRowButNotInIncognito() {
         typealias Style = MobileSearchSheet.FieldStyle
         #expect(Style(growsFromBar: false, pageIsLight: true) == .standard)
         #expect(Style(growsFromBar: true, pageIsLight: true) == .lightPage)
@@ -190,9 +190,10 @@ struct MobileChromeTests {
         #expect(Style.lightPage.whiteLift(incognito: true) == 0 && Style.darkPage.whiteLift(incognito: true) == 0,
                 "incognito's field is the material alone")
         #expect(Style.standard.whiteLift(incognito: true) == nil, "the page menu's field keeps its own")
-        #expect(Style.lightPage.whiteLift(incognito: false, overTabRow: true) == 0
-                    && Style.darkPage.whiteLift(incognito: false, overTabRow: true) == 0,
-                "over the tab switcher the field is the material alone")
+        let row = Style.darkPage.whiteLift(incognito: false, overTabRow: true) ?? 0
+        #expect(row == Style.lightPage.whiteLift(incognito: false, overTabRow: true), "the same in either appearance")
+        #expect(row > 0 && row < dark, "over the tab switcher, fainter than over a dark page")
+        #expect(Style.darkPage.whiteLift(incognito: true, overTabRow: true) == 0, "incognito still has none")
     }
 
     /// The mic sits left of the incognito mask, clear of it.
