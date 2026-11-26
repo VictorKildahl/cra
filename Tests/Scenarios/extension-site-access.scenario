@@ -1,0 +1,32 @@
+# promise: #695
+# A pinned extension's right-click menu has Arc's site access line (Chromium's extension menu, title case): the
+# fixture's content script on 127.0.0.1 gives "This Can Read and Change Site Data" with its three choices, "On
+# 127.0.0.1" on and "On All Sites" greyed out (it asks for no other site), then Learn More. Picking "When You Click
+# the Extension" withholds the site as Chrome's menu does and the menu reads it back from Chromium; on a page no
+# extension may run on (chrome://version) the line is "Can't Read or Change Site's Data", greyed out.
+# The state comes from the engine (CraBrowser.extensionSiteAccess, engine 159.0.8154.45-7).
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": true}
+cra://debug?installExtension=${FIXTURES}/CommandsExtension
+relaunch
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=access-page
+wait 3
+cra://debug?pinExtension=${COMMANDS_EXTENSION_ID}
+wait 2
+cra://debug?extensionMenu=${COMMANDS_EXTENSION_ID}&label=rows
+expect-log extension menu rows: Cra Commands Fixture \(off\) \| - \| Say hello \| - \| This Can Read and Change Site Data ▸ \| - \| Remove from Cra \| Unpin \|
+cra://debug?extensionMenu=${COMMANDS_EXTENSION_ID}&label=choices&submenu=This%20Can%20Read%20and%20Change%20Site%20Data
+expect-log extension menu choices: When You Click the Extension \| On 127\.0\.0\.1 ✓ \| On All Sites \(off\) \| - \| Learn More About Site Access$
+cra://debug?extensionMenu=${COMMANDS_EXTENSION_ID}&label=pick&submenu=This%20Can%20Read%20and%20Change%20Site%20Data&press=When%20You%20Click%20the%20Extension
+expect-log extension site access [a-p]{8}: onClick set
+cra://debug?extensionMenu=${COMMANDS_EXTENSION_ID}&label=withheld&submenu=This%20Can%20Read%20and%20Change%20Site%20Data
+expect-log extension menu withheld: When You Click the Extension ✓ \| On 127\.0\.0\.1 \| On All Sites \(off\) \|
+cra://debug?extensionMenu=${COMMANDS_EXTENSION_ID}&label=back&submenu=This%20Can%20Read%20and%20Change%20Site%20Data&press=On%20127.0.0.1
+expect-log extension site access [a-p]{8}: onSite set
+cra://debug?extensionMenu=${COMMANDS_EXTENSION_ID}&label=granted&submenu=This%20Can%20Read%20and%20Change%20Site%20Data
+expect-log extension menu granted: When You Click the Extension \| On 127\.0\.0\.1 ✓ \|
+cra://open?url=chrome://version
+wait 3
+cra://debug?extensionMenu=${COMMANDS_EXTENSION_ID}&label=restricted
+expect-log extension menu restricted: Cra Commands Fixture \(off\) \| - \| Say hello \| - \| Can't Read or Change Site's Data \(off\) \| - \| Remove from Cra

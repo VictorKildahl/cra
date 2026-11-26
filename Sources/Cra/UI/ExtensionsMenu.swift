@@ -94,6 +94,12 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
                 guard !own.isEmpty else { break }
                 own.forEach(menu.addItem)
                 menu.addItem(.separator())
+            case .siteAccess:
+                // The site access line for the page, from the engine (#695).
+                guard let page = Self.page(), page.responds(to: #selector(CraBrowser.extensionSiteAccess(_:))),
+                      let access = ExtensionSiteAccess(engine: page.extensionSiteAccess(id)) else { break }
+                menu.addItem(Self.siteAccessItem(access, extension: id, page: page, open: open))
+                menu.addItem(.separator())
             case .remove:
                 menu.addItem(BlockMenuItem(title: row.title) { Self.confirmRemove(e) })
             case .options:
@@ -136,6 +142,27 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
             if (row["checked"] as? Bool) == true { item.state = .on }
             return item
         }
+    }
+
+    /// "Can't Read or Change Site's Data", greyed out, or the submenu with the three choices and Learn More (#695).
+    static func siteAccessItem(_ access: ExtensionSiteAccess, extension id: String, page: CraBrowser, open: @escaping (String) -> Void) -> NSMenuItem {
+        let item = NSMenuItem(title: access.title, action: nil, keyEquivalent: "")
+        guard !access.rows.isEmpty else { return item }
+        let sub = NSMenu(title: access.title)
+        for row in access.rows {
+            if row.isSeparator { sub.addItem(.separator()); continue }
+            let choice = row.choice
+            let entry = BlockMenuItem(title: row.title) { [weak page] in
+                guard let choice else { open(ExtensionSiteAccess.learnMorePage); return }
+                let done = page?.setExtensionSiteAccess(choice.rawValue, extension: id) == true
+                CraLog.note("extension site access \(id.prefix(8)): \(choice.rawValue) \(done ? "set" : "refused")")
+            }
+            if !row.enabled { entry.action = nil }
+            if row.checked { entry.state = .on }
+            sub.addItem(entry)
+        }
+        item.submenu = sub
+        return item
     }
 
     /// Remove from Cra: asked first, as Chrome's "Remove from Chrome…" does (#695).

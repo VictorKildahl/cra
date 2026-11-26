@@ -1826,9 +1826,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("current space \(label): \(space.title) profile=\(main.store.profileName(space.profileID))")
                 return
             }
-            // extensionMenu=<id>: the toolbar's right-click menu for that pinned extension (#695); press=<row> chooses one.
+            // extensionMenu=<id>: the toolbar's right-click menu for that pinned extension (#695); press=<row> chooses one,
+            // submenu=<row> lists (and presses in) that row's submenu instead.
             if let id = dict["extensionMenu"], let bar = main.shell.paneCards.first?.toolbarHost as? PaneToolbarView {
-                CraLog.note("extension menu \(dict["label"] ?? id): " + bar.debugExtensionMenu(id, press: dict["press"]))
+                CraLog.note("extension menu \(dict["label"] ?? id): " + bar.debugExtensionMenu(id, press: dict["press"], submenu: dict["submenu"]))
                 CraLog.note("extension pinned \(dict["label"] ?? id): \(ExtensionStore.shared.pinnedIDs(inProfile: "Default").contains(id) ? 1 : 0)")
                 // Which of the menu's pages the selected tab is now, not its address (cra.log keeps no addresses).
                 let url = main.store.selectedTabID(window: main.windowID).flatMap { main.store.item($0)?.tab?.url } ?? ""

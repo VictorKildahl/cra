@@ -3330,6 +3330,8 @@ static NSView* FindRenderWidgetHostView(NSView* root) {
 - (BOOL)runExtensionCommand:(NSString*)command extension:(NSString*)extensionID { return NO; }
 - (NSArray<NSDictionary<NSString*, id>*>*)extensionActionMenuItems:(NSString*)extensionID { return @[]; }
 - (BOOL)runExtensionMenuItem:(NSString*)itemID extension:(NSString*)extensionID { return NO; }
+- (NSDictionary<NSString*, id>*)extensionSiteAccess:(NSString*)extensionID { return nil; }
+- (BOOL)setExtensionSiteAccess:(NSString*)access extension:(NSString*)extensionID { return NO; }
 - (BOOL)uninstallExtension:(NSString*)extensionID { return NO; }
 - (void)allowAppLinkScheme:(NSString*)scheme fromOrigin:(NSString*)origin {}
 - (BOOL)runChromeCommand:(NSString*)name {

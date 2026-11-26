@@ -78,5 +78,6 @@ source_set("core") {
     "//components/history/core/browser",
     "//components/keyed_service/core",
     "//components/query_parser",
+    "//components/url_formatter",
   ]
 }

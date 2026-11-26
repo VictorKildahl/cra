@@ -439,6 +439,15 @@ CRA_EXPORT @interface CraBrowser : NSObject
 - (NSArray<NSDictionary<NSString *, id> *> *)extensionActionMenuItems:(NSString *)extensionID NS_SWIFT_NAME(extensionActionMenuItems(_:));
 /// Runs one of those rows ("id") as Chrome's menu does: contextMenus.onClicked with this page as the tab.
 - (BOOL)runExtensionMenuItem:(NSString *)itemID extension:(NSString *)extensionID NS_SWIFT_NAME(runExtensionMenuItem(_:extension:));
+/// The extension's site access on this page, as Chrome's extension menu shows it (#695, legacy InitMenu): nil when
+/// it asks for none (no host permissions, no activeTab) or isn't enabled in this page's profile; @{"cantAccess": @YES}
+/// when it may never run here (PermissionsManager can't select "on click": chrome://, the Web Store); otherwise
+/// "site" (the host as the menu names it), "current" ("onClick", "onSite", "onAllSites") and "enabled" (the ones
+/// CanUserSelectSiteAccess allows). Engine only.
+- (nullable NSDictionary<NSString *, id> *)extensionSiteAccess:(NSString *)extensionID NS_SWIFT_NAME(extensionSiteAccess(_:));
+/// Sets it for this page's site ("onClick", "onSite", "onAllSites"), as Chrome's menu does (SitePermissionsHelper::
+/// UpdateSiteAccess). NO when Chromium wouldn't offer that choice here.
+- (BOOL)setExtensionSiteAccess:(NSString *)access extension:(NSString *)extensionID NS_SWIFT_NAME(setExtensionSiteAccess(_:extension:));
 /// Removes the extension from this page's profile, as chrome://extensions' Remove does (no dialog: the app asks).
 /// NO when Chromium can't (a policy-installed extension) or it isn't installed there.
 - (BOOL)uninstallExtension:(NSString *)extensionID NS_SWIFT_NAME(uninstallExtension(_:));

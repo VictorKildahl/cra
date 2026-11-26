@@ -290,11 +290,19 @@ final class PaneToolbarView: NSView {
 
     /// Scenarios (#695): a pinned extension's right-click menu as its rows ("-" a separator, "▸" a
     /// submenu, "(off)" a row that does nothing), then the row titled `press` chosen, if any.
-    func debugExtensionMenu(_ id: String, press: String?) -> String {
-        guard let menu = buttons["ext:" + id]?.menuProvider?() else { return "no menu" }
+    /// `submenu`: the rows of the menu's row with that title instead (✓ on the chosen one), `press` among them.
+    func debugExtensionMenu(_ id: String, press: String?, submenu: String? = nil) -> String {
+        guard let top = buttons["ext:" + id]?.menuProvider?() else { return "no menu" }
+        let menu: NSMenu
+        if let submenu {
+            guard let sub = top.items.first(where: { $0.title == submenu })?.submenu else { return "no submenu" }
+            menu = sub
+        } else {
+            menu = top
+        }
         let rows = menu.items.map { item -> String in
             if item.isSeparatorItem { return "-" }
-            return item.title + (item.submenu != nil ? " ▸" : item.action == nil ? " (off)" : "")
+            return item.title + (item.submenu != nil ? " ▸" : item.action == nil ? " (off)" : "") + (item.state == .on ? " ✓" : "")
         }
         if let press, let i = menu.items.firstIndex(where: { $0.title == press }) { menu.performActionForItem(at: i) }
         return rows.joined(separator: " | ")

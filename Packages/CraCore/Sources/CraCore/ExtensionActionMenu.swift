@@ -3,8 +3,8 @@ import Foundation
 /// A pinned extension's right-click menu in the toolbar (GitHub #695): Arc's, which is Chromium's
 /// extension action menu (the reporter's 1Password menu in Arc 1.17x): the extension's name, its own
 /// action items, the site access line, Remove from Arc and Unpin, then Manage Extension and View Web
-/// Permissions. The extension's own items and Remove come through the engine (engine -20); the site access
-/// line isn't here yet. Options is Chrome's row for an extension with an options page; Cra's icon choices
+/// Permissions. The extension's own items and Remove come through the engine (engine -20), the site access
+/// line too (engine -7 of 159, `ExtensionSiteAccess`). Options is Chrome's row for an extension with an options page; Cra's icon choices
 /// (Original Icon, Monochrome, Symbol, Choose Image…), which this menu used to be, close it.
 public enum ExtensionActionMenu {
     public enum Row: Equatable, Sendable {
@@ -14,6 +14,9 @@ public enum ExtensionActionMenu {
         case separator
         /// The extension's own items (chrome.contextMenus for its action), then a separator; nothing when it has none.
         case ownItems
+        /// The site access line for the page (`ExtensionSiteAccess`), then a separator; nothing when the
+        /// extension asks for no site access.
+        case siteAccess
         case options
         /// Remove the extension, after asking.
         case remove
@@ -25,7 +28,7 @@ public enum ExtensionActionMenu {
         public var title: String {
             switch self {
             case .name(let name, _): name
-            case .separator, .ownItems: ""
+            case .separator, .ownItems, .siteAccess: ""
             case .options: "Options"
             case .remove: "Remove from Cra"
             case .unpin: "Unpin"
@@ -37,7 +40,7 @@ public enum ExtensionActionMenu {
     }
 
     public static func rows(name: String, hasOptions: Bool, fromWebStore: Bool) -> [Row] {
-        [.name(name, opensWebStore: fromWebStore), .separator, .ownItems]
+        [.name(name, opensWebStore: fromWebStore), .separator, .ownItems, .siteAccess]
             + (hasOptions ? [.options] : []) + [.remove, .unpin, .separator, .manage, .webPermissions, .separator, .icon]
     }
 

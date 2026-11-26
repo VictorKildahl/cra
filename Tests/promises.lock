@@ -1584,9 +1584,14 @@
 #694   Packages/CraCore/Tests/CraCoreTests/ToolbarHoverTests.swift::aDarkBarKeepsItsWhiteHover  eb26d033280c
 #694   Packages/CraCore/Tests/CraCoreTests/ToolbarHoverTests.swift::aLightBarGetsADarkHover  aa6dcd50c5d4
 #694   Tests/Scenarios/toolbar-hover-light.scenario  c39048eb6964
-#695   Packages/CraCore/Tests/CraCoreTests/ExtensionActionMenuTests.swift::arcsRowsInArcsOrder  10b77303231a
+#695   Packages/CraCore/Tests/CraCoreTests/ExtensionActionMenuTests.swift::arcsRowsInArcsOrder  0fd5e63a57eb
 #695   Packages/CraCore/Tests/CraCoreTests/ExtensionActionMenuTests.swift::eachRowOpensChromesPage  5c91641395f2
-#695   Tests/Scenarios/extension-menu-own-items.scenario  24125a3d9e6e
+#695   Packages/CraCore/Tests/CraCoreTests/ExtensionSiteAccessTests.swift::aPageItMayNeverRunOnIsOneGreyLine  3b982f37ec86
+#695   Packages/CraCore/Tests/CraCoreTests/ExtensionSiteAccessTests.swift::noLineForAnExtensionThatAsksForNoSiteAccess  5947ce198aa0
+#695   Packages/CraCore/Tests/CraCoreTests/ExtensionSiteAccessTests.swift::theSubmenuHasChromesThreeChoicesThenLearnMore  068da72c9fba
+#695   Packages/CraCore/Tests/CraCoreTests/ExtensionSiteAccessTests.swift::unknownChoicesFromTheEngineAreLeftOut  dc1fff92c6c6
+#695   Tests/Scenarios/extension-menu-own-items.scenario  0bdaaccbcbe2
+#695   Tests/Scenarios/extension-site-access.scenario  fb7c5fecbedd
 #695   Tests/Scenarios/toolbar-extension-menu.scenario  c4af102c83b5
 #696   Packages/CraCore/Tests/CraCoreTests/TabSwitcherKeysTests.swift::graveGoesBackLikeTheAppSwitcher  dd39f3565da5
 #696   Packages/CraCore/Tests/CraCoreTests/TabSwitcherKeysTests.swift::theOtherKeysStayAsTheyWere  36027ecb06a5

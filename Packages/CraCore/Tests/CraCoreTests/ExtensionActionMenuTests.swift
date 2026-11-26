@@ -7,14 +7,14 @@ struct ExtensionActionMenuTests {
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/695"))
     func arcsRowsInArcsOrder() {
-        // Arc 1.17x (the reporter's 1Password menu): the name, the extension's own items, Remove from Arc and
+        // Arc 1.17x (the reporter's 1Password menu): the name, the extension's own items, the site access line, Remove from Arc and
         // Unpin, then Manage Extension and View Web Permissions; Options with an options page, as Chrome's menu
         // has; Cra's icon choices last.
         #expect(ExtensionActionMenu.rows(name: "1Password", hasOptions: false, fromWebStore: true) == [
-            .name("1Password", opensWebStore: true), .separator, .ownItems, .remove, .unpin, .separator, .manage, .webPermissions, .separator, .icon,
+            .name("1Password", opensWebStore: true), .separator, .ownItems, .siteAccess, .remove, .unpin, .separator, .manage, .webPermissions, .separator, .icon,
         ])
         #expect(ExtensionActionMenu.rows(name: "Fixture", hasOptions: true, fromWebStore: false) == [
-            .name("Fixture", opensWebStore: false), .separator, .ownItems, .options, .remove, .unpin, .separator, .manage, .webPermissions, .separator, .icon,
+            .name("Fixture", opensWebStore: false), .separator, .ownItems, .siteAccess, .options, .remove, .unpin, .separator, .manage, .webPermissions, .separator, .icon,
         ])
         #expect(ExtensionActionMenu.Row.remove.title == "Remove from Cra")
         #expect(ExtensionActionMenu.Row.manage.title == "Manage Extension")
