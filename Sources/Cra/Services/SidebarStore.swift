@@ -765,6 +765,10 @@ final class SidebarStore {
         selectTab(referrer, window: window)
     }
 
+    /// Favorites closed with ⌘W whose pages kept running (#740): ⌃Tab leaves them out until they're picked again,
+    /// as in Arc (RecentTabOrder.listsPane, #784). Not saved: a relaunch unloads them anyway.
+    var favoritesClosedWithCmdW: Set<UUID> = []
+
     func selectTab(_ id: UUID?, window: UUID? = nil) {
         var w = self.window(window).id
         // A space's tab picked while an incognito or Blank Window is in front (a link from
@@ -783,6 +787,7 @@ final class SidebarStore {
             $0.focusedSpaceID = sid
             $0.selectedTabPerSpace[sid] = id
         }
+        favoritesClosedWithCmdW.remove(id)
         noteShown(id)
         if !isIncognito(space: sid) {
             var dates = ranking.recentlySwitchedToTabs[id] ?? []

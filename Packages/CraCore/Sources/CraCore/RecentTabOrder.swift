@@ -11,6 +11,13 @@ import Foundation
 /// order. Picking another space's tab shows it, so it becomes the newest and the tab left behind
 /// the next newest: a second tap goes back to where it started.
 public enum RecentTabOrder {
+    /// Whether ⌃Tab lists a pane: only open tabs. A pinned tab or Favorite counts while its page is loaded, but a
+    /// Favorite closed with ⌘W leaves the switcher although its page keeps running (#740), until it's picked again
+    /// (Arc 1.174.2, #784). The tab on screen always counts.
+    public static func listsPane(selected: Bool, pinned: Bool, loaded: Bool, closedWithCmdW: Bool) -> Bool {
+        selected || ((!pinned || loaded) && !closedWithCmdW)
+    }
+
     public struct Entry: Equatable, Sendable {
         public var id: UUID
         public var lastActive: Date?

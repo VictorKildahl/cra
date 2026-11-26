@@ -1,8 +1,8 @@
 # promise: #784
 # ⌃Tab's switcher lists only open tabs: a Today tab closed with ⌘W leaves it, and so does a pinned tab, whose
 # page ⌘W unloads. Reported as closed tabs still listed after ⌘W (0.1.56); these closes were right already. A
-# Favorite is the exception on purpose: ⌘W only deselects it and its page keeps running, as in Arc (#740), so it
-# is still an open tab.
+# Favorite ⌘W only deselects (its page keeps running, #740) leaves the switcher too, as in Arc:
+# tab-switcher-favorite-close.
 budget rss=700 stalls50=10
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
 cra://open?url=${PAGE}?n=1

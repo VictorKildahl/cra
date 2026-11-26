@@ -1,0 +1,29 @@
+# promise: #784
+# A Favorite closed with ⌘W leaves ⌃Tab's switcher, as in Arc 1.174.2 (measured 26 Nov 2026: listed before ⌘W, gone
+# after), though its page keeps running (#740). Picked again, it's back in the list. isabhiii on #784.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=1
+wait 1
+cra://open?url=${PAGE}?n=2
+wait 1
+cra://open?url=${PAGE}?n=fav
+wait 2
+cra://action/favoriteTab
+wait 1
+cra://debug?switcher=1
+expect-log tab switcher: 3 cards: Fixture fav, Fixture 2, Fixture 1
+cra://dismiss
+wait 1
+cra://action/closeTab
+expect-log close tab: favorite deselected, its page kept
+wait 2
+cra://debug?switcher=1
+expect-log tab switcher: 2 cards: Fixture 2, Fixture 1
+reject-log tab switcher: 2 cards: .*Fixture fav
+cra://dismiss
+wait 1
+cra://debug?selectTab=n=fav
+wait 2
+cra://debug?switcher=1
+expect-log tab switcher: 3 cards: Fixture fav, Fixture 2, Fixture 1
+cra://dismiss

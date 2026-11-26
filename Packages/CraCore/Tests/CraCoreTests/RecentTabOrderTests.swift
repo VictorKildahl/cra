@@ -86,4 +86,16 @@ struct RecentTabOrderSplitTests {
         let entries = [RecentTabOrder.Entry(id: a, lastActive: at(1)), .init(id: b, lastActive: at(3)), .init(id: c, lastActive: at(2))]
         #expect(RecentTabOrder.cards(entries, current: a).map(\.id) == RecentTabOrder.ordered(entries, current: a))
     }
+
+    /// ⌃Tab lists open tabs only. A pinned tab or Favorite counts while its page is loaded, but a Favorite closed with ⌘W
+    /// leaves the switcher although its page keeps running (#740), until it's picked again: Arc 1.174.2 listed it before
+    /// ⌘W and not after (measured 26 Nov 2026, offline copy). isabhiii on #784.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/784")) func aFavoriteClosedWithCmdWLeavesTheSwitcher() {
+        #expect(RecentTabOrder.listsPane(selected: false, pinned: true, loaded: true, closedWithCmdW: false))
+        #expect(!RecentTabOrder.listsPane(selected: false, pinned: true, loaded: true, closedWithCmdW: true))
+        // An unloaded pinned tab isn't open; a Today tab always is; the tab on screen always counts.
+        #expect(!RecentTabOrder.listsPane(selected: false, pinned: true, loaded: false, closedWithCmdW: false))
+        #expect(RecentTabOrder.listsPane(selected: false, pinned: false, loaded: false, closedWithCmdW: false))
+        #expect(RecentTabOrder.listsPane(selected: true, pinned: true, loaded: true, closedWithCmdW: true))
+    }
 }

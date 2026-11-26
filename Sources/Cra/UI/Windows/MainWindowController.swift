@@ -3220,10 +3220,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             switch CloseSuccessor.pinnedClose(isFavorite: store.isFavorite(id), fromItsMenu: fromItsMenu,
                                               audible: audible, awayFromPinnedPage: !away.isEmpty) {
             case .deselectKeepingPage:
+                store.favoritesClosedWithCmdW.formUnion(panes)
                 if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
                 CraLog.note("close tab: favorite deselected, its page kept")
                 return
             case .deselectGoingHome:
+                store.favoritesClosedWithCmdW.formUnion(panes)
                 if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
                 for p in away { resetPinnedTab(p) }
                 CraLog.note("close tab: favorite deselected, back to its pinned page")
@@ -3246,12 +3248,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     }
 
     /// The space's open tabs, the latest first, a split as one card (#554). A pinned tab that was
-    /// closed (unloaded) isn't open: ⌃Tab doesn't list it, nor a pinned split none of whose panes is open.
+    /// closed (unloaded) isn't open: ⌃Tab doesn't list it, nor a pinned split none of whose panes is open,
+    /// nor a Favorite closed with ⌘W whose page kept running (#784, as in Arc).
     private func openRecentCards(limit: Int, allSpaces: Bool = false) -> [RecentTabOrder.Card] {
         let recent = allSpaces ? store.recentCardsInAllSpaces(limit: .max, window: windowID)
             : store.recentCards(in: focusedSpaceID, limit: .max, window: windowID)
         return Array(recent.filter { card in
-            card.panes.contains { $0 == selectedTabID || !store.isPinned($0) || app.runtime(for: $0) != nil }
+            card.panes.contains {
+                RecentTabOrder.listsPane(selected: $0 == selectedTabID, pinned: store.isPinned($0), loaded: app.runtime(for: $0) != nil,
+                                         closedWithCmdW: store.favoritesClosedWithCmdW.contains($0))
+            }
         }.prefix(limit))
     }
 
