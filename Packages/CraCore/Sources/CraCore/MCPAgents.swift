@@ -53,10 +53,15 @@ public struct MCPSettings: Codable, Equatable, Sendable {
     /// history_search on (Settings ▸ Advanced ▸ Let agents read your history).
     public var allowsHistory = false
     public var agents: [MCPAgent] = []
+    /// How long the agent stays on screen after its last step (Settings ▸ Advanced ▸ Agents).
+    public var linger: MCPAgentPresence.Linger = .standard
 
-    public init(allowsScripts: Bool = false, allowsHistory: Bool = false, agents: [MCPAgent] = []) {
-        self.allowsScripts = allowsScripts; self.allowsHistory = allowsHistory; self.agents = agents
+    public init(allowsScripts: Bool = false, allowsHistory: Bool = false, agents: [MCPAgent] = [],
+                linger: MCPAgentPresence.Linger = .standard) {
+        self.allowsScripts = allowsScripts; self.allowsHistory = allowsHistory; self.agents = agents; self.linger = linger
     }
+
+    private enum CodingKeys: String, CodingKey { case allowsScripts, allowsHistory, agents, lingerSeconds }
 
     /// The tools the user's answers leave off.
     public var disabledTools: Set<String> {
@@ -71,6 +76,16 @@ public struct MCPSettings: Codable, Equatable, Sendable {
         allowsScripts = try c.decodeIfPresent(Bool.self, forKey: .allowsScripts) ?? false
         allowsHistory = try c.decodeIfPresent(Bool.self, forKey: .allowsHistory) ?? false
         agents = try c.decodeIfPresent([MCPAgent].self, forKey: .agents) ?? []
+        // A file from before the setting, or a number that isn't one of the choices: the standard.
+        linger = MCPAgentPresence.Linger(saved: try? c.decodeIfPresent(Int.self, forKey: .lingerSeconds))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(allowsScripts, forKey: .allowsScripts)
+        try c.encode(allowsHistory, forKey: .allowsHistory)
+        try c.encode(agents, forKey: .agents)
+        try c.encode(linger.rawValue, forKey: .lingerSeconds)
     }
 
     /// Missing or unreadable: nothing allowed, so every agent is asked again.

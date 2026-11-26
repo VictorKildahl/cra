@@ -5828,15 +5828,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// An MCP agent's pill at the bottom of the page (AgentPill): its face, what it does, Take Over (⌘.).
     private lazy var agentPill = AgentPill()
 
-    /// ⌘. (Stop Loading) while an agent's pill is up here stops the agent instead of the page.
-    func takeOverFromAgent() -> Bool { agentPill.takeOverIfUp() }
+    /// ⌘. (Stop Loading) while an agent's pill is up here, or while an agent whose pill was closed
+    /// with its × still acts here, stops the agent instead of the page.
+    func takeOverFromAgent() -> Bool { agentPill.takeOverIfUp() || MCPServer.shared.takeOverClosedPill(in: windowID) }
 
-    func showAgentPill(_ text: String, takeOver: @escaping () -> Void) {
+    /// `tabWatched`: the agent acts in a tab the user is looking at (the whole pill), else only its face.
+    func showAgentPill(_ text: String, tabWatched: Bool, lingers: TimeInterval, takeOver: @escaping () -> Void, close: @escaping () -> Void) {
         guard let window else { return }
-        agentPill.show(text, page: { [weak self] in
+        agentPill.show(text, tabWatched: tabWatched, lingers: lingers, page: { [weak self] in
             guard let self else { return nil }
             return self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil)
-        }, in: window, takeOver: takeOver)
+        }, in: window, takeOver: takeOver, close: close)
+    }
+
+    /// Tests (cra://debug?mcpPill=open|close|takeover): a click on the pill's face, on its ×, or ⌘.
+    func pressAgentPill(_ part: String) {
+        switch part {
+        case "close": agentPill.pressClose()
+        case "takeover": CraLog.note("mcp pill: ⌘. \(takeOverFromAgent() ? "took over" : "found no agent")")
+        default: agentPill.open()
+        }
     }
 
     // MARK: An agent's cursor

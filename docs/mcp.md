@@ -44,17 +44,22 @@ While an agent acts in a page, a dark pill at the bottom of the window it works 
 agent's face and what it does ("Claude Code is clicking “Sign in”"; each new step slides in), with
 **Take Over** (or ⌘.): that agent's session disconnects and its calls stop. MCP stays on, so other
 agents keep working and the stopped one can connect again; only Settings turns it off. The pill
-stays while the agent works and goes a few seconds after its last action; reading, organizing tabs
-and notes never show it.
+stays while the agent works and goes after its last action; reading, organizing tabs and notes
+never show it. While the agent acts in a tab you aren't looking at, the pill is only the agent's
+face, still, where the pill would be: no words and no motion over the page you read. A click on
+the face opens the whole pill, and ⌘. takes over either way. On hover the whole pill shows a ×,
+which puts it away until that agent's session ends without stopping the agent; ⌘. still takes
+over while it acts in the window.
 
-The same face sits at the end of the sidebar row of every tab an agent works in, reading too, and
-goes eight seconds after its last call there. When you are looking at the tab the agent acts in,
+The same face sits at the end of the sidebar row of every tab an agent works in, reading too.
+The pill, the row's face and the cursor stay 10 seconds after the agent's last step, so they don't
+come and go while it thinks; Settings ▸ Advanced ▸ Agents ▸ Keep an agent on screen for picks 5,
+10 or 30 seconds or a minute (`lingerSeconds` in `mcp.json`). When you are looking at the tab the agent acts in,
 the face is its cursor: it glides to what the agent points at, slowly enough to follow, rests on it
 for a moment and squishes when it clicks, so a page never changes without you seeing what was
 clicked. When the agent acts on something out of view, the page scrolls to it smoothly while the
 cursor looks that way, and its wheel scrolls are paced under the cursor, so the page never jumps
-somewhere you didn't see it go. The cursor stays up as long as the tab's face does, so it doesn't
-vanish while the agent thinks. Steps a few milliseconds apart change the pill's words at most once
+somewhere you didn't see it go. Steps a few milliseconds apart change the pill's words at most once
 every 0.7 s, the latest winning. On a tab you aren't looking at there is no cursor and the agent
 works at full speed.
 

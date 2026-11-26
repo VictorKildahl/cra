@@ -26,6 +26,12 @@ final class MCPServer {
         get { settings.allowsHistory }
         set { settings.allowsHistory = newValue }
     }
+    /// How long the pill, the cursor and the row's face stay after an agent's last step
+    /// (Settings ▸ Advanced ▸ Agents, discussion #862).
+    var linger: MCPAgentPresence.Linger {
+        get { settings.linger }
+        set { settings.linger = newValue }
+    }
     /// For this run only (launch arguments of isolated test copies): agents allowed without a
     /// prompt (-mcpApprovesAgents YES), and page_evaluate on (-mcpAllowsScripts YES).
     @ObservationIgnored private let approvesAgents = MCPServer.launchArgument("mcpApprovesAgents")
@@ -212,6 +218,8 @@ final class MCPServer {
                 if self?.connections[owner] == client { self?.connections.removeValue(forKey: owner) }
                 self?.stoppedSessions.remove(owner)
                 self?.stopWorking(session: owner)
+                self?.closedPills.remove(owner)
+                self?.closedPillWindows = self?.closedPillWindows.filter { $0.value.session != owner } ?? [:]
                 self?.agentNames.removeValue(forKey: owner)
                 if self?.lastPillSession == owner { self?.lastPillSession = nil }
                 self?.identities.removeValue(forKey: client)
@@ -638,8 +646,13 @@ final class MCPServer {
     /// The agent's pill while it acts (AgentPill), at the bottom of the window that holds the tab it
     /// works in: its face, what it does ("Claude Code is clicking “Sign in”", MCPAgentPresence), and
     /// Take Over (⌘.), which stops it. Each step changes the words; it stays up while the agent works
-    /// and goes AgentPill.visibleFor after its last action. Reading never shows it.
+    /// and goes `linger` after its last action. Reading never shows it. In a tab the user isn't
+    /// looking at it is only the agent's face (MCPAgentPresence.pillLook, discussion #579).
     @ObservationIgnored private var pillShown: [UUID: UUID] = [:]
+    /// Sessions whose pill the user put away with its ×: it stays away until the session ends, and
+    /// ⌘. still takes over in the window the agent acts in (each window's session, until when).
+    @ObservationIgnored private var closedPills: Set<UUID> = []
+    @ObservationIgnored private var closedPillWindows: [UUID: (session: UUID, until: Date)] = [:]
     @ObservationIgnored private var lastPillText: [UUID: String] = [:]
     /// page_batch says nothing itself: each of its steps does (batch()).
     private static let quietTools: Set<String> = ["site_notes", "tab_show", "tab_move", "tab_update", "folder_create", "page_dialog", "page_batch"]
@@ -659,10 +672,34 @@ final class MCPServer {
         let text = MCPAgentPresence.activity(agent: agent, tool: tool, arguments: arguments, target: target, site: url.flatMap(MCPAgentPresence.site))
         // Another agent acting in the window takes the pill at once, so Take Over stops the one it names.
         if pillShown[window.windowID] != session || lastPillText[window.windowID] != text { CraLog.note("mcp pill: \(text)") }
+        lastPillSession = session
+        if closedPills.contains(session) {
+            closedPillWindows[window.windowID] = (session, Date().addingTimeInterval(linger.seconds))
+            return
+        }
         pillShown[window.windowID] = session
         lastPillText[window.windowID] = text
-        lastPillSession = session
-        window.showAgentPill(text) { [weak self] in self?.stopFromPill(session: session) }
+        let watched = id.map { window.agentTabIsWatched($0) } ?? false
+        let windowID = window.windowID
+        window.showAgentPill(text, tabWatched: watched, lingers: linger.seconds,
+                             takeOver: { [weak self] in self?.stopFromPill(session: session) },
+                             close: { [weak self] in self?.closePill(session: session, in: windowID) })
+    }
+
+    /// The pill's ×: away until this agent's session ends, without stopping it.
+    private func closePill(session: UUID, in windowID: UUID) {
+        CraLog.note("mcp pill: closed until the session ends")
+        closedPills.insert(session)
+        closedPillWindows[windowID] = (session, Date().addingTimeInterval(linger.seconds))
+        if pillShown[windowID] == session { pillShown.removeValue(forKey: windowID); lastPillText.removeValue(forKey: windowID) }
+    }
+
+    /// ⌘. in a window whose pill the user closed while its agent still acts there: Take Over all the same.
+    func takeOverClosedPill(in windowID: UUID) -> Bool {
+        guard let closed = closedPillWindows[windowID], closed.until > Date(), connections[closed.session] != nil else { return false }
+        closedPillWindows.removeValue(forKey: windowID)
+        stopFromPill(session: closed.session)
+        return true
     }
 
     // MARK: The face in the sidebar
@@ -672,7 +709,7 @@ final class MCPServer {
     @ObservationIgnored private var workingSweep: DispatchWorkItem?
 
     private func noteWorking(_ id: UUID, session: UUID) {
-        working[id] = (session, Date().addingTimeInterval(MCPAgentPresence.lingers))
+        working[id] = (session, Date().addingTimeInterval(linger.seconds))
         showWorking()
     }
 

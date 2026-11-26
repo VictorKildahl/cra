@@ -1834,6 +1834,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let history = dict["mcpHistory"] { MCPServer.shared.allowsHistory = history == "on"; return }
             // mcpStop=1: the latest pill's Stop (that agent disconnects, MCP stays on).
             if dict["mcpStop"] != nil { MCPServer.shared.stopLatestPill(); return }
+            // mcpPill=open|close|takeover: a click on the pill's face (opens the whole pill), on its ×, or ⌘.
+            if let part = dict["mcpPill"] { main.pressAgentPill(part); return }
             // mcpWatched=on|off: a shown tab counts as watched even while its window is covered.
             if let watched = dict["mcpWatched"] { MainWindowController.agentTabsWatchedUnseen = watched == "on"; return }
             // translatePrompts=never:<host>|block:<lang>|reset|state[&profile=<name>][&label=<label>]: Settings ▸
