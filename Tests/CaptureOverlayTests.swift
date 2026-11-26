@@ -239,18 +239,116 @@ enum CaptureOverlayTests {
         expect(panel.parent == nil && !panel.isVisible, "normal capture still toggles off")
     }
 
+    /// #835: Capture (⇧⌘2) works in an ordinary Little Window (not only Peek), attaching to the
+    /// Little Window's own page, toggling off on a second press, staying idle on an empty ⌥⌘N card,
+    /// and never leaking capture to the main browser window behind it.
+    // promise: #835
     @MainActor
     private static func checkLittleWindow() {
-        let fixture = Fixture()
-        defer { fixture.close() }
-        fixture.peek.isPeek = false
-        pressCapture(fixture)
-        fixture.answerScreenshots()
-        expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
-               "ordinary Little Windows keep their existing capture behaviour")
-        expect(fixture.mainWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
-               "an ordinary Little Window does not send capture to the main page")
-        expect(!fixture.peek.handleCapture(action: "reload"), "other commands remain with their existing handlers")
+        for childHosted in [false, true] {
+            let fixture = Fixture(childHosted: childHosted)
+            defer { fixture.close() }
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            pressCapture(fixture)
+            fixture.answerScreenshots()
+            let panel = fixture.peekWindow.childWindows?.first(where: { $0 is CapturePanel })
+            expect(panel != nil && panel?.parent === fixture.peekWindow && panel?.isVisible == true,
+                   "Capture (Command-Shift-2) opens over an ordinary Little Window")
+            expect(panel?.frame == fixture.pageRect, "capture covers the Little Window's actual page viewport")
+            expect(fixture.mainWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "an ordinary Little Window does not send capture to the main page")
+            if let contents = panel?.contentView?.layer?.sublayers?.first?.contents,
+               CFGetTypeID(contents as CFTypeRef) == CGImage.typeID {
+                expectRed(contents as! CGImage)
+            } else {
+                expect(false, "the Little Window capture's page image is present")
+            }
+            pressCapture(fixture)
+            expect(panel?.parent == nil && panel?.isVisible != true,
+                   "the second capture command closes the Little Window's capture")
+            expect(fixture.peekWindow.isVisible, "ending capture keeps the Little Window open")
+        }
+
+        // An empty Little Card (⌥⌘N) or a Little Window with no page yet stays quiet and never captures main.
+        for empty in ["card", "noPage"] {
+            let fixture = Fixture()
+            defer { fixture.close() }
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            if empty == "card" { fixture.peek.isCard = true } else { fixture.peek.hasPage = false }
+            pressCapture(fixture)
+            fixture.answerScreenshots()
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "an empty Little Window (\(empty)) does not open capture")
+            expect(fixture.mainWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "an empty Little Window (\(empty)) does not fall back to capturing the main page")
+        }
+
+        // Starting capture while the main window already has an overlay open switches capture to the Little Window.
+        do {
+            let fixture = Fixture()
+            defer { fixture.close() }
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            fixture.main.capturePage()
+            fixture.answerScreenshots()
+            expect(fixture.mainWindow.childWindows?.contains(where: { $0 is CapturePanel }) == true,
+                   "main window capture is open first")
+            pressCapture(fixture)
+            fixture.answerScreenshots()
+            expect(fixture.mainWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "capturing in a Little Window closes the main window's capture")
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) == true,
+                   "capturing in a Little Window opens capture over the Little Window even if main had one open")
+            fixture.peek.closeCapture()
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "closing the Little Window's capture removes its panel")
+            expect(!fixture.peek.handleCapture(action: "reload"), "other commands remain with their existing handlers")
+        }
+
+        // Capture Image… from the context menu works on an ordinary Little Window too.
+        do {
+            let fixture = Fixture()
+            defer { fixture.close() }
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            fixture.peek.captureImage(at: NSPoint(x: 30, y: 30))
+            fixture.peekBrowser.reply(to: "\(PageScript.world):Runtime.evaluate",
+                                      with: #"{"result":{"value":{"x":20,"y":20,"width":160,"height":120}}}"#)
+            fixture.answerScreenshots()
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) == true,
+                   "Capture Image opens over an ordinary Little Window")
+            fixture.peek.closeCapture()
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "closing after Capture Image removes the Little Window's capture panel")
+        }
+
+        // Switching browser hosts while a Little Window capture request is still pending cancels
+        // the original host's request so a late screenshot cannot reopen capture after closeCapture().
+        for viaImage in [false, true] {
+            let fixture = Fixture()
+            defer { fixture.close() }
+            let secondWindow = NSWindow(contentRect: NSRect(x: -12000, y: -10000, width: 1100, height: 800),
+                                        styleMask: [.borderless], backing: .buffered, defer: false)
+            secondWindow.isReleasedWhenClosed = false
+            defer { secondWindow.close() }
+            let secondHost = MainWindowController(window: secondWindow)
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            pressCapture(fixture)
+            fixture.peek.captureHost = secondHost
+            if viaImage {
+                fixture.peek.captureImage(at: NSPoint(x: 30, y: 30))
+            } else {
+                pressCapture(fixture)
+            }
+            fixture.peek.closeCapture()
+            fixture.answerScreenshots()
+            fixture.answerScreenshots()
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "switching capture host while pending (\(viaImage ? "image" : "page")) cancels the first host's request")
+        }
     }
 
     /// #451: the pointer on a title line lights Arc's choice, the card around it; holding ⌥ lights
@@ -372,6 +470,7 @@ private final class Fixture {
         peek = LittleWindowController(window: peekWindow)
         peek.browser = peekBrowser
         peek.peekParent = main
+        peek.captureHost = main
         mainWindow.contentView!.addSubview(mainBrowser.containerView)
         if childHosted {
             let frame = peekWindow.convertToScreen(peekBrowser.containerView.frame)

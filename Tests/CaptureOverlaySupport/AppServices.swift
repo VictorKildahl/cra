@@ -24,7 +24,11 @@ final class MainWindowController: NSWindowController {
 final class LittleWindowController: NSWindowController {
     var browser: CraBrowser?
     weak var peekParent: MainWindowController?
+    weak var captureHost: MainWindowController?
+    weak var activeCaptureHost: MainWindowController?
     var isPeek = true
+    var isCard = false
+    var hasPage = true
     var isParked = false
     var closingPeek = false
 

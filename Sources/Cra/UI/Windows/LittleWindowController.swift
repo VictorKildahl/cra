@@ -168,6 +168,15 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// covers; a click on it, Escape or the close button ends the Peek.
     let isPeek: Bool
     private(set) weak var peekParent: MainWindowController?
+    /// The browser window currently hosting Capture for this window, if any (#835).
+    weak var activeCaptureHost: MainWindowController?
+    /// The normal browser window that hosts Capture for an ordinary Little Window (never an
+    /// incognito or Blank Window, so "New Easel" and "Send To…" land in a normal space).
+    var captureHost: MainWindowController? {
+        app.mainWindows.first { $0.windowID == store.lastNormalWindowID }
+            ?? app.mainWindows.first { !$0.isStandalone }
+            ?? app.main
+    }
     /// This Peek to its window's veil (MainWindowController.showPeekVeil).
     let peekID = UUID()
     /// The tab the Peek came from: links that leave the Peek open as tabs placed from it, and
@@ -1052,7 +1061,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func parkPeek() {
         guard isPeek, !isParked, !closingPeek, let window, let parent = peekParent else { return }
         isParked = true
-        peekParent?.closeCapture(in: self)
+        closeCapture()
         openingPeek = false
         transition?.remove()
         transition = nil
@@ -1115,7 +1124,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func dropPeek() {
         guard isPeek, let window, !closingPeek else { return }
         closingPeek = true
-        peekParent?.closeCapture(in: self)
+        closeCapture()
         transition?.remove()
         transition = nil
         guard windowShouldClose(window) else { return }
@@ -1137,7 +1146,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         guard let window, let parent = peekParent, let pw = parent.window else { finish(); return }
         let neverShown = openingPeek && transition == nil
         closingPeek = true
-        parent.closeCapture(in: self)
+        closeCapture()
         transition?.remove()
         transition = nil
         // Closed while it was still finding its link: it goes without having been seen.
@@ -1281,6 +1290,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func openCommandBar() {
         guard let window else { return }
         tooltipTimer?.invalidate(); hideTooltip()
+        closeCapture()
         closePopup()
         let prefill = hasPage ? currentURL : nil
         // Suggestions come from the normal profile even when an incognito window was in front.
@@ -1669,6 +1679,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// live browser goes with it, so history, scroll position and logins stay.
     func promote(to spaceID: UUID?) {
         guard let b = browser, hasPage else { return }
+        closeCapture()
         (b as? EaselBrowser)?.usePageLook()
         closePopup()
         commandBar.close()
@@ -1752,6 +1763,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     /// change, or a navigation the other engine has to show).
     private func replacePage(at url: String) {
         guard let old = browser else { return }
+        closeCapture()
         endDevTools(of: old)
         old.delegate = nil
         if let w = old.hostWindow, w.parent === window { window?.removeChildWindow(w); w.orderOut(nil) }
@@ -1964,6 +1976,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // Before the page and its windows go: one of them may have the keyboard.
         handBackFocus()
         tooltipTimer?.invalidate(); hideTooltip()
+        closeCapture()
         closePopup()
         commandBar.close()
         finder.close()
@@ -1980,6 +1993,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func windowWillClose(_ notification: Notification) {
         guard (notification.object as? NSWindow) === window else { return }
         handBackFocus()  // closes that skip windowShouldClose: the page's own window.close()
+        closeCapture()
         stopBarLook()
         endPeek()
         if browser == nil { app.removeLittleWindow(self) }
@@ -2331,6 +2345,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func browser(_ browser: CraBrowser, requestsWindowWithURL url: String, kind: CraLinkWindow) {
         app.openLink(url, in: kind, space: state.targetSpaceID, fromIncognito: browser.isIncognito)
+    }
+
+    func browser(_ browser: CraBrowser, requestsCaptureOfImageAt point: NSPoint) {
+        guard browser === self.browser else { return }
+        captureImage(at: point)
     }
 
     /// Arc 1.171 (#202): a link from a Peek that asks for a new tab is a Today tab in the space,

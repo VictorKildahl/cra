@@ -11,8 +11,9 @@ extension MainWindowController {
     /// is taken at once and moves to the middle of the page with the menu beside it, as in Arc.
     func capturePage(liftImageAt point: NSPoint? = nil, in peek: LittleWindowController? = nil) {
         if let open = captureOverlay, open.isOpen {
+            let sameWindow = open.parentWindow === (peek?.window ?? self.window)
             open.close()
-            if point == nil { return }
+            if point == nil && sameWindow { return }
         }
         guard captureRequest == nil, let source = captureSource(in: peek) else { return }
         let b = source.browser
@@ -104,6 +105,11 @@ extension MainWindowController {
                 if let lift { overlay.lift(lift) }
             }
         }
+    }
+
+    func hasCapture(in peek: LittleWindowController) -> Bool {
+        guard let window = peek.window else { return false }
+        return captureOverlay?.isOpen == true && captureOverlay?.parentWindow === window
     }
 
     func closeCapture(in peek: LittleWindowController) {
