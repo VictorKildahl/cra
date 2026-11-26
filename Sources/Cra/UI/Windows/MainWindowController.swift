@@ -5617,20 +5617,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             case .search: url = commandBar.engine.searchURL(typed); entered = false
             }
             store.recordQuerySelection(query: query, url: url)
-            if entered { store.recordTyped(url: url, profile: store.profileID(space: focusedSpaceID)) }
             let fillsEmptyPane = selectedTab?.isEmptyTab == true
             // A pinned tab keeps to its host: another host's address opens a Today tab (Arc).
             let leavesPinned = !fillsEmptyPane && selectedTabID.map(store.isPinned) == true
                 && PinnedNavigation.typedURLOpensNewTab(url, from: selectedTab?.tab?.url ?? "")
-            if mode == .editURL || fillsEmptyPane, selectedTabID != nil, !leavesPinned {
-                loadInSelectedTab(url)
-            } else if !isStandalone, let space = store.settings.space(forTypedURL: url), space != focusedSpaceID,
-                      store.orderedSpaces.contains(where: { $0.id == space }) {
-                // Air Traffic Control routes a typed URL too (#421): the tab opens in the route's
-                // space and the window goes there, as in Arc.
-                store.createTab(url: url, in: space, window: windowID)
-            } else {
-                store.createTab(url: url, window: windowID)
+            // Air Traffic Control routes a typed URL too (#421): the tab opens in the route's space and the window
+            // goes there, as in Arc.
+            let route = isStandalone ? nil : store.settings.space(forTypedURL: url).flatMap { id in
+                store.orderedSpaces.contains(where: { $0.id == id }) ? id : nil
+            }
+            let destination = TypedDestination.of(loadsInSelectedTab: (mode == .editURL || fillsEmptyPane) && selectedTabID != nil && !leavesPinned,
+                                                  route: route, focused: focusedSpaceID)
+            // Counted in the profile it opens in, not the one it was typed in (#864).
+            if entered { store.recordTyped(url: url, profile: store.profileID(space: destination.space(focused: focusedSpaceID))) }
+            switch destination {
+            case .selectedTab: loadInSelectedTab(url)
+            case .routed(let space): store.createTab(url: url, in: space, window: windowID)
+            case .newTab: store.createTab(url: url, window: windowID)
             }
         }
         guard let s else {

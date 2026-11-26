@@ -1,0 +1,32 @@
+# promise: #864
+# An address typed in ⌘T that Air Traffic Control sends to a space on another profile counts for typed completion
+# (#667) in that profile, not the one it was typed in: Home's bar doesn't complete or suggest an address that never
+# opened in Home, as in Arc. Cra counted it in the typing space's profile before the route sent it on (GitHub #864,
+# EzraNz). Home is on Default, Work on its own profile; a route sends n=routed to Work.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "defaultLinkDestination": {"littleWindow": {}}, "linkRoutes": [{"id": "E0000000-0000-0000-0000-000000000001", "match": "contains", "text": "n=routed", "destination": {"space": {"_0": "A0000000-0000-0000-0000-000000000002"}}}]}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000002"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000002","name":"Work"}]}
+pace 0.5
+cra://open?url=${PAGE}?n=home
+wait 2
+
+# Typed in Home, routed: it opens in Work's profile.
+cra://commandbar?query=${PAGE}?n=routed
+wait 1
+cra://debug?commandBarReturn=routed
+expect-log command bar return routed: pressed
+wait 2
+cra://debug?currentSpace=routed
+expect-log current space routed: Work profile=Work$
+
+# Back in Home: no history row and no completion for it there.
+cra://action/previousSpace
+wait 1
+cra://debug?currentSpace=home
+expect-log current space home: Home profile=
+cra://commandbar?query=127.0
+wait 1
+cra://debug?commandBarRows=home-after
+expect-log Cra command bar rows home-after:
+reject-log command bar rows home-after:.*(history:\S*n=routed|completion=\S*n=routed)
+cra://dismiss

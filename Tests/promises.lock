@@ -1878,6 +1878,9 @@
 #851   Tests/EaselCanvasTests.swift::captureEditor  bf466e9417dc
 #854   Packages/CraCore/Tests/CraCoreTests/SiteSearchTests.swift::addedEnginesTakeTheirKeywordsAndCanBeTheDefault  f92abb8d62ba
 #854   Tests/Scenarios/command-bar-search-keywords.scenario  525e1b9f06e0
+#864   Packages/CraCore/Tests/CraCoreTests/TypedDestinationTests.swift::aRoutedAddressCountsInTheSpaceItOpensIn  529145e04959
+#864   Packages/CraCore/Tests/CraCoreTests/TypedDestinationTests.swift::everythingElseCountsInTheSpaceInUse  3a699f78a3e1
+#864   Tests/Scenarios/command-bar-typed-routed-profile.scenario  1bd12d58f336
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::theSegmentsTileIsTheIconTheDockShows  fa64d566596d
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconGridTests.swift::theGlassSegmentsTileSitsOnTheGrid  69a07833b8a8
 #869   Tests/BrowserManagerLifecycleTests.swift::boostAfterLateAddressCase  5bebee9b1ade
