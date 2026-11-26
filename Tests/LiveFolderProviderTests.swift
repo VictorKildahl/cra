@@ -114,6 +114,10 @@ enum LiveFolderProviderTests {
         check(reruns?["passed"] as? Int == 2 && reruns?["failed"] as? Int == 1 && reruns?["pending"] as? Int == 0 && reruns?["skipped"] as? Int == 0,
               "only the newest run of each check name counts, including standalone checks")
         check(reruns?["failing"] as? [String] == ["Regressed"], "newest failed run supplies the failing name")
+        let events = try read(fixture("github-checks-events.json"))["checks"] as? [String: Any]
+        check(events?["passed"] as? Int == 3 && events?["failed"] as? Int == 0 && events?["pending"] as? Int == 0 && events?["skipped"] as? Int == 1,
+              "separate events count twice, reruns keep the newest result, skipped and app checks count")
+        check(events?["failing"] as? [String] == [], "recovered workflow has no failing name")
         for invalidURL in ["https://github.com/example/widget/pull/3/files", "https://github.com/example/widget/pull/3/../../../x",
                            "https://github.com/example/widget/pull/3?x=1", "https://github.com/example/widget/pull/3#x",
                            "http://github.com/example/widget/pull/3", "https://other.example/example/widget/pull/3"] {

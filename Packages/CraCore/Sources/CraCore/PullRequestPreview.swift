@@ -85,10 +85,11 @@ public enum PullRequestPreview {
                         labels: labels.prefix(3).map { Label(name: $0.name, color: rgb($0.color)) },
                         extraLabels: max(0, labels.count - 3))
         if let checks {
-            let total = checks.passed + checks.failed + checks.pending
+            let done = checks.passed + checks.skipped
+            let total = done + checks.failed + checks.pending
             if total > 0 {
                 card.checks = Checks(state: checks.failed > 0 ? .failed : checks.pending > 0 ? .pending : .passed,
-                                     passed: checks.passed, total: total)
+                                     passed: done, total: total)
             }
             if checks.failed > 0 {
                 card.failing = Array(checks.failing.prefix(3))

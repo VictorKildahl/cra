@@ -198,10 +198,14 @@ Hand-written fixtures preserve that structure with made-up job names. Failed/pen
 labels are recognised conservatively; any unknown job icon drops the entire checks
 result rather than giving an incorrect count.
 
-PR 14927 also confirmed that the page lists repeated workflow runs for the head commit.
-Count each check name once, keeping the entry with the highest `/actions/runs/<id>/`
-number in its link, regardless of page order; a check without a run ID keeps its single
-entry. This matters for failures as well as skipped totals: an older failed run must not
-override a passing rerun. The original parse counted 13 skipped entries on 14927 where
-`gh pr checks` reported 8, motivating this deduplication rule.
+Count each workflow name + event + check name once, keeping the entry with the highest
+`/actions/runs/<id>/` number, regardless of page order. Thus `CI on: push` and
+`CI on: pull_request` both count, while an older failure from the same workflow and
+event cannot override its passing rerun. Third-party checks without a run ID keep one
+entry per app/workflow section and name. An unreadable section header falls back to
+check-name deduplication. Skipped checks count as done: the card shows
+`(passed + skipped) / (passed + skipped + failed + pending)`, like GitHub's card.
+
+Known limit: commit statuses (for example, a Vercel deployment status) are absent from
+`/checks`, so the card can count one fewer than GitHub when a PR has them.
 There is no review state, row glyph, prefetch, polling, POST, token or API-host request.

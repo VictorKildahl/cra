@@ -84,7 +84,7 @@ struct PullRequestPreviewTests {
         ], tasks: .init(done: 2, total: 5))
         card = PullRequestPreview.card(item: item, checks: .init(passed: 8, failed: 5, pending: 1, skipped: 9, failing: ["a", "b", "c", "d", "e"]), now: now)
         #expect(card.author == "author" && card.draft && card.commentCount == 2 && card.tasks == .init(done: 2, total: 5))
-        #expect(card.checks?.state == .failed && card.checks?.passed == 8 && card.checks?.total == 14)
+        #expect(card.checks?.state == .failed && card.checks?.passed == 17 && card.checks?.total == 23)
         #expect(card.failing == ["a", "b", "c"] && card.extraFailing == 2)
         #expect(card.labels.map(\.name) == ["one", "two", "three"] && card.extraLabels == 2)
         #expect(card.labels[0].color == RGB(63.0 / 255, 185.0 / 255, 80.0 / 255))
@@ -93,10 +93,17 @@ struct PullRequestPreviewTests {
         for (checks, state) in [(PullRequestChecks(passed: 8, pending: 3, skipped: 6), PullRequestPreview.Checks.State.pending),
                                 (.init(passed: 12, skipped: 6), .passed)] {
             card = PullRequestPreview.card(item: item, checks: checks, now: now)
-            #expect(card.checks?.state == state && card.checks?.total == checks.passed + checks.pending)
+            #expect(card.checks?.state == state && card.checks?.passed == checks.passed + checks.skipped && card.checks?.total == checks.passed + checks.skipped + checks.pending)
             #expect(card.failing.isEmpty && card.extraFailing == 0)
         }
-        #expect(PullRequestPreview.card(item: item, checks: .init(skipped: 2), now: now).checks == nil)
+        #expect(PullRequestPreview.card(item: item, checks: .init(skipped: 2), now: now).checks?.passed == 2)
+        for (checks, done, total) in [(PullRequestChecks(passed: 9, skipped: 1), 10, 10),
+                                      (.init(passed: 11, failed: 1, skipped: 8), 19, 20),
+                                      (.init(passed: 12, skipped: 6), 18, 18),
+                                      (.init(passed: 8, failed: 3), 8, 11)] {
+            card = PullRequestPreview.card(item: item, checks: checks, now: now)
+            #expect(card.checks?.passed == done && card.checks?.total == total)
+        }
         item.subtitle = ""
         item.details = .init(commentCount: 0, labels: [.init(name: "no color"), .init(name: "invalid", color: "GG0000"), .init(name: "signed", color: "+12345")])
         card = PullRequestPreview.card(item: item, checks: nil, now: now)

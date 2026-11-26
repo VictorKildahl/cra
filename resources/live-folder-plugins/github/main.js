@@ -244,6 +244,10 @@ function parseChecks(html) {
         "This job is queued": "pending", "This job is in progress": "pending", "This check is in progress": "pending",
         "This job was skipped": "skipped", "This check was skipped": "skipped"
     };
+    const sections = matches(/<summary\b[^>]*>([\s\S]*?)<\/summary>/gi, html).map(m => {
+        const heading = /<span\b[^>]*class="[^"]*\bv-align-middle\b[^"]*"[^>]*>([\s\S]*?)<\/span>/.exec(m[1]);
+        return {index: m.index, title: heading ? plain(heading[1]) : null};
+    });
     const jobs = new Map();
     for (let i = 0; i < starts.length; i++) {
         const chunk = html.slice(starts[i].index + starts[i][0].length, starts[i + 1]?.index ?? html.length);
@@ -258,13 +262,15 @@ function parseChecks(html) {
         const title = plain(name[1]);
         const run = /\/actions\/runs\/(\d+)\//.exec(attribute("href", link[1]) ?? "");
         const runID = run ? BigInt(run[1]) : 0n;
-        if (!jobs.has(title) || runID > jobs.get(title).runID) {
-            jobs.set(title, {state: states[icons[0]], runID, index: i});
+        const section = sections.filter(section => section.index < starts[i].index).at(-1)?.title;
+        const key = JSON.stringify([section || null, title]);
+        if (!jobs.has(key) || runID > jobs.get(key).runID) {
+            jobs.set(key, {name: title, state: states[icons[0]], runID, index: i});
         }
     }
-    for (const [name, job] of [...jobs].sort((a, b) => a[1].index - b[1].index)) {
+    for (const job of [...jobs.values()].sort((a, b) => a.index - b.index)) {
         checks[job.state]++;
-        if (job.state === "failed" && checks.failing.length < 3) checks.failing.push(name);
+        if (job.state === "failed" && checks.failing.length < 3) checks.failing.push(job.name);
     }
     return checks.passed + checks.failed + checks.pending + checks.skipped ? {checks} : {};
 }
