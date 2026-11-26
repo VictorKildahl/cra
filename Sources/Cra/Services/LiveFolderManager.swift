@@ -43,6 +43,11 @@ final class LiveFolderManager {
         return checksCaches[profile]?.checks(for: .init(item))
     }
 
+    func reservesChecksSlot(for item: LiveFolderPluginItem, tab: UUID) -> Bool {
+        let profile = store?.profilePath(item: tab) ?? ""
+        return checksCaches[profile]?.reservesSlot(for: .init(item)) ?? true
+    }
+
     /// Best effort, entirely separate from refresh: no folder state or error is written.
     func fetchChecks(for item: LiveFolderPluginItem, tab: UUID) {
         guard let store, let folder = store.liveFolder(containing: tab), let configuration = folder.liveFolder?.plugin,

@@ -31,6 +31,13 @@ public struct PullRequestChecksCache {
         return true
     }
     public mutating func finish(_ key: Key, checks: PullRequestChecks?) { entries[key] = .finished(checks) }
+    public func reservesSlot(for key: Key) -> Bool {
+        if case .finished(let checks) = entries[key] {
+            guard let checks else { return false }
+            return checks.passed + checks.failed + checks.pending + checks.skipped > 0
+        }
+        return true
+    }
     public func checks(for key: Key) -> PullRequestChecks? {
         if case .finished(let checks) = entries[key] { return checks }
         return nil

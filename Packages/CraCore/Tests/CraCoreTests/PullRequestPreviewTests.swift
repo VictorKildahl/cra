@@ -70,6 +70,19 @@ struct PullRequestPreviewTests {
         #expect({ cache.begin(.init(item)) }())
     }
 
+    @Test func checksSlotIsReleasedAfterEmptyAnswer() {
+        let item = LiveFolderPluginItem(id: "pr", url: "https://github.com/a/b/pull/3", title: "PR")
+        let key = PullRequestChecksCache.Key(item)
+        for result: PullRequestChecks? in [nil, .init(), .init(passed: 2)] {
+            var cache = PullRequestChecksCache()
+            #expect(cache.reservesSlot(for: key))
+            #expect({ cache.begin(key) }())
+            #expect(cache.reservesSlot(for: key))
+            cache.finish(key, checks: result)
+            #expect(cache.reservesSlot(for: key) == (result?.passed == 2))
+        }
+    }
+
     @Test func structuredCardAndOmissions() {
         var item = LiveFolderPluginItem(id: "pr", url: "https://github.com/a/b/pull/3", title: "A title")
         var card = PullRequestPreview.card(item: item, checks: nil, now: now)

@@ -29,6 +29,7 @@ final class FavoritePreviewCard {
         var favicon: (String) -> NSImage? = { _ in nil }
         var pullRequest: () -> LiveFolderPluginItem? = { nil }
         var checks: (LiveFolderPluginItem) -> PullRequestChecks? = { _ in nil }
+        var reservesChecksSlot: (LiveFolderPluginItem) -> Bool = { _ in true }
         var fetchChecks: (LiveFolderPluginItem) -> Void = { _ in }
 
         /// A pinned tab's row: the card goes right of this view (the sidebar's list), level with
@@ -193,6 +194,7 @@ final class FavoritePreviewCard {
         case .pullRequest:
             guard let item = target.pullRequest() else { return nil }
             return AnyView(PullRequestPreviewView(card: PullRequestPreview.card(item: item, checks: target.checks(item), now: Date()),
+                                                  reservesChecksSlot: target.reservesChecksSlot(item),
                                                   open: { [weak self] in self?.open(item.url) }))
         case .outlookMail:
             guard let state = OutlookClient.shared.state(for: target.favorite, profilePath: target.profilePath) else { return nil }
@@ -383,6 +385,7 @@ extension FavoritePreviewCard.Target {
         if beside != nil {
             t.pullRequest = { LiveFolderManager.shared.pullRequestItem(for: id) }
             t.checks = { LiveFolderManager.shared.checks(for: $0, tab: id) }
+            t.reservesChecksSlot = { LiveFolderManager.shared.reservesChecksSlot(for: $0, tab: id) }
             t.fetchChecks = { LiveFolderManager.shared.fetchChecks(for: $0, tab: id) }
         }
         t.beside = beside
@@ -1002,6 +1005,7 @@ private struct EventBlock: View {
 /// Snapshot first, checks when available, in the existing Previews chrome.
 private struct PullRequestPreviewView: View {
     let card: PullRequestPreview.Card
+    let reservesChecksSlot: Bool
     let open: () -> Void
     @State private var hovered = false
 
@@ -1029,13 +1033,15 @@ private struct PullRequestPreviewView: View {
                         FlowRow(spacing: 8) {
                             if card.draft { status("circle.fill", "Draft", dot: true) }
                             // Keep the snapshot's status items in place when checks arrive.
-                            ZStack(alignment: .leading) {
-                                status("checkmark", "00/00").hidden()
-                                if let checks = card.checks {
-                                    status(checks.state == .passed ? "checkmark" : checks.state == .failed ? "xmark" : "circle.fill",
-                                           "\(checks.passed)/\(checks.total)",
-                                           color: checks.state == .passed ? green : checks.state == .failed ? red : amber,
-                                           dot: checks.state == .pending)
+                            if reservesChecksSlot {
+                                ZStack(alignment: .leading) {
+                                    status("checkmark", "00/00").hidden()
+                                    if let checks = card.checks {
+                                        status(checks.state == .passed ? "checkmark" : checks.state == .failed ? "xmark" : "circle.fill",
+                                               "\(checks.passed)/\(checks.total)",
+                                               color: checks.state == .passed ? green : checks.state == .failed ? red : amber,
+                                               dot: checks.state == .pending)
+                                    }
                                 }
                             }
                             if let count = card.commentCount { status("bubble.left", "\(count)") }
