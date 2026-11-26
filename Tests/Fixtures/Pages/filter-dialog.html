@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Dialog reuse</title>
+<style>
+  body { height: 3200px }
+  #notice { position: fixed; inset: 0; background: white }
+  #next { position: absolute; left: 10px; top: 10px; padding: 20px }
+</style>
+<a id="next" href="#story">Read story</a>
+<article id="story">Story</article>
+<dialog id="consent-fixture" style="display:none"></dialog>
+<div id="notice">Please disable your ad blocker</div>
+<script>
+  document.documentElement.style.overflow = 'hidden';
+  document.querySelector('#consent-fixture').showModal();
+</script>

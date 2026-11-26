@@ -93,6 +93,18 @@ struct DesktopFilterListsTests {
         #expect(settings.customFilterAddresses == [custom])
     }
 
+    @Test func warningRecoveryFollowsItsSubscription() throws {
+        var settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        let address = DesktopFilterList.warningListAddress
+        #expect(!settings.removesAdblockWarnings)
+        settings.setFilterList(address, enabled: true)
+        #expect(settings.removesAdblockWarnings)
+        settings.disabledCustomBlocklists.append(address)
+        #expect(!settings.removesAdblockWarnings)
+        settings.setFilterList(address, enabled: false)
+        #expect(!settings.removesAdblockWarnings)
+    }
+
     @Test func subscriptionSwitchesAreIndependent() throws {
         func address(_ name: String) throws -> String {
             try #require(DesktopFilterList.catalog.first { $0.name == name }?.address)

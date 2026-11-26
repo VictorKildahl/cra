@@ -8,6 +8,7 @@ final class TabRuntime {
     let tabID: UUID
     let browser: CraBrowser
     var hasElementHidingStyle = false
+    var recoveryOptions = 0
     /// The site (host) the committed page was styled for (list filters, boost), nil until it commits.
     /// Chromium reports a link's or redirect's page committing before its address (#869).
     var styledSite: String?
@@ -1656,6 +1657,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         if committed {
             if let runtime = runtimes[id] {
                 runtime.hasElementHidingStyle = false
+                runtime.recoveryOptions = 0
                 runtime.styledSite = Self.styledSite(of: browser.currentURL)
                 runtime.boostCanvasNeedsFallback = nil
                 runtime.boostCanvasDocument += 1
@@ -1695,6 +1697,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         let browser = runtime.browser
         guard let url = URL(string: browser.currentURL), let scheme = url.scheme,
               ["http", "https"].contains(scheme.lowercased()), let host = url.host else { return }
+        let active = !BlockLists.shared.isPaused(url: browser.currentURL)
+        let cookies = active && store.settings.blockCookieBanners
+        let warnings = active && store.settings.removesAdblockWarnings
+        let options = (cookies ? 1 : 0) + (warnings ? 2 : 0)
+        if options != runtime.recoveryOptions, let recovery = Self.pageRecovery {
+            runtime.recoveryOptions = options
+            let selectors = CookieBanners.selectors.joined(separator: ",")
+            runPageScript("(\(recovery))(\(cookies),\(warnings),\(Self.jsonString(selectors)))", in: browser)
+        }
         let css = BlockLists.shared.style(for: host)
         guard runtime.hasElementHidingStyle || !css.isEmpty else { return }
         // Important declarations in a layer outrank unlayered site author styles.
@@ -1796,12 +1807,19 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         }
     }
 
+    private static let pageRecovery = Bundle.main.url(forResource: "page-recovery", withExtension: "js", subdirectory: "blocklist")
+        .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+
     /// A stylesheet adopted by the page's document from Cra's world, kept under `name` there so a
     /// later commit of the same document replaces it.
     private func adopt(_ css: String, as name: String, in browser: CraBrowser) {
         guard let literal = String(data: (try? JSONSerialization.data(withJSONObject: [css], options: [])) ?? Data(), encoding: .utf8) else { return }
         let script = "(()=>{let s=window.\(name);if(!s){s=window.\(name)=new CSSStyleSheet();"
             + "document.adoptedStyleSheets=[...document.adoptedStyleSheets,s];}s.replaceSync(\(literal)[0]);})()"
+        runPageScript(script, in: browser)
+    }
+
+    private func runPageScript(_ script: String, in browser: CraBrowser) {
         guard let params = try? JSONSerialization.data(withJSONObject: ["expression": script]),
               let json = String(data: params, encoding: .utf8) else { return }
         browser.evaluate(inIsolatedWorld: PageScript.world, params: json) { _, _ in }

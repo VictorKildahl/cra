@@ -59,6 +59,7 @@ enum TestRoot { case today }
             autoPictureInPicture && !autoPictureInPictureOff.contains(URL(string: url)?.host ?? "")
         }
         var shareThemeWithWebsites = true
+        var removesAdblockWarnings = false
         var blockCookieBanners = false
         var blockAdsAndTrackers = true
         var littleWindowOnOptionCommandClick = false
