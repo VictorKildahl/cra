@@ -23,6 +23,7 @@ suite "Web features map" python3 -I scripts/web-features.py
 suite "Web features check" python3 Tests/test_web_features.py
 suite "Notarize dist (#720)" scripts/test-notarize-dist.sh
 suite "Load paths (#720)" scripts/test-load-paths.sh
+suite "Scenario lines" scripts/test-scenario-line.sh
 if [ "${1:-}" != core ]; then
   suite "Browser manager" Tests/test-browser-manager.sh
   suite "Ask on Page DOM" scripts/test-ask-on-page-content.sh

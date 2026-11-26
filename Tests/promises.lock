@@ -1155,7 +1155,7 @@
 #549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::anAutoThemesNameFollowsMacOSButItsStripDoesnt  8f73c859196b
 #549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::onlyTheSpaceNameTakesTheSpacesColour  efd6d2934c10
 #549   Packages/CraCore/Tests/CraCoreTests/LittleStripTonesTests.swift::theStripIsArcsGradientWhateverTheSpaceTheme  249428d34570
-#549   Tests/Scenarios/little-window-strip-theme.scenario  e7fdc52d6742
+#549   Tests/Scenarios/little-window-strip-theme.scenario  8d4685ebac44
 #550   Tests/FloatingSidebarTests.swift::theShadowStaysUnderTheSidebar  831fdb6d0b6c
 #550   Tests/Scenarios/floating-sidebar-shadow.scenario  a59106d5ba21
 #551   Packages/CraCore/Tests/CraCoreTests/CommandBarClosingTests.swift::leavingCraKeepsTheBarOpen  d0842a6daad8
@@ -1436,7 +1436,7 @@
 #632   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::eachPageAddsColoursOnArcsWheel  0720894ebafe
 #632   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::removeAndAddFollowArcsWheel  eaf76faa3f2d
 #632   Packages/CraCore/Tests/CraCoreTests/SpaceColorPresetsTests.swift::wheelIsSaved  731297878198
-#632   Tests/Scenarios/theme-editor-wheel.scenario  7f7783800517
+#632   Tests/Scenarios/theme-editor-wheel.scenario  1649f939bb4c
 #634   Tests/ExtensionPopupWindowTests.swift::hangsUnderItsButtonUntilDragged  ecd8a3e853c5
 #634   Tests/Scenarios/extension-popup-opens-options.scenario  b8b245bd274f
 #634   Tests/Scenarios/floating-sidebar-extension-popup-fullscreen.scenario  735aacadfad7
