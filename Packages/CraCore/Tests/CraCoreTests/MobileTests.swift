@@ -776,6 +776,24 @@ struct MobileArchiveTests {
 struct MobileTabCarouselTests {
     static let phone = CGSize(width: 393, height: 852)
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/TBD")) func picturesKeepTheTopLeftWhenTheScreenShapeChanges() {
+        let narrow = CGRect(x: 0, y: 10, width: 300, height: 450)
+        let widePicture = MobileTabCarousel.pictureFrame(image: CGSize(width: 951, height: 669), in: narrow)
+        #expect(abs(widePicture.minX) < 0.01 && abs(widePicture.minY - 10) < 0.01)
+        #expect(abs(widePicture.height - 450) < 0.01 && widePicture.width > 300)
+
+        let wide = CGRect(x: 0, y: 0, width: 600, height: 400)
+        let narrowPicture = MobileTabCarousel.pictureFrame(image: CGSize(width: 466, height: 678), in: wide)
+        #expect(abs(narrowPicture.minX) < 0.01 && abs(narrowPicture.minY) < 0.01)
+        #expect(abs(narrowPicture.width - 600) < 0.01 && narrowPicture.height > 400)
+
+        let portrait = CGRect(x: 0, y: 0, width: 273, height: 591.8)
+        let matching = MobileTabCarousel.pictureFrame(image: Self.phone, in: portrait)
+        #expect(abs(matching.minX - portrait.minX) < 1 && abs(matching.minY - portrait.minY) < 1)
+        #expect(abs(matching.maxX - portrait.maxX) < 1 && abs(matching.maxY - portrait.maxY) < 1)
+        #expect(MobileTabCarousel.pictureFrame(image: .zero, in: narrow) == narrow)
+    }
+
     /// Arc Search's row at rest on an iPhone 15 Pro.
     @Test func cardsSitWhereArcSearchPutsThem() {
         let focus = MobileTabCarousel.placement(relative: 0, in: Self.phone)
