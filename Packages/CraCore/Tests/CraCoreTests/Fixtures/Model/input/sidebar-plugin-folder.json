@@ -261,7 +261,10 @@
         "title": "Fix the thing",
         "subtitle": "someone",
         "group": "example/app",
-        "createdAt": "2026-10-30T10:00:00Z"
+        "createdAt": "2026-10-30T10:00:00Z",
+        "updatedAt": "2026-11-24T09:00:00Z",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "details": {"draft": true, "commentCount": 2, "labels": [{"name": "ui", "color": "D97757"}, {"name": "tests"}], "tasks": {"done": 2, "total": 4}}
        }
       ],
       "actions": [],

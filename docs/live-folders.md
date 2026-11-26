@@ -171,3 +171,41 @@ GitLab as the source: the same folder row, menus, dialogs, refresh schedule and 
   an answer to a request made for the old profile, server or filters is dropped.
 - Left out of #223 as not Arc: category subfolders ("Separate by Category"), "Restore Hidden", a minimum
   450 ms refresh spinner and manual refreshes without Arc's 10 s gap.
+
+## GitHub dashboard and hover checks (24 Nov 2026)
+
+The signed-in `/pulls/search` JSON has `payload.pullsDashboardSurfaceContentRoute.results[]`.
+Confirmed item keys: `itemType`, `id`, `number`, `permalink`, `repoNameWithOwner`, `title`,
+`titleHtml`, `author {displayLogin}`, `authoredByAgent`, `assignees`, `state`, `displayState`,
+`isDraft`, `isReadByCurrentUser`, `commentCount`, `labels [{color, description, globalId, id,
+name, nameHtml}]`, `taskListItemCount`, `completeTaskListItemCount`, `headSha`,
+`commitHeadShaChannel`, `mergeQueueUrl`, `closedAt`, `mergedAt`, `createdAt`, `updatedAt`.
+Dates are ISO 8601 with an offset. No checks or review keys exist in this payload.
+The plugin keeps the draft, comments, up to ten labels, nonzero task totals, updated date and
+40-hex head SHA; the first known details win when filters overlap. The private capture is
+not a fixture; the dashboard fixture uses made-up data and these keys only.
+
+Checks on hover use `GET https://github.com/<owner>/<repo>/pull/<number>/checks` with
+`Accept: application/json`, `X-Requested-With: XMLHttpRequest`, `GitHub-Verified-Fetch: true`.
+Runtime verification on public `cli/cli` PRs 15108, 13788 and 14927 confirmed JSON
+wrapping HTML in `payload["pullRequestsChecksRoute.Main"].value`. The HTML contains
+`checks-list-item` jobs nested inside suite `details`/`summary` containers, SVG
+`aria-label` status icons, and job names in the span inside `a.SideNav-subItem`.
+The recorded parse matched 15108's 12 passing jobs and 6 skipped jobs, and 13788's
+8 passing and 3 failing jobs, including the failing names. Success and skipped labels
+include `This job succeeded`, `This check passed` and `This job was skipped`.
+Hand-written fixtures preserve that structure with made-up job names. Failed/pending
+labels are recognised conservatively; any unknown job icon drops the entire checks
+result rather than giving an incorrect count.
+
+Count each workflow name + event + check name once, keeping the entry with the highest
+`/actions/runs/<id>/` number, regardless of page order. Thus `CI on: push` and
+`CI on: pull_request` both count, while an older failure from the same workflow and
+event cannot override its passing rerun. Third-party checks without a run ID keep one
+entry per app/workflow section and name. An unreadable section header falls back to
+check-name deduplication. Skipped checks count as done: the card shows
+`(passed + skipped) / (passed + skipped + failed + pending)`, like GitHub's card.
+
+Known limit: commit statuses (for example, a Vercel deployment status) are absent from
+`/checks`, so the card can count one fewer than GitHub when a PR has them.
+There is no review state, row glyph, prefetch, polling, POST, token or API-host request.
