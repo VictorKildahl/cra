@@ -3235,6 +3235,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // spaceCreation=state|type:<name>|icon:<emoji>|symbol:<name>|theme:<n>|profile:<n>|engine:<keyword>|create|cancel: Arc's
             // Create a Space page, one step on it, and what it and the dock then show.
+            // plusMenu=<label>: the colours the sidebar's + menu opens with (#822: dark or light with the Mac's appearance).
+            if let label = dict["plusMenu"] {
+                CraLog.note("plus menu \(label): " + ((main.shell.sidebarHost as? SidebarView)?.debugCreationMenuColors() ?? "no sidebar"))
+                return
+            }
             if let step = dict["spaceCreation"] { main.debugSpaceCreation(step); return }
             if let g = dict["swipe"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 // &releaseStall=<ms>: the main thread held that long after the release, as a busy space switch holds it (#613).

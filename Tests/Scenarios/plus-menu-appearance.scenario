@@ -1,0 +1,16 @@
+# promise: #822
+# The sidebar's + menu takes the space's palette for the Mac's appearance, as Arc 1.174.2 does (measured 26 Nov 2026 on a
+# light space in both modes): light with black titles in Light mode, dark with white titles in Dark mode. Reported on a
+# grey space in Light mode, where Cra drew it dark. View ▸ Appearance stands in for the Mac's setting here.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=1
+wait 2
+cra://action/appearanceLight
+wait 1
+cra://debug?plusMenu=light
+expect-log plus menu light: fill=#F[0-9A-F]{5} ink=#000000 disabled=#ABABAB dark=0
+cra://action/appearanceDark
+wait 1
+cra://debug?plusMenu=dark
+expect-log plus menu dark: fill=#[0-2][0-9A-F]{5} ink=#FFFFFF disabled=#797881 dark=1
+cra://action/appearanceAutomatic

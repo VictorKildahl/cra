@@ -1817,7 +1817,9 @@
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aWindowOpenedOnlyOnTheAppsAddressCloses  37a32911d3de
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::anAddressWhoseAppIsCraIsNotHandedBack  c4bfd41c035a
 #821   Tests/Scenarios/app-link-handed-back.scenario  4d32878a4552
-#822   Packages/CraCore/Tests/CraCoreTests/ArcMenuTonesTests.swift::aGreySpaceInLightModeGetsArcsDarkMenu  cb1fce08e6e3
+#822   Packages/CraCore/Tests/CraCoreTests/ArcMenuTonesTests.swift::inDarkModeTheMenuStaysDarkOnEverySpace  3e48215dc62a
+#822   Packages/CraCore/Tests/CraCoreTests/ArcMenuTonesTests.swift::inLightModeTheMenuTakesTheLightPalette  379654d58ef0
+#822   Tests/Scenarios/plus-menu-appearance.scenario  0d01a89b2a64
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

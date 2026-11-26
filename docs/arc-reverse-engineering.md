@@ -2598,12 +2598,17 @@ strings "Opens the tab switcher, where you can cycle through recent tabs like Co
   left of the button's centre (194 pt into the fill), the tip 10 pt above the button. Rows 194×40 at y 8, 48 | 105,
   145 | 202, 242, separators 1 pt at y 96 and 193 (x 10…200): New Space, New Folder | New Easel ⌃⇧E, New Boost |
   New Split ⌃+, New Tab ⌘T. It opens with New Tab picked. Boost is off without a web page, Split without a tab.
-  Colours from the space's DARK semantic palette on light spaces too: fill backgroundExtra, hover and separators
+  Colours from the space's DARK semantic palette on light spaces too (measured with the Mac in Dark mode; see #822 below): fill backgroundExtra, hover and separators
   hover at 0.48 over it, shortcuts subtitle, disabled (121,120,129); titles 13 pt semibold white 51 pt in,
   shortcuts end 21 pt from the edge. Timings (static, disassembly): open 0.1 s scale from 0.95 + 0.05 s fade,
   close 0.07 s, curve (0.215, 0.61, 0.355, 1). The + (14×14, 2 pt arms) turns 45° into × with ≈13 % overshoot,
   settled ≈0.18 s. Glyphs for Space, Tab, Split and Boost are Arc's own PDFs; Cra uses the nearest SF Symbols.
   Cra: SidebarCreationMenu, CraCore ArcMenuTones.
+- [O live, 26 Nov 2026, Arc 1.174.2 offline copy, #822] The + menu follows the Mac's appearance, not only the space: the same
+  light gold space opened it dark in Dark mode and light in Light mode (the copy run with -NSRequiresAquaSystemAppearance YES).
+  Light: fill light.backgroundExtra (254,253,253), separators light.hover (226,220,198), shortcuts light.subtitle, titles and
+  glyphs black, disabled rows ARC_ArcMenu.bundle's MenuDisabledText light value (171,171,171) (dark (121,120,129)).
+  Cra: ArcMenuTones(theme:dark:) from SystemAppearance, scenario plus-menu-appearance.
 - [O capture, Victor's screenshot] pressed cell: 34×32, ~6 pt circular corners, fill 39,33,51 over 21,14,34, i.e. white
   at ~7.8%.
 - [U] Arc's hover fill could not be recorded (live pointer runs were cut short while Victor was at the Mac); the pressed

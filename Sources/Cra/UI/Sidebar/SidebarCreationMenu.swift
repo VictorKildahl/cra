@@ -46,6 +46,8 @@ struct SidebarCreationMenuColors {
     var separator = NSColor(srgbRed: 47 / 255, green: 51 / 255, blue: 145 / 255, alpha: 1)
     var shortcut = NSColor(srgbRed: 118 / 255, green: 119 / 255, blue: 128 / 255, alpha: 1)
     var disabled = NSColor(srgbRed: 121 / 255, green: 120 / 255, blue: 129 / 255, alpha: 1)
+    /// Titles and enabled glyphs: white in Dark mode, black in Light (ArcMenuTones.ink, #822).
+    var ink = NSColor.white
 }
 
 struct SidebarCreationMenuItem {
@@ -279,7 +281,7 @@ final class SidebarCreationMenuView: NSView, ArcMenuContent {
             let icon = NSImageView(frame: NSRect(x: 9, y: 8, width: 24, height: 24))
             icon.image = NSImage(systemSymbolName: item.symbol, accessibilityDescription: nil)?
                 .withSymbolConfiguration(.init(pointSize: 20, weight: .medium))
-            icon.contentTintColor = item.enabled ? .white : colors.disabled
+            icon.contentTintColor = item.enabled ? colors.ink : colors.disabled
             icon.imageScaling = .scaleProportionallyDown
             row.addSubview(icon)
             addSubview(row)
@@ -320,7 +322,7 @@ final class SidebarCreationMenuView: NSView, ArcMenuContent {
         }
         for (index, item) in items.enumerated() {
             let rect = rowRect(index)
-            let ink = item.enabled ? NSColor.white : colors.disabled
+            let ink = item.enabled ? colors.ink : colors.disabled
             let shortcutInk = item.enabled ? colors.shortcut : colors.disabled
             let text = item.title as NSString
             let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: ink]

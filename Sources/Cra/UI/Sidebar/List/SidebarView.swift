@@ -74,6 +74,8 @@ final class SidebarView: NSView {
     var debugDockLine: String { dock.debugLine }
     func debugTypeSpaceName(_ text: String) { creationHost?.debugType(text) }
     func debugSpaceCreationTip(_ row: String) -> String { creationHost?.debugTip(row) ?? "none" }
+    /// For scenarios (#822): the colours the dock's + menu opens with.
+    func debugCreationMenuColors() -> String { dock.debugCreationMenuColors() }
     func closeSpaceCreationPopovers() { creationHost?.closeIconPicker() }
     func focusSpaceCreationName() { creationHost?.focusName() }
     /// The creation animation, then `done`; at once when the page isn't up.
@@ -1282,6 +1284,25 @@ final class SpaceDockView: NSView {
         super.viewWillMove(toWindow: newWindow)
     }
 
+    /// The + menu's colours: Arc's menu takes the space's palette for the Mac's appearance, dark in Dark mode and light
+    /// in Light (#822).
+    private func creationMenuColors() -> SidebarCreationMenuColors {
+        let tones = ArcMenuTones(theme: store.focusedSpace(window: ui.windowID).theme.shown, dark: SystemAppearance.shared.isDark)
+        func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
+        return SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
+                                         shortcut: ink(tones.shortcut), disabled: ink(tones.disabled), ink: ink(tones.ink))
+    }
+
+    /// For scenarios (#822): the colours the + menu opens with, as sRGB hex.
+    func debugCreationMenuColors() -> String {
+        func hex(_ c: NSColor) -> String {
+            let s = c.usingColorSpace(.sRGB) ?? c
+            return String(format: "#%02X%02X%02X", Int(s.redComponent * 255 + 0.5), Int(s.greenComponent * 255 + 0.5), Int(s.blueComponent * 255 + 0.5))
+        }
+        let c = creationMenuColors()
+        return "fill=\(hex(c.fill)) ink=\(hex(c.ink)) disabled=\(hex(c.disabled)) dark=\(SystemAppearance.shared.isDark ? 1 : 0)"
+    }
+
     private func toggleCreationMenu() {
         guard !store.isBlank(window: ui.windowID) else { return }
         ArcTooltipController.shared.dismiss()
@@ -1301,11 +1322,7 @@ final class SpaceDockView: NSView {
             SidebarCreationMenuItem(title: title, symbol: symbol, shortcut: KeyBindingRegistry.shared.action(id)?.primary?.display ?? "",
                                     enabled: enabled) { [actions] in actions.performAction(id) }
         }
-        let tones = ArcMenuTones(theme: store.focusedSpace(window: ui.windowID).theme.shown)
-        func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
-        let colors = SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
-                                               shortcut: ink(tones.shortcut), disabled: ink(tones.disabled))
-        creationMenu.toggle(from: plus, items: items, colors: colors) { [weak plus] open in
+        creationMenu.toggle(from: plus, items: items, colors: creationMenuColors()) { [weak plus] open in
             plus?.highlighted = open
             plus?.setMenuOpen(open)
         }

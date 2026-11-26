@@ -29,19 +29,28 @@ struct ArcMenuTonesTests {
         #expect(Self.gap(Self.arcDefault.shortcut, (118, 119, 128)) <= 2, "default: \(Self.arcDefault.shortcut)")
     }
 
-    /// #822: the + menu is dark on a plain grey space with macOS in light mode. That is Arc's menu:
-    /// measured live on Arc 1.172.1 it takes the space's dark palette whatever the space or the
-    /// Mac's appearance, unlike the extensions popover (a system popover, light in light mode).
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/822")) func aGreySpaceInLightModeGetsArcsDarkMenu() {
-        let grey = ArcMenuTones(theme: SpaceTheme(colors: ["#D1D1D6"], intensity: 0, noise: 0, appearance: "light"))
-        #expect(max(grey.fill.r, grey.fill.g, grey.fill.b) < 0.12, "dark fill, as in Arc: \(grey.fill)")
-        #expect(grey.shortcut.r > grey.fill.r + 0.2, "shortcuts read on the dark fill: \(grey.shortcut)")
-        #expect(grey.disabled == ArcMenuTones.disabledInk)
+    /// #822: the menu takes the half of the space's palette that matches the Mac's appearance, as Arc 1.174.2 does
+    /// (26 Nov 2026: the gold space captured with the Mac in Dark mode, then in Light mode; the reporter's Arc showed it
+    /// light). The 9 Nov measurement above ran in Dark mode only, which is where "always dark" came from.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/822")) func inLightModeTheMenuTakesTheLightPalette() {
+        let light = ArcMenuTones(shadedDark: Self.rgb(0x6F5600), shaded: Self.rgb(0xE9B300), midTone: Self.rgb(0xE9B300),
+                                 tintedLight: Self.rgb(0xFCEDBC), dark: false)
+        #expect(Self.gap(light.fill, (254, 253, 252)) <= 2, "fill = light.backgroundExtra: \(light.fill)")
+        #expect(Self.gap(light.separator, (226, 221, 200)) <= 3, "separators = light.hover: \(light.separator)")
+        #expect(Self.gap(light.shortcut, (198, 187, 145)) <= 3, "shortcuts = light.subtitle: \(light.shortcut)")
+        #expect(light.disabled == ArcMenuTones.disabledInkLight)
+        #expect(light.ink == RGB(0, 0, 0), "black titles")
+        // A plain grey space in Light mode (the reporter's) is light too.
+        let grey = ArcMenuTones(theme: SpaceTheme(colors: ["#D1D1D6"], intensity: 0, noise: 0, appearance: "light"), dark: false)
+        #expect(min(grey.fill.r, grey.fill.g, grey.fill.b) > 0.9, "light fill: \(grey.fill)")
     }
 
-    @Test func aLightSpaceStillGetsADarkMenu() {
-        let pale = ArcMenuTones(theme: SpaceTheme(colors: ["#FFF6D8"], intensity: 0.2, noise: 0, appearance: "light"))
-        #expect(pale.fill.r < 0.1 && pale.fill.g < 0.1 && pale.fill.b < 0.1, "Arc's menu is dark on light spaces: \(pale.fill)")
-        #expect(pale.disabled == ArcMenuTones.disabledInk)
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/822")) func inDarkModeTheMenuStaysDarkOnEverySpace() {
+        let grey = ArcMenuTones(theme: SpaceTheme(colors: ["#D1D1D6"], intensity: 0, noise: 0, appearance: "light"), dark: true)
+        #expect(max(grey.fill.r, grey.fill.g, grey.fill.b) < 0.12, "dark fill, as in Arc: \(grey.fill)")
+        #expect(grey.shortcut.r > grey.fill.r + 0.2, "shortcuts read on the dark fill: \(grey.shortcut)")
+        #expect(grey.disabled == ArcMenuTones.disabledInk && grey.ink == RGB(1, 1, 1))
+        let pale = ArcMenuTones(theme: SpaceTheme(colors: ["#FFF6D8"], intensity: 0.2, noise: 0, appearance: "light"), dark: true)
+        #expect(pale.fill.r < 0.1 && pale.fill.g < 0.1 && pale.fill.b < 0.1, "dark on a light space in Dark mode: \(pale.fill)")
     }
 }
