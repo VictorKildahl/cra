@@ -270,8 +270,11 @@ struct ShortcutRecorder: View {
     }
 
     private func handle(_ e: NSEvent) {
-        if e.keyCode == 53 { stop(); return }                               // esc
-        if e.keyCode == 51 || e.keyCode == 117 { bindings.setShortcuts([], for: action.id); stop(); return }  // ⌫ / ⌦
+        switch Shortcut.recordingStep(keyCode: e.keyCode, modifiers: e.modifierFlags.rawValue) {
+        case .cancel: stop(); return                                        // esc
+        case .clear: bindings.setShortcuts([], for: action.id); stop(); return  // ⌫ / ⌦
+        case .record: break                                                 // ⇧⎋ and the like too (#855)
+        }
         guard let s = Shortcut.from(event: e) else { return }
         bindings.setShortcuts([s], for: action.id)
         stop()

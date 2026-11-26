@@ -123,6 +123,28 @@ public struct KeyChord: Codable, Hashable {
     public static let f12 = "\u{F70F}"
     /// The space bar: Arc's Reveal Current Tab is ⌃Space, shown ⌃⎵.
     public static let space = " "
+    /// The Escape key (NSEvent's U+001B), shown ⎋: with a modifier it can be a shortcut, ⇧⎋ for the Task Manager (#855).
+    public static let escape = "\u{1B}"
+
+    /// What a key press does while Settings ▸ Shortcuts records one. Plain Esc stops recording and ⌫ or ⌦ clear the
+    /// shortcut, as before; Esc with a modifier is recorded, so Open Task Manager can have Chrome's ⇧⎋ (#855).
+    public enum RecordingStep: Equatable { case cancel, clear, record }
+
+    public static func recordingStep(keyCode: UInt16, modifiers: UInt) -> RecordingStep {
+        let held = Modifiers(rawValue: modifiers).intersection([.shift, .control, .option, .command])
+        if keyCode == 53 { return held.isEmpty ? .cancel : .record }
+        if keyCode == 51 || keyCode == 117 { return .clear }
+        return .record
+    }
+
+    /// Whether a recorded key can be a shortcut: a special key (Tab, the arrows, a function key) or Esc with any
+    /// modifier, else a key with ⌘, ⌃ or ⌥ (a bare letter, or one with only ⇧, is typing).
+    public static func isRecordable(key: String, modifiers: UInt) -> Bool {
+        let held = Modifiers(rawValue: modifiers).intersection([.shift, .control, .option, .command])
+        if key == escape { return !held.isEmpty }
+        let special = [tab, left, right, up, down].contains(key) || (key.unicodeScalars.first.map { $0.value >= 0xF704 && $0.value <= 0xF71F } ?? false)
+        return special || !held.intersection([.command, .control, .option]).isEmpty
+    }
 
     /// How menus and the command bar show it: ⌃⌥⇧⌘ in Apple's order, then the key.
     public var display: String { caps.joined() }
@@ -143,6 +165,7 @@ public struct KeyChord: Codable, Hashable {
         case Self.delete: s.append("⌫")
         case Self.f12: s.append("F12")
         case Self.space: s.append("⎵")
+        case Self.escape: s.append("⎋")
         default: s.append(key.uppercased())
         }
         return s

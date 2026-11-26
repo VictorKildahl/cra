@@ -753,6 +753,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    /// Help ▸ Troubleshooting ▸ Open Task Manager: Chrome's own, which belongs to the browser, as in Arc. Any open page's
+    /// hidden Chrome window can open it, so no tab in front is no reason to refuse (#855, ChromeCommandPages).
+    private func openTaskManager() {
+        let elsewhere = mainWindows.filter { $0 !== main }.flatMap { $0.browsers.runtimes.values.map(\.browser) }
+            + littleWindows.compactMap(\.browser)
+        let pages = ChromeCommandPages.order(front: main.currentBrowser, sameWindow: main.browsers.runtimes.values.map(\.browser),
+                                             elsewhere: elsewhere)
+        if let page = pages.first(where: { $0.runChromeCommand("IDC_TASK_MANAGER") }) {
+            CraLog.note("task manager: opened from \(page === main.currentBrowser ? "the page in front" : "another open page")")
+            return
+        }
+        CraLog.note("task manager: no page open, \"Open a Page First\"")
+        main.showToast("Open a Page First")
+    }
+
     func openExternalURL(_ url: String) {
         // A link from another app soon after starting on a new tab: its tab is what the window
         // shows, so the bar that was waiting for a new tab goes.
@@ -2801,6 +2816,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("app windows \(label): done")
                 return
             }
+            // taskManagerEnd=<page title>: in Chrome's Task Manager, the page's row picked and "End task" pressed,
+            // through the window's accessibility elements as VoiceOver would (#855).
+            if let title = dict["taskManagerEnd"] { CraLog.note("task manager end \(title): \(TaskManagerAccess.endTask(title: title))"); return }
             // chromeWindows=<label>: Chromium's own windows (its tab strip and toolbar) a user could see,
             // on screen and not see-through, each named (#472).
             if let label = dict["chromeWindows"] {
@@ -4387,7 +4405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             main.openExtensions(commandHeld: held) { [bindings] e in bindings.action(for: e)?.id == "openExtensions" }
         case "manageExtensions": main.openExtensionsPage()
         case "cast": if main.currentBrowser?.runChromeCommand("IDC_ROUTE_MEDIA") != true { main.showToast("Nothing to Cast") }
-        case "taskManager": if main.currentBrowser?.runChromeCommand("IDC_TASK_MANAGER") != true { main.showToast("Open a Page First") }
+        case "taskManager": openTaskManager()
         case "showArchive": main.showLibrary(.archive)
         case "clearArchive": store.clearArchive()
         case "stayOnTop": main.toggleStayOnTop()

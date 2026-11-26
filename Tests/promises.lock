@@ -1884,6 +1884,10 @@
 #853   Tests/Scenarios/clear-site-data.scenario  386eed987c2e
 #854   Packages/CraCore/Tests/CraCoreTests/SiteSearchTests.swift::addedEnginesTakeTheirKeywordsAndCanBeTheDefault  f92abb8d62ba
 #854   Tests/Scenarios/command-bar-search-keywords.scenario  525e1b9f06e0
+#855   Packages/CraCore/Tests/CraCoreTests/ChromeCommandPagesTests.swift::shiftEscapeCanBeTheTaskManagersShortcut  2282d24656df
+#855   Packages/CraCore/Tests/CraCoreTests/ChromeCommandPagesTests.swift::theTaskManagerOpensWithNoPageInFront  2f99e20db13e
+#855   Tests/Scenarios/task-manager-shortcut.scenario  2600af90f19a
+#855   Tests/Scenarios/task-manager.scenario  27ef3e294f9e
 #864   Packages/CraCore/Tests/CraCoreTests/TypedDestinationTests.swift::aRoutedAddressCountsInTheSpaceItOpensIn  529145e04959
 #864   Packages/CraCore/Tests/CraCoreTests/TypedDestinationTests.swift::everythingElseCountsInTheSpaceInUse  3a699f78a3e1
 #864   Tests/Scenarios/command-bar-typed-routed-profile.scenario  1bd12d58f336
