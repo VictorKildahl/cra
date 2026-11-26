@@ -1514,7 +1514,6 @@ final class SpacesTests: BrowserTestCase {
     // promise: #839
     /// Each sheet background reaches both window edges, including the side safe area.
     func testSpacesBackgroundsReachTheWindowEdges() throws {
-        defer { XCUIDevice.shared.orientation = .portrait }
         func checkEdges(_ state: String) throws {
             let shot = try XCTUnwrap(capture()?.image,
                                      "\(state): XCTest screen capture is blank on this display; the edge check cannot judge Cra here")
@@ -1534,7 +1533,6 @@ final class SpacesTests: BrowserTestCase {
 
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
         waitForPage("First")
-        XCUIDevice.shared.orientation = .landscapeLeft
         app.buttons["bar-tabs"].tap()
         let card = app.buttons["sync-card-open"]
         XCTAssertTrue(card.waitForExistence(timeout: 8))
