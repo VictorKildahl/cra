@@ -1556,7 +1556,7 @@ final class SpacesTests: BrowserTestCase {
         try checkEdges("Sync intro")
 
         app.terminate()
-        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraSyncDelay", "3"])
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraHoldConnecting", "YES"])
         waitForPage("First")
         app.buttons["bar-tabs"].tap()
         XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
@@ -1565,6 +1565,13 @@ final class SpacesTests: BrowserTestCase {
         waitForStableFrame(app.staticTexts["spaces-connecting"])
         try checkEdges("Connecting")
         XCTAssertTrue(app.staticTexts["spaces-connecting"].exists, "captured while Connecting is visible")
+
+        app.terminate()
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
         XCTAssertTrue(app.buttons["share-prompt-no-thanks"].waitForExistence(timeout: 10))
         waitForStableFrame(app.buttons["share-prompt-no-thanks"])
         try checkEdges("Share prompt")
