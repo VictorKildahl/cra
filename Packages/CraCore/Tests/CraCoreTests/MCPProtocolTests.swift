@@ -26,6 +26,10 @@ struct MCPProtocolTests {
     @Test func backgroundAndTransferArguments() {
         #expect(MCPProtocol.validate(name: "tab_open", arguments: ["url": "https://example.com", "windowless": true]))
         #expect(!MCPProtocol.validate(name: "tab_open", arguments: ["url": "https://example.com", "windowless": 1]))
+        let splitTarget = "00000000-0000-4000-8000-000000000001"
+        #expect(MCPProtocol.validate(name: "tab_open", arguments: ["url": "https://example.com", "splitWith": splitTarget]))
+        #expect(MCPProtocol.problem(name: "tab_open", arguments: ["url": "https://example.com", "splitWith": "not-a-tab-id"]) == "splitWith must be a tab ID from tabs_list.")
+        #expect(MCPProtocol.problem(name: "tab_open", arguments: ["url": "https://example.com", "splitWith": splitTarget, "windowless": true]) == "splitWith cannot be combined with windowless=true.")
         #expect(MCPProtocol.validate(name: "page_upload", arguments: ["tabId": "id", "selector": "input", "paths": ["/tmp/sample.txt"]]))
         for paths in [[], ["relative"], ["/tmp/a\0b"], Array(repeating: "/tmp/a", count: 9), ["/" + String(repeating: "a", count: 4096)]] {
             #expect(!MCPProtocol.validate(name: "page_upload", arguments: ["tabId": "id", "selector": "input", "paths": paths]))

@@ -328,11 +328,18 @@ final class MCPServer {
             return
         }
         if name == "tab_open" {
+            let splitWithID = (arguments["splitWith"] as? String).flatMap(UUID.init(uuidString:))
+            let splitWindow = splitWithID.flatMap { id in
+                app.mainWindows.first { !$0.isIncognito && $0.browsers.runtime(for: id) != nil }
+            }
             guard canContinue(), let url = arguments["url"] as? String, MCPProtocol.navigable(url),
-                  let window = app.mainWindows.first(where: { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito }) else {
+                  let window = splitWindow ?? app.mainWindows.first(where: { $0.windowID == app.store.lastNormalWindowID && !$0.isIncognito }) else {
                 completion(MCPProtocol.content("Opening a tab requires an HTTP(S) URL and a normal browser window.", failed: true)); return
             }
             if arguments["windowless"] as? Bool == true {
+                guard splitWithID == nil else {
+                    completion(MCPProtocol.content("splitWith cannot be combined with windowless=true.", failed: true)); return
+                }
                 guard agentTabs.count < 8 else { completion(MCPProtocol.content("Eight agent tabs are retained. Use tabs_list and tab_close to release open or timed-out tabs.", failed: true)); return }
                 let id = UUID()
                 let profile = app.store.profilePath(space: app.store.focusedSpaceID(window: window.windowID))
@@ -345,12 +352,56 @@ final class MCPServer {
             // selected, so the agent works next to the user without taking their screen.
             let select = arguments["select"] as? Bool == true
             var space: UUID?
+            if arguments["splitWith"] != nil, splitWithID == nil {
+                completion(MCPProtocol.content("splitWith must be a tab ID from tabs_list.", failed: true)); return
+            }
+            if let splitWithID {
+                guard let anchor = app.store.mcpTab(splitWithID), let anchorURL = anchor.tab?.url,
+                      MCPProtocol.navigable(anchorURL), let anchorSpace = app.store.spaceID(ofItem: splitWithID, window: window.windowID) else {
+                    completion(MCPProtocol.content("splitWith must be an open web tab from tabs_list.", failed: true)); return
+                }
+                guard app.store.paneTabIDs(for: splitWithID).count < app.store.splitPaneLimit else {
+                    completion(MCPProtocol.content("Cannot Add New Pane: the split has reached its pane limit.", failed: true)); return
+                }
+                let visible = app.mainWindows.contains { candidate in
+                    guard !candidate.isIncognito,
+                          let candidateSpace = app.store.spaceID(ofItem: splitWithID, window: candidate.windowID) else { return false }
+                    return app.store.visiblePaneTabIDs(in: candidateSpace, window: candidate.windowID).contains(splitWithID)
+                }
+                guard !visible || select else {
+                    completion(MCPProtocol.content("splitWith is visible; pass select=true to change its view.", failed: true)); return
+                }
+                space = anchorSpace
+            }
             if let name = arguments["space"] as? String {
-                space = app.store.spaceOrder.first { app.store.space($0)?.title.localizedCaseInsensitiveCompare(name) == .orderedSame }
-                guard space != nil else {
+                let requestedSpace = app.store.spaceOrder.first { app.store.space($0)?.title.localizedCaseInsensitiveCompare(name) == .orderedSame }
+                guard let requestedSpace else {
                     let names = app.store.spaceOrder.compactMap { app.store.space($0)?.title }
                     completion(MCPProtocol.content("No space is called \(name). Spaces: " + names.joined(separator: ", ") + ".", failed: true)); return
                 }
+                if let splitWithID, !app.store.isInSpace(splitWithID, requestedSpace) {
+                    completion(MCPProtocol.content("space must match the space of splitWith.", failed: true)); return
+                }
+                space = requestedSpace
+            }
+            if let splitWithID {
+                // Without select=true nothing is picked: the window stays on what the user looks at, in
+                // whatever space, and the split shows when they next pick it.
+                guard let pane = app.store.openLinkInSplit(url, from: splitWithID, window: window.windowID, select: select),
+                      let split = app.store.splitContaining(pane.id) else {
+                    completion(MCPProtocol.content("Could not add the page to Split View.", failed: true)); return
+                }
+                ownedTabs[owner, default: []].insert(pane.id)
+                _ = window.browsers.ensureRuntime(for: pane.id)
+                if arguments["activate"] as? Bool == true {
+                    window.window?.makeKeyAndOrderFront(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                let panes = app.store.paneTabIDs(for: pane.id).map(\.uuidString)
+                let result: [String: Any] = ["tabId": pane.id.uuidString, "status": "opened", "selected": select,
+                                             "splitId": split.id.uuidString, "paneTabIds": panes]
+                completion((try? MCPCDP.content(result)) ?? MCPProtocol.content("Could not describe Split View.", failed: true))
+                return
             }
             let tab = app.store.createTab(url: url, in: space, select: select, window: window.windowID)
             ownedTabs[owner, default: []].insert(tab.id)
@@ -389,14 +440,16 @@ final class MCPServer {
                 completion(MCPProtocol.content("Normal browser window unavailable.", failed: true)); return
             }
             if name == "tab_close" {
-                // Any today tab, like ⌘W (Reopen Closed Tab brings it back). Pinned tabs and
-                // favorites are the user's own layout and stay.
-                guard !app.store.isPinned(id), app.store.splitContaining(id) == nil else {
-                    completion(MCPProtocol.content("Pinned tabs, favorites and tabs in a split stay open; close only today tabs.", failed: true)); return
+                let inSplit = app.store.splitContaining(id) != nil
+                let isOwnedPane = inSplit && ownedTabs[owner]?.contains(id) == true
+                // Any today tab, like ⌘W (Reopen Closed Tab brings it back). An agent can close
+                // the pane it opened; pinned/favorite tabs and other split panes stay.
+                guard !app.store.isPinned(id), !inSplit || isOwnedPane else {
+                    completion(MCPProtocol.content("Pinned tabs, favorites and split panes this connection did not open stay open.", failed: true)); return
                 }
                 transfers.removeValue(forKey: id)?.close()
                 if let page = pages[id] { page.detach() }
-                window.closeTab(id)
+                if inSplit { window.closeSplitPane(id) } else { window.closeTab(id) }
                 ownedTabs[owner]?.remove(id); pages.removeValue(forKey: id); pointerPositions.removeValue(forKey: id)
             } else {
                 app.store.selectTab(id, window: window.windowID)
@@ -547,6 +600,11 @@ final class MCPServer {
                         folders.insert(folder.displayTitle, at: 0); parent = folder.parentID
                     }
                     if !folders.isEmpty { row["folder"] = folders.joined(separator: " / ") }
+                    if let split = app.store.splitContaining(item.id), let index = split.children.firstIndex(of: item.id) {
+                        row["splitId"] = split.id.uuidString
+                        row["splitPaneIndex"] = index
+                        row["splitPaneCount"] = split.children.count
+                    }
                     if selected.contains(item.id) { row["selected"] = true }
                     if item.id == activeTab { row["active"] = true }
                     if let url = item.tab?.url, !url.isEmpty, !MCPProtocol.navigable(url) { row["webPage"] = false }

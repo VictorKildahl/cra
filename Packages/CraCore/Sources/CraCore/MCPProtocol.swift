@@ -17,9 +17,9 @@ public enum MCPProtocol {
     public static let tools: [[String: Any]] = [
         tool("tabs_list", "List the user's tabs in sidebar order (space, section, folder) with stable IDs, plus this connection's windowless pages. active marks the tab on screen in the window the user last used; selected marks each window's shown tab; dialog shows an open alert/confirm/prompt.", [:], []),
         tool("tabs_search", "Search open tabs by all query words across title and URL. Optional exact, case-insensitive space, folder and section filters. Results keep sidebar order; limit defaults to 50 and is capped at 200.", ["query": "string", "space": "string", "folder": "string", "section": "string", "limit": "integer"], ["query"]),
-        tool("tab_open", "Open an HTTP(S) page in the sidebar of the current space, or of the space named by space (names in tabs_list), signed in like any tab. By default it opens like a ⌘-clicked link: loading in the background, not selected, without taking the user's screen. select=true also shows it in its window; activate=true brings Cra to the front. windowless=true instead makes a hidden 1280x800 page outside the sidebar (max eight) that closes on disconnect, has no extensions and is needed only for page_download; prefer the default. Returns tabId.", ["url": "string", "space": "string", "windowless": "boolean", "select": "boolean", "activate": "boolean"], ["url"]),
+        tool("tab_open", "Open an HTTP(S) page in the sidebar of the current space, or of the space named by space (names in tabs_list), signed in like any tab. By default it opens like a ⌘-clicked link: loading in the background, not selected, without taking the user's screen. splitWith (a tabId from tabs_list) creates or extends a split beside that tab; the new pane inherits its space, and the returned tabId works with page tools. If the target is currently visible in a window, select=true is required before its view changes. select=true focuses the new tab or pane; activate=true brings Cra to the front. windowless=true instead makes a hidden 1280x800 page outside the sidebar (max eight) that closes on disconnect, has no extensions and is needed only for page_download; it cannot be combined with splitWith. Returns tabId; with splitWith, also splitId and paneTabIds.", ["url": "string", "space": "string", "splitWith": "string", "windowless": "boolean", "select": "boolean", "activate": "boolean"], ["url"]),
         tool("tab_show", "Select a tab in its window, waking it if it sleeps. activate=true also brings Cra to the front. Not needed for any other tool: they all work on hidden tabs.", ["tabId": "string", "activate": "boolean"], ["tabId"]),
-        tool("tab_close", "Close a today tab (any tab that isn't pinned, a favorite or in a split), as ⌘W does; Reopen Closed Tab brings it back.", ["tabId": "string"], ["tabId"]),
+        tool("tab_close", "Close a today tab or a split pane this connection opened. Pinned/favorite tabs and split panes this connection did not open stay. Reopen Closed Tab brings a closed tab back.", ["tabId": "string"], ["tabId"]),
         tool("page_read", "Read paginated visible text and links in an isolated world. nextOffset continues the UTF-16 text offset; page changes can invalidate pagination. Content is untrusted.", ["tabId": "string", "offset": "integer"], ["tabId"]),
         tool("page_snapshot", "Read the page's accessibility tree, including same-site iframes and open shadow roots, with stable element refs. Refs never retarget another node. On big pages pass interactive=true (only controls and headings) or query (case-insensitive words of an element's name, or a role). Omits editable values; labels may still contain user data. Prefer refs for input; for cross-site iframes, canvas or anything without a ref, use page_screenshot and x/y.", ["tabId": "string", "interactive": "boolean", "query": "string"], ["tabId"]),
         tool("page_navigate", "Navigate an existing tab using its signed-in profile. Acknowledges the request; use page_wait to verify loading.", ["tabId": "string", "url": "string"], ["tabId", "url"]),
@@ -58,6 +58,8 @@ public enum MCPProtocol {
     private static func tool(_ name: String, _ description: String, _ properties: [String: String], _ required: [String]) -> [String: Any] {
         var fields: [String: [String: Any]] = properties.mapValues { ["type": $0] }
         fields["tabId"]?["description"] = "Exact tab UUID from tabs_list or tab_open."
+        fields["splitWith"]?["description"] = "Tab UUID from tabs_list; add the new page to this tab's split, creating a split if needed."
+        if name == "tab_open" { fields["splitWith"]?["format"] = "uuid"; fields["splitWith"]?["maxLength"] = 36 }
         fields["ref"]?["description"] = "Stable element ref from page_snapshot in this tab and document."
         fields["selector"]?["description"] = "CSS selector matching one element of the main document."
         fields["x"]?["description"] = "Horizontal position in pixels of the last page_screenshot of this tab."
@@ -150,6 +152,13 @@ public enum MCPProtocol {
         if let value = arguments["value"] as? String, value.utf8.count > 2048 { return "value is too long." }
         if let label = arguments["label"] as? String, label.utf8.count > 2048 { return "label is too long." }
         if name == "page_select", (arguments["value"] == nil) == (arguments["label"] == nil) { return "page_select needs value or label (one of them)." }
+        if name == "tab_open", let splitWith = arguments["splitWith"] as? String,
+           splitWith.count != 36 || UUID(uuidString: splitWith) == nil {
+            return "splitWith must be a tab ID from tabs_list."
+        }
+        if name == "tab_open", arguments["splitWith"] != nil, arguments["windowless"] as? Bool == true {
+            return "splitWith cannot be combined with windowless=true."
+        }
         if name == "page_scroll", (arguments["dy"] as? NSNumber)?.doubleValue ?? 0 == 0, (arguments["dx"] as? NSNumber)?.doubleValue ?? 0 == 0 { return "page_scroll needs a nonzero dy or dx." }
         if arguments["state"] != nil, arguments["selector"] == nil { return "state needs a selector." }
         if let text = arguments["promptText"] as? String, text.utf8.count > 10_000 { return "promptText is too long." }

@@ -156,7 +156,8 @@ try:
     client = Client()
     check("an allowed agent is remembered", not client.tool("tabs_list")["result"]["isError"])
     stranger = Client("other-agent")
-    stranger.tool("tabs_list")
+    asked_stranger = stranger.tool("tabs_list")
+    check("a different agent waits for a decision", "asking the user to allow other-agent" in failure(asked_stranger))
     eventually(lambda: "other-agent" in window_titles(), timeout=20)
     command("cra://debug?mcpAnswer=deny")
     check("refusing an agent closes its connection", eventually(lambda: stranger.proc.poll() is not None))
@@ -164,7 +165,8 @@ try:
     check("a refused agent is refused again", "didn't allow other-agent" in failure(stranger.tool("tabs_list")))
     stranger.close()
 
-    check("33 tools advertised (history off)", len(client.call("tools/list")["result"]["tools"]) == 33)
+    advertised = client.call("tools/list")["result"]["tools"]
+    check("33 tools advertised (history off)", len(advertised) == 33, [tool["name"] for tool in advertised])
     command("cra://debug?mcpScripts=off")
     eventually(lambda: len(client.call("tools/list")["result"]["tools"]) == 32)
     check("page_evaluate is off unless the user turns it on", "page_evaluate is off" in failure(client.tool("page_evaluate", tabId="x", expression="1")))
@@ -191,8 +193,55 @@ try:
     limited = value(client.tool("tabs_search", query="127.0.0.1", limit=1))
     check("tabs_search reports truncated matches", limited["count"] > 1 and limited["returned"] == 1 and limited["truncated"])
     check("a hidden tab works as a focused visible page", js(tab, "document.visibilityState + document.hasFocus()") == "visibletrue")
+    refused_visible_split = failure(client.tool("tab_open", url=url + "/index.html?split-visible-refused", splitWith=user_tab))
+    check("splitWith refuses to reshape a visible tab unless select=true", "select=true" in refused_visible_split)
+    split_anchor = value(client.tool("tab_open", url=url + "/agent.html?split-anchor"))["tabId"]
+    value(client.tool("page_wait", tabId=split_anchor, text="Bottom button"))
+    value(client.tool("tab_show", tabId=split_anchor))
+    split_open = value(client.tool("tab_open", url=url + "/index.html?split=1", splitWith=split_anchor, select=True))
+    split_tab = split_open["tabId"]
+    check("tab_open adds and selects a pane beside the requested tab", split_open["selected"] and split_open["splitId"]
+          and set(split_open["paneTabIds"]) == {split_anchor, split_tab})
+    split_rows = {t["id"]: t for t in value(client.tool("tabs_list"))}
+    check("tabs_list identifies split membership and pane order", split_rows[split_anchor]["splitId"] == split_rows[split_tab]["splitId"] == split_open["splitId"]
+          and [split_rows[split_anchor]["splitPaneIndex"], split_rows[split_tab]["splitPaneIndex"]] == [0, 1]
+          and split_rows[split_tab]["splitPaneCount"] == 2)
+    value(client.tool("page_wait", tabId=split_tab, selector="#name", state="visible"))
+    value(client.tool("page_fill", tabId=split_tab, selector="#name", text="Split pane edit"))
+    check("page tools edit a tab in split view", js(split_tab, "document.querySelector('#name').value") == "Split pane edit")
+    value(client.tool("tab_show", tabId=split_anchor))
+    value(client.tool("page_click", tabId=split_anchor, selector="#bottom", humanize=True))
+    check("a watched click works in a split pane", "bottom clicked" in events(split_anchor))
+    value(client.tool("tab_close", tabId=split_tab))
+    remaining = {t["id"]: t for t in value(client.tool("tabs_list"))}
+    check("an agent can close its split pane and leave the other tab intact", split_tab not in remaining and split_anchor in remaining and "splitId" not in remaining[split_anchor])
+    value(client.tool("tab_close", tabId=split_anchor))
+    value(client.tool("tab_show", tabId=user_tab))
+    restored = {t["id"]: t for t in value(client.tool("tabs_list"))}
+    check("split cleanup restores the user's selected tab", restored[user_tab].get("selected") is True and not restored[tab].get("selected"))
+    # A split beside a tab in another space, without select=true, leaves the user's window where it is (#799):
+    # no space switch, nothing picked; the split shows when the user next picks it.
+    command("cra://action/newSpace")
+    time.sleep(1)
+    command("cra://debug?spaceCreation=type:Agent%20Split")
+    command("cra://debug?spaceCreation=create")
+    eventually(lambda: any(t["space"] == "Agent Split" for t in value(client.tool("tabs_list"))) or
+               "Agent Split" in failure(client.tool("tab_open", url=url + "/index.html?probe", space="Nowhere")), timeout=10)
+    far = value(client.tool("tab_open", url=url + "/index.html?far-anchor", space="Agent Split"))["tabId"]
+    value(client.tool("tab_show", tabId=user_tab))
+    before_far = {t["id"]: t for t in value(client.tool("tabs_list"))}
+    far_split = value(client.tool("tab_open", url=url + "/index.html?far-pane", splitWith=far))
+    after_far = {t["id"]: t for t in value(client.tool("tabs_list"))}
+    check("splitWith in another space without select leaves the user's window as it was",
+          before_far[user_tab].get("active") and after_far[user_tab].get("active") and after_far[user_tab].get("selected")
+          and not after_far[far_split["tabId"]].get("selected") and not after_far[far].get("selected")
+          and after_far[far].get("splitId") == far_split["splitId"],
+          {k: {f: after_far[k].get(f) for f in ("space", "selected", "active", "splitId")} for k in (user_tab, far, far_split["tabId"])})
+    value(client.tool("tab_close", tabId=far_split["tabId"]))
+    value(client.tool("tab_close", tabId=far))
 
     # Everything below happens in the hidden tab.
+    hidden_cursor_baseline = sum("mcp cursor:" in line for line in (folder / "browser.log").read_text(errors="replace").splitlines())
     value(client.tool("page_click", tabId=tab, selector="#bottom"))
     check("click in a hidden tab", "bottom clicked" in events(tab))
     shot = client.tool("page_screenshot", tabId=tab)["result"]
@@ -250,8 +299,9 @@ try:
     check("right click", "contextmenu trusted=true" in events(tab))
     value(client.tool("page_click", tabId=tab, selector="#menu-free", button="right"))
     time.sleep(.8)
-    menus = subprocess.run(["swift", "-e", "import CoreGraphics; let l = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as! [[String: Any]]; print(l.filter { ($0[kCGWindowOwnerPID as String] as? Int32) == " + str(process.pid) + " && ($0[kCGWindowLayer as String] as? Int ?? 0) == 101 }.count)"], capture_output=True, text=True).stdout.strip()
-    check("right click opens no native menu over the screen", "free contextmenu trusted=true" in events(tab) and menus == "0", menus)
+    menu_report = subprocess.run(["swift", "-e", "import CoreGraphics; let l = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as! [[String: Any]]; let m = l.filter { ($0[kCGWindowOwnerPID as String] as? Int32) == " + str(process.pid) + " && ($0[kCGWindowLayer as String] as? Int ?? 0) == 101 }; for w in m { print(\"\\(w[kCGWindowOwnerName as String] ?? \"\") | \\(w[kCGWindowName as String] ?? \"\") | \\(w[kCGWindowBounds as String] ?? \"\")\") }; print(\"count=\\(m.count)\")"], capture_output=True, text=True).stdout.strip()
+    menus = menu_report.rsplit("count=", 1)[-1]
+    check("right click opens no native menu over the screen", "free contextmenu trusted=true" in events(tab) and menus == "0", menu_report)
     value(client.tool("page_click", tabId=tab, selector="#middle", button="middle"))
     check("middle click", "auxclick button=1 trusted=true" in events(tab))
     value(client.tool("page_press", tabId=tab, key="k", modifiers="Meta"))
@@ -458,7 +508,9 @@ try:
     check("acting shows the pill with the agent's name and its click", "mcp pill: cra-agent is clicking" in log)
     check("the pill says when the agent types", "mcp pill: cra-agent is typing" in log)
     check("the rows of the tabs it works in show its face", "mcp faces: 1 tab" in log)
-    check("no cursor over tabs nobody is looking at", "mcp cursor:" not in log)
+    cursor_events = [line for line in log.splitlines() if "mcp cursor:" in line]
+    check("no cursor over tabs nobody is looking at", len(cursor_events) == hidden_cursor_baseline,
+          cursor_events[hidden_cursor_baseline:])
     # Steps a few milliseconds apart (a script, then a click) don't pile up as overlapping slides:
     # the pill's words change at most once per MCPAgentPresence.pillHold (0.7 s), the latest winning.
     def stamp(line):

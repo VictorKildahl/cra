@@ -65,20 +65,24 @@ or minimised windows and with Cra in the background:
 
 - `tab_open` opens a tab like a ⌘-clicked link: in the today list of the current space (or the
   space named by `space`), loading, unread and not selected. Cra doesn't come forward.
-  `select=true` also shows it in its window; `activate=true` brings Cra to the front.
+  `select=true` also shows it in its window; `activate=true` brings Cra to the front. Pass
+  `splitWith` a tab ID from `tabs_list` to open the new page beside that tab, creating or extending
+  its split. The new pane inherits the target's space; the response includes `splitId` and
+  `paneTabIds`. For a target currently visible in a window, pass `select=true` or the request is
+  refused. `select=true` focuses the new pane. Use the pane `tabId` with page tools.
 - The first time a client works in a page, Cra turns on DevTools focus emulation for it, so the
   page runs as a focused, visible page: input lands, animations run, and screenshots work.
   When the last client disconnects (or MCP is turned off) those pages go back to normal.
 - A sleeping tab wakes in the background when a tool needs it, and a tab an agent works in
   counts as used, so tab sleeping and freezing wait as they would after you looked at it.
 - `tabs_list` lists your tabs in sidebar order with their space, section (favorites, pinned,
-  today) and folder. `active` marks the tab on screen in the window you used last;
-  `selected` marks each window's shown tab.
+  today), folder, and split membership (`splitId`, `splitPaneIndex`, `splitPaneCount`). `active`
+  marks the tab on screen in the window you used last; `selected` marks each window's shown tab.
+- `tab_close` closes today tabs, as ⌘W does, and split panes this connection opened. Pinned tabs,
+  favorites and split panes this connection did not open stay.
 - `tabs_search` finds open tabs when every query word appears in the title or URL. Optional `space`,
   `folder`, and `section` filters match exactly, ignoring case. Results keep sidebar order, return
   up to 50 by default (200 maximum), and report the match count and whether results were truncated.
-- `tab_close` closes today tabs, as ⌘W does (Reopen Closed Tab brings one back). Pinned tabs,
-  favorites and tabs in a split stay.
 - `tab_move`, `tab_update` and `folder_create` organize the sidebar as a drag or a menu does:
   move a tab to another space, to its favorites, pinned or today section, into a folder or after
   another tab; rename, mute, put to sleep or wake it; make a folder in a space's pinned section.
@@ -94,9 +98,9 @@ extension's frame inside a page (a password manager's menu) are refused too.
 | --- | --- |
 | `tabs_list` | Your tabs in sidebar order, plus this connection's windowless pages |
 | `tabs_search` | Search open tabs by title and URL; optionally filter by space, folder and section |
-| `tab_open` | Open an HTTP(S) page in the background (`space`, `select`, `activate`, `windowless`) |
+| `tab_open` | Open an HTTP(S) page in the background, optionally beside a tab in Split View (`space`, `splitWith`, `select`, `activate`, `windowless`) |
 | `tab_show` | Select a tab in its window; `activate=true` also brings Cra forward |
-| `tab_close` | Close a today tab |
+| `tab_close` | Close a today tab or this connection's own split pane |
 | `page_read` | Visible text in pages of up to 20,000 UTF-16 units, and up to 50 links |
 | `page_snapshot` | Accessibility tree with stable refs, including same-site iframes and open shadow roots; `interactive` and `query` narrow it |
 | `page_screenshot` | Viewport JPEG (at most 1280 px) of any tab, hidden ones included, with its size for x/y |
