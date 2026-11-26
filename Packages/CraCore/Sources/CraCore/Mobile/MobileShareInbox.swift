@@ -18,10 +18,12 @@ public struct MobileShareInbox: Codable, Equatable {
 
         public var id: String { rawValue }
 
+        /// The iPhone's own places: Arc Search's are the Mac's Spaces, which the phone can't write yet, and plain "Tabs" read
+        /// as if the link went to the Mac (#829).
         public var label: String {
             switch self {
-            case .tabs: return "Tabs"
-            case .favorites: return "Favorites"
+            case .tabs: return "iPhone Tabs"
+            case .favorites: return "iPhone Favorites"
             }
         }
 
