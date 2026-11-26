@@ -56,6 +56,7 @@ if [ "${1:-}" != core ]; then
   suite "Tidy Downloads lifecycle" scripts/test-tidy-downloads.sh
   suite "Tidy Tabs model" scripts/test-tidy-tabs-model.sh
   suite "Tidy Tabs lifecycle" scripts/test-tidy-tabs.sh
+  suite "DNS provider menu" scripts/test-dns-provider-menu.sh
   suite "Policies" scripts/test-policies.sh
   suite "Import skipped list" scripts/test-skipped-list.sh
   suite "Content blocker" scripts/test-content-blocker.sh
