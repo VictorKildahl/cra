@@ -56,11 +56,26 @@ enum FloatingSidebarTests {
         edge?.onResize?(20, 15)
         expect(began && got.map { $0 == 20 && $1 == 15 } == true && shell.sidebarHost.frame.width == 348,
                "the floating edge hands the drag's start, translation and speed to the shell")
+        // Double-click restores Arc's default (228 pt snap) width through the shell (#819).
+        var reset = false
+        shell.resizeHandle.onDoubleClick = {
+            reset = true
+            shell.sidebarWidth = 228
+        }
+        shell.sidebarWidth = 400
+        edge?.onDoubleClick?()
+        let resetPanelWidth = panel.frame.width
+        expect(reset && shell.sidebarWidth == 228 && shell.sidebarHost.frame.width == 228
+               && abs(edge!.frame.maxX - shell.sidebarHost.frame.maxX) < 0.5,
+               "double-clicking the floating edge resets width through the shell")
+        expect(abs(resetPanelWidth - (228 + FloatingSidebarGeometry.margin)) < 0.5,
+               "the floating panel follows the reset width")
         shell.resizeHandle.onResize?(0, 0)
         shell.resizeHandle.onBegin = nil
         shell.resizeHandle.onResize = nil
         shell.resizeHandle.onDrag = nil
         shell.resizeHandle.onEnd = nil
+        shell.resizeHandle.onDoubleClick = nil
 
         // Multiple animation completions can be queued; only the latest show owns it.
         sidebar.hide(animated: true)
@@ -730,6 +745,7 @@ final class ResizeHandleView: NSView {
     var onBegin: (() -> Void)?
     var onResize: ((_ translation: CGFloat, _ speed: CGFloat) -> Void)?
     var onEnd: (() -> Void)?
+    var onDoubleClick: (() -> Void)?
     var side: SidebarSide = .left
 }
 

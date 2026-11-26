@@ -304,6 +304,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             store.prefs.sidebarWidth = Double(shell.sidebarWidth)
             lastSidebarWidth = shell.sidebarWidth
         }
+        // Arc: double-click the edge to restore the default width (#819) — same 228 pt as the
+        // drag snap (`SidebarResizeState.canSnapToDefaultWidth`).
+        shell.resizeHandle.onDoubleClick = { [weak self] in
+            guard let self else { return }
+            let width = CGFloat(SidebarResize.snapWidth)
+            store.prefs.sidebarWidth = SidebarResize.snapWidth
+            lastSidebarWidth = width
+            shell.sidebarWidth = width
+            if shell.sidebarDetached {
+                // Floating panel follows via FloatingSidebar's own onDoubleClick → reposition.
+                return
+            }
+            shell.animateSidebar(visible: sidebarVisible, floating: shell.floatingSidebar,
+                                 fullscreen: shell.contentFullscreen, width: width)
+        }
         shell.onEdgeHover = { [weak self] inStrip in
             if inStrip { self?.floatingSidebar?.edgeHovered() } else { self?.floatingSidebar?.edgeLeft() }
         }

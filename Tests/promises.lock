@@ -1281,6 +1281,7 @@
 #604   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aTypedAppAddressOpensItsApp  22affcbfecae
 #604   Tests/Scenarios/command-bar-app-address.scenario  9dc5b635b27a
 #619   Tests/Scenarios/background-tab-video-queue.scenario  aa89da14fbb4
+#819   Packages/CraCore/Tests/CraCoreTests/SidebarWidthTests.swift::doubleClickRestoresArcsDefault  36cc4ed559ce
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85
