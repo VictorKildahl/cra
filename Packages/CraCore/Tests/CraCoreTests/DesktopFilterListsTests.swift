@@ -11,6 +11,8 @@ struct DesktopFilterListsTests {
         #expect(groups[1].entries.first?.name == "EasyPrivacy")
         let entries = groups.flatMap(\.entries)
         #expect(entries.count == DesktopFilterList.catalog.count)
+        // One row per subscription: two rows with one address would switch together.
+        #expect(Set(entries.map(\.address)).count == entries.count)
         #expect(entries.allSatisfy { !$0.detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         let regional = try #require(groups.last).entries
         for (lhs, rhs) in zip(regional, regional.dropFirst()) {
