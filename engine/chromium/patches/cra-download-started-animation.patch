@@ -1,0 +1,40 @@
+diff --git a/chrome/browser/ui/views/download/BUILD.gn b/chrome/browser/ui/views/download/BUILD.gn
+index 869d40b63b..12dd6dd3b6 100644
+--- a/chrome/browser/ui/views/download/BUILD.gn
++++ b/chrome/browser/ui/views/download/BUILD.gn
+@@ -103,6 +103,7 @@ source_set("download") {
+       "//components/safe_browsing/core/common:safe_browsing_policy_handler",
+       "//components/safe_browsing/core/common:safe_browsing_prefs",
+       "//ui/strings:ui_strings_grit",
++      "//ui/views/controls/webview",
+     ]
+     if (is_mac) {
+       deps += [ "//chrome/browser/ui:fullscreen_util_mac" ]
+diff --git a/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc b/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
+index 10b7682418..62d1a66fb2 100644
+--- a/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
++++ b/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
+@@ -58,6 +58,7 @@ DEFINE_USER_DATA(DownloadToolbarUIController);
+ #include "ui/gfx/animation/animation.h"
+ #include "ui/gfx/paint_vector_icon.h"
+ #include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/webview/cra_hosted_page.h"
+ #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+ #include "ui/views/controls/button/button.h"
+ #include "ui/views/controls/image_view.h"
+@@ -513,6 +514,15 @@ void DownloadToolbarUIController::ShowPendingDownloadStartedAnimation() {
+       !platform_util::IsVisible(web_contents->GetNativeView())) {
+     return;
+   }
++  // Cra: a page Cra shows in its own window (cra_hosted_page.h) has Arc's
++  // download flight, which Cra's app throws. Chrome's arrow flew to the
++  // download button of a toolbar nobody sees, and its window came up at the
++  // primary display's corner before its first frame moved it: with Cra on
++  // another display, that switched the primary display off a full-screen
++  // Space to a desktop (GitHub #774).
++  if (web_contents->GetUserData(views::CraHostedPageKey())) {
++    return;
++  }
+   // Animation cleans itself up after it's done.
+   if (auto* button = GetDownloadsButton(browser_view_)) {
+     new DownloadBubbleStartedAnimationViews(

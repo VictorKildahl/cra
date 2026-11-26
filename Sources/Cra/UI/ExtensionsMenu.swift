@@ -168,7 +168,8 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
     /// Remove from Cra: asked first, as Chrome's "Remove from Chrome…" does (#695).
     static func confirmRemove(_ e: ExtensionStore.Entry) {
         let dialog = AppDialog(title: "Remove “\(e.name)”?",
-                               message: "It will be removed from this profile, with its data.",
+                               message: ExtensionRemoval.message(isShared: ExtensionStore.shared.shares.isShared(e.extensionID),
+                                                                 isCraCopy: !e.managedByChrome, profileCount: e.profiles?.count),
                                actions: [DialogAction("Remove", role: .destructive), .cancel])
         let remove = { (r: NSApplication.ModalResponse) in if r == .alertFirstButtonReturn { Self.remove(e) } }
         if let window = AppDialog.parentWindow { dialog.present(over: window, completion: remove) } else { remove(dialog.runModal()) }
@@ -177,6 +178,12 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
     /// Chromium uninstalls it from the page's profile; a copy Cra loads itself from its folder goes too, or it
     /// would load again at the next launch.
     @MainActor static func remove(_ e: ExtensionStore.Entry) {
+        // Shared (discussion #595): from every profile, as Settings removes it. Chrome keeps it otherwise.
+        if ExtensionStore.shared.shares.isShared(e.extensionID) {
+            ExtensionStore.shared.removeShared(e)
+            CraLog.note("extension removed \(e.extensionID.prefix(8)): shared, from every profile")
+            return
+        }
         let page = page()
         let uninstalled = page?.responds(to: #selector(CraBrowser.uninstallExtension(_:))) == true && page?.uninstallExtension(e.extensionID) == true
         if !e.managedByChrome { ExtensionStore.shared.remove(e) }

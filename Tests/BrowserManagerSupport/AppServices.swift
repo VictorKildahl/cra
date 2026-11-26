@@ -141,6 +141,9 @@ enum TestRoot { case today }
     /// The profiles a loaded page asked for Web Store installs in (#203), in order.
     var webStoreProfiles: [String] = []
     func installFromWebStore(using browser: CraBrowser, profile: String) { webStoreProfiles.append(profile) }
+    /// The profiles a loaded page brought its shared extensions up to date in (discussion #595), in order.
+    var sharedProfiles: [String] = []
+    func reconcileShared(profile: String, using browser: CraBrowser? = nil) { sharedProfiles.append(profile) }
 }
 enum BrowsingDataClear {
     enum Range { case allTime }

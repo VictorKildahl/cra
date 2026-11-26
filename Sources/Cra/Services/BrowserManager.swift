@@ -1730,6 +1730,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         guard !browser.isIncognito else { return }
         // The profile's extensions are up: imported Web Store copies become store installs (#203).
         ExtensionStore.shared.installFromWebStore(using: browser, profile: store.profileDirectoryName(item: id))
+        // …and it gets the shared extensions it lacks, or loses one taken out of it (discussion #595).
+        ExtensionStore.shared.reconcileShared(profile: store.profileDirectoryName(item: id), using: browser)
         if url.hasPrefix("chrome://settings") { watchClearBrowsingData(browser) }
         store.recordVisit(url: url, title: title.isEmpty ? (store.item(id)?.tab?.savedTitle ?? "") : title, profile: store.profileID(item: id))
     }

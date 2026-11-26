@@ -14,6 +14,7 @@
 class ChromeBrowserMainExtraParts;
 
 namespace content {
+class BrowserContext;
 class WebContents;
 struct ContextMenuParams;
 struct GlobalRenderFrameHostId;
@@ -182,6 +183,12 @@ inline DownloadInterceptHook g_download_intercept = nullptr;
 // a tab closed in Cra goes, as in Arc (patches/cra-close-without-asking.patch, GitHub #705).
 using ClosingWithoutAskingHook = bool (*)(content::WebContents* contents);
 inline ClosingWithoutAskingHook g_closing_without_asking = nullptr;
+
+// Whether Cra manages an installed extension in this profile: a shared extension, which Cra's Settings keep in
+// every profile the person picked (GitHub discussion #595). chrome://extensions says "Managed by Cra" for it instead of
+// nothing; Cra's ManagementPolicy provider keeps it installed (patches/extension-managed-by-cra.patch).
+using ExtensionManagedHook = bool (*)(content::BrowserContext* context, const std::string& extension_id);
+inline ExtensionManagedHook g_extension_managed = nullptr;
 
 }  // namespace cra
 

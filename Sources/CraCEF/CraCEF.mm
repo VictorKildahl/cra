@@ -3801,6 +3801,13 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
 + (void)setBrowserDevToolsEventHandler:(void (^)(NSString*, NSString*, NSString* _Nullable))handler {
     g_cdpEventHandler = [handler copy];
 }
+// Shared extensions (GitHub discussion #595) need Chrome's management policy, which CEF's runtime doesn't reach.
++ (void)setManagedExtensionIDs:(NSDictionary<NSString*, NSArray<NSString*>*>*)idsByProfile {}
++ (void)installWebStoreExtension:(NSString*)extensionID manifest:(NSString*)manifestJSON
+                     profilePath:(NSString*)profilePath completion:(void (^)(NSString*))completion {
+    completion(@"not on CEF");
+}
++ (BOOL)uninstallExtension:(NSString*)extensionID profilePath:(NSString*)profilePath { return NO; }
 + (NSString*)extensionSettingsForProfile:(NSString*)profilePath {
     // Quitting: the contexts are going away, and ProfileContext would make a new one.
     if (!g_contextInitialized || g_quitting) return nil;

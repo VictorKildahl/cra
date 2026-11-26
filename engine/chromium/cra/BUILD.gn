@@ -13,6 +13,8 @@ source_set("core") {
     "fetch.mm",
     "history.h",
     "history.mm",
+    "managed_extensions.h",
+    "managed_extensions.mm",
     "engine_main.mm",
     "page_protocol.h",
     "page_protocol.mm",

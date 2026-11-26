@@ -126,6 +126,11 @@ never need to build Chromium yourself. If your fix needs a change inside the eng
 the issue first: the maintainer rebuilds the engine for it, and every patch has to be carried
 through each Chrome update.
 
+## Conduct and governance
+
+Everyone in Cra's spaces follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+[GOVERNANCE.md](GOVERNANCE.md) says who decides what, and how.
+
 ## Security
 
 Please don't open public issues for vulnerabilities. See [SECURITY.md](SECURITY.md).

@@ -16,6 +16,10 @@ one-time), and a custom amount gets the highest tier at or below it, as GitHub d
     raise their monthly amount: only releases from the day of the raise on count as
     thanking them for it.
   - "logo": companies whose logo belongs on crabrowser.app/support.
+  - "readme" / "home page": company tiers from $250 a month whose logo also belongs in the
+    GitHub README / on the crabrowser.app home page while they sponsor.
+  - "welcome": public company sponsors who joined (or moved up) since the tag and get a
+    welcome post from @crabrowser.
 
 Private sponsors are never named; they're listed so they can be reached privately.
 Needs VictorKildahl's token with the `user` (or `read:user`) scope.
@@ -33,6 +37,9 @@ WEBSITE = Path(os.environ.get("CRA_WEBSITE", ROOT.parent / "cra-website"))
 PERKS = {  # perk -> (pattern in a tier description, what it means)
     "notes": (r"release notes|notes of every release", "Name in these release notes"),
     "logo": (r"\blogo\b", "Logo on crabrowser.app/support"),
+    "readme": (r"logo in the GitHub README", "Logo in the GitHub README"),
+    "home": (r"home page", "Logo on the crabrowser.app home page"),
+    "welcome": (r"post from @crabrowser", "Welcome post from @crabrowser (once, when they join)"),
 }
 EVERY = [  # how often a monthly tier's name is in the release notes, in days
     (r"every release", 0),
@@ -106,6 +113,12 @@ def tier_title(tier):
     return m.group(1) if m else tier["name"]
 
 
+def tier_perks(descriptions):
+    """The perks a sponsor's tiers promise, by the PERKS patterns."""
+    descriptions = list(descriptions)
+    return {p for p, (pat, _) in PERKS.items() for text in descriptions if re.search(pat, text or "", re.I)}
+
+
 def notes_every(descriptions):
     """Days between a monthly sponsor's names in the release notes: the most often any of
     their tiers promises, so a tier that says "Everything in Insider" keeps Insider's pace.
@@ -146,7 +159,7 @@ def main():
         t = s["tier"]
         own = [x for x in tiers if x["isOneTime"] == t["isOneTime"] and x["monthlyPriceInDollars"] <= t["monthlyPriceInDollars"]]
         s["reward"] = tier_title(max(own, key=lambda x: x["monthlyPriceInDollars"])) if own else None
-        s["perks"] = {p for p, (pat, _) in PERKS.items() for x in own if re.search(pat, x["description"] or "", re.I)}
+        s["perks"] = tier_perks(x["description"] for x in own)
         s["every"] = notes_every(x["description"] for x in own)
         s["new"] = dt.datetime.fromisoformat(s["createdAt"].replace("Z", "+00:00")).timestamp() > since
         e, private = s["sponsorEntity"], s["privacyLevel"] == "PRIVATE"
@@ -162,6 +175,8 @@ def main():
     def due(s, perk):
         if perk not in s["perks"]:
             return False
+        if perk == "welcome":  # once, in public, when they join or move up
+            return s["isActive"] and s["new"] and bool(s["names"])
         if perk != "notes":  # a private company is reached privately about its logo
             return s["isActive"] and not s["tier"]["isOneTime"]
         if not s["names"]:  # private: never named

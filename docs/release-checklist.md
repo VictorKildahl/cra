@@ -12,9 +12,10 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Themes and window chrome
 
-- **#739:** with Settings ▸ App Icon on Segments, System Settings ▸ Appearance ▸ Icon & widget style set to Dark, then Clear and Tinted,
-  turns Cra's Dock icon dark, clear and tinted like the other apps' (resources/AppIcon.icns is on Apple's grid, AppIconGridTests). A picked
-  icon stays as drawn.
+- **#739:** with Settings ▸ General ▸ App Icon on Segments (check `defaults read dk.kildahl.cra appIcon`: a pick is
+  drawn as it is, by design), System Settings ▸ Appearance ▸ Icon & widget style set to Dark, then Clear and Tinted,
+  turns Cra's Dock icon dark, glassy and tinted like the other apps' (the Icon Composer icon, resources/AppIcon.icon,
+  compiled into Assets.car; AppIconCatalogTests). Default keeps the sand tile. On macOS 14 or 15 the .icns shows.
 - **#372:** Settings opens at 684 × 650 pt on the first tab (your first name, "Cra" without one) every time, whatever tab it was closed on, and ⌘W closes it. Go through the
   ten tabs in dark and in light: the window is the system's window colour (not Arc's navy, Victor 12 Nov 2026), the chosen tab's pill
   (white 10 % with a hairline in dark, white with a shadow in light), 36 × 16 pt switches, the cards, Max's banner (Cra's mark and "Max"),
@@ -301,6 +302,9 @@ built release app with a test profile. Note anything that fails in the release's
 - **#354:** on two displays, with another app full screen on the primary one and Cra on the
   other: a link that opens a tab, a ⌘-click that opens one behind, a tab whose page has to load,
   a Peek and DevTools all leave the primary display on its full-screen Space.
+- **#774:** the same two displays: a click on a link that downloads (with and without Ask Where to
+  Save), a page's file picker and an alert leave the primary display on its full-screen Space,
+  and only Cra's download flight shows, no arrow of Chromium's.
 - **#231:** with Keep Cra in the menu bar on, the C shows in the menu bar in light and dark.
   ⌘Q takes the windows and the Dock icon away, and focus goes to the app behind. A full-screen
   window leaves its Space first. ⌥⌘N from another app opens a Little Window at once, with the

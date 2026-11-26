@@ -2320,6 +2320,7 @@ final class ShareExtensionTests: BrowserTestCase {
         XCTAssertTrue(app.staticTexts["Shared page"].waitForExistence(timeout: 5))
     }
 
+    // promise: #829
     /// The extension itself, from the page menu's share sheet: "Saved", the place picker, Done.
     func testTheShareSheetSavesThroughTheExtension() {
         // A page that loads (the network is needed): the share sheet shares the page's address.
@@ -2337,6 +2338,9 @@ final class ShareExtensionTests: BrowserTestCase {
         XCTAssertTrue(app.staticTexts["Saved"].waitForExistence(timeout: 8))
         sleep(1)
         keep("share-saved")
+        // #829: the place says it's the iPhone's, not a Mac Space.
+        let place = app.buttons["share-destination"]
+        XCTAssertTrue(place.label.contains("iPhone"), "the picker names the iPhone: \(place.label)")
         app.buttons["share-done"].tap()
         sleep(1)
         XCUIDevice.shared.press(.home)

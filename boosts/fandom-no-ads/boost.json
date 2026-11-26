@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "name": "Hide Ads",
+  "host": "fandom.com",
+  "about": "Hides the banner above the article, the ads in the side rail and between sections, and the autoplaying video at the top of the page.",
+  "by": "aashishvinu",
+  "preview": "https://starwars.fandom.com/wiki/Luke_Skywalker",
+  "zapped": [
+    ".fandom-ad-sticky-container",
+    ".fandom-ad-wrapper",
+    "fandom-ad",
+    ".featured-video-player-container"
+  ]
+}

@@ -35,6 +35,9 @@ final class ExtensionStore {
         var disabledProfiles: Set<String> = []
         /// Profile folders that allow it in incognito (chrome://extensions ▸ Allow in Incognito, GitHub #620).
         var incognitoProfiles: Set<String> = []
+        /// The Chrome Web Store's own install in some profile, which Settings can share with every profile
+        /// (discussion #595).
+        var fromWebStore = false
 
         func isInstalled(inProfile name: String) -> Bool { profiles?.contains(name) ?? true }
         func isEnabled(inProfile name: String) -> Bool { isInstalled(inProfile: name) && !disabledProfiles.contains(name) }
@@ -349,6 +352,200 @@ final class ExtensionStore {
         }
     }
 
+    // MARK: Shared extensions (GitHub discussion #595)
+
+    nonisolated private static var sharedFile: URL { AppPaths.file("shared-extensions.json") }
+
+    /// Cra's profile folders, Default first, in Settings' order: the profiles a shared extension belongs in, also one
+    /// whose Chromium folder isn't made yet. AppDelegate points it at the sidebar's profiles; read live, so a profile
+    /// made a moment ago counts.
+    static var profileFoldersSource: @MainActor () -> [String] = { ["Default"] + chromiumProfiles().filter { $0 != "Default" } }
+    static var profileFolders: [String] { profileFoldersSource() }
+
+    /// Chromium's path for a profile folder (nil for Default), as CraCEFRuntime takes it.
+    nonisolated static func profilePath(_ folder: String) -> String? {
+        folder == "Default" ? nil : AppPaths.chromiumCache.appendingPathComponent(folder, isDirectory: true).path
+    }
+
+    /// Whether this engine can keep a shared extension installed (Chrome's management policy). CEF and engines from
+    /// before discussion #595 can't: Settings offers no sharing there.
+    static var canShare: Bool { CraCEFRuntime.responds(to: #selector(CraCEFRuntime.setManagedExtensionIDs(_:))) }
+
+    /// The Web Store extensions shared with every profile (shared-extensions.json).
+    private(set) var shares = ExtensionStore.loadShared()
+
+    /// Shared extensions asked of the store in a profile this session ("<profile>/<id>"), each once.
+    @ObservationIgnored private var sharedAsked: Set<String> = []
+
+    nonisolated static func loadShared() -> SharedExtensions {
+        guard let data = try? Data(contentsOf: sharedFile) else { return SharedExtensions() }
+        return (try? JSONDecoder().decode(SharedExtensions.self, from: data)) ?? SharedExtensions()
+    }
+
+    private func saveShared(_ next: SharedExtensions) {
+        guard next != shares else { return }
+        shares = next
+        do {
+            if next.isEmpty {
+                if FileManager.default.fileExists(atPath: Self.sharedFile.path) { try FileManager.default.removeItem(at: Self.sharedFile) }
+            } else {
+                try JSONEncoder().encode(next).write(to: Self.sharedFile, options: .atomic)
+            }
+        } catch { CraLog.note("shared extensions: could not save (\(error.localizedDescription))") }
+        pushManagedExtensions()
+    }
+
+    /// Chrome keeps each profile's shared extensions installed, and chrome://extensions says Cra manages them.
+    func pushManagedExtensions() {
+        guard Self.canShare else { return }
+        CraCEFRuntime.setManagedExtensionIDs(shares.managedIDs(allProfiles: Self.profileFolders))
+    }
+
+    /// The extensions a profile's extensions.settings holds, of any install location.
+    nonisolated private static func installedIDs(_ settings: [String: Any]) -> Set<String> {
+        Set(settings.compactMap { id, value in (value as? [String: Any])?["location"] != nil ? id : nil })
+    }
+
+    /// Loaded profiles that no longer have an extension owed an uninstall there are done with it.
+    private func settleShared(live: [String: [String: Any]]) {
+        var next = shares
+        for (profile, settings) in live { next.settle(profile: profile, installed: Self.installedIDs(settings)) }
+        saveShared(next)
+        pushManagedExtensions()
+    }
+
+    /// A loaded profile gets the shared extensions it lacks, from the store, and loses the ones taken out of it.
+    /// `browser`, a page in that profile, installs them on an engine from before discussion #595.
+    func reconcileShared(profile: String, using browser: CraBrowser? = nil) {
+        guard !shares.isEmpty, let live = Self.liveExtensionSettings(inProfile: profile) else { return }
+        // A profile made since the last push: Chrome keeps its shared extensions too.
+        pushManagedExtensions()
+        let installed = Self.installedIDs(live)
+        var next = shares
+        next.settle(profile: profile, installed: installed)
+        saveShared(next)
+        let plan = shares.plan(profile: profile, installed: installed, refused: Self.loadRefusals())
+        let removed = plan.uninstall.filter { uninstallShared($0, profile: profile, using: browser) }
+        if !removed.isEmpty {
+            // Done: an install the person makes there later is left alone.
+            next = shares
+            next.settle(profile: profile, installed: installed.subtracting(removed))
+            saveShared(next)
+        }
+        for id in plan.install where !sharedAsked.contains("\(profile)/\(id)") { installShared(id, profile: profile, using: browser) }
+    }
+
+    /// Every profile that has loaded, after a change in Settings. One that hasn't follows when it loads.
+    func reconcileLoadedProfiles() {
+        for profile in Self.profileFolders where CraCEFRuntime.loadState(ofProfile: Self.profilePath(profile)) == 2 {
+            reconcileShared(profile: profile)
+        }
+    }
+
+    @discardableResult
+    private func uninstallShared(_ id: String, profile: String, using browser: CraBrowser?) -> Bool {
+        // The policy has let go of it there already (saveShared): Chrome would refuse otherwise.
+        pushManagedExtensions()
+        var removed = false
+        if CraCEFRuntime.responds(to: #selector(CraCEFRuntime.uninstallExtension(_:profilePath:))) {
+            removed = CraCEFRuntime.uninstallExtension(id, profilePath: Self.profilePath(profile))
+        } else if let browser, browser.responds(to: #selector(CraBrowser.uninstallExtension(_:))) {
+            removed = browser.uninstallExtension(id)
+        }
+        CraLog.note("shared extension \(id): \(removed ? "removed from" : "could not be removed from") \(profile)")
+        return removed
+    }
+
+    private func installShared(_ id: String, profile: String, using browser: CraBrowser?) {
+        // The manifest of an install another profile has: the store's version may not ask for more than it.
+        guard let folder = entries.first(where: { $0.extensionID == id })?.url,
+              let data = try? Data(contentsOf: folder.appendingPathComponent("manifest.json")),
+              let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            CraLog.note("shared extension \(id): no profile has it to install from; not added to \(profile)")
+            return
+        }
+        let finish = { [weak self] (error: String?) in
+            if let error {
+                CraLog.note("shared extension \(id): the Web Store install in \(profile) failed (\(error))")
+                // The store's no stands (#491); a quit cutting the install short is no answer.
+                if self?.isQuitting != true {
+                    var refusals = Self.loadRefusals()
+                    if refusals.refuse(folder: id, inProfile: profile) { Self.saveRefusals(refusals) }
+                }
+            } else {
+                CraLog.note("shared extension \(id): installed in \(profile)")
+            }
+            self?.reload()
+        }
+        if CraCEFRuntime.responds(to: #selector(CraCEFRuntime.installWebStoreExtension(_:manifest:profilePath:completion:))) {
+            sharedAsked.insert("\(profile)/\(id)")
+            CraLog.note("shared extension \(id): installing from the Web Store in \(profile)")
+            CraCEFRuntime.installWebStoreExtension(id, manifest: String(decoding: data, as: UTF8.self),
+                                                   profilePath: Self.profilePath(profile)) { error in finish(error) }
+        } else if let browser, let params = try? JSONSerialization.data(withJSONObject: ["id": id, "manifest": manifest]) {
+            sharedAsked.insert("\(profile)/\(id)")
+            CraLog.note("shared extension \(id): installing from the Web Store in \(profile)")
+            browser.sendDevToolsMethod("Cra.installFromWebStore", params: String(decoding: params, as: UTF8.self)) { _, error in
+                DispatchQueue.main.async { finish(error) }
+            }
+        }
+    }
+
+    /// The line under an extension in Settings ▸ Extensions: which of `profiles` (folder and name, Default first) have it.
+    func profilesLine(for e: Entry, profiles: [(folder: String, name: String)]) -> String {
+        shares.profilesLine(id: e.extensionID, installedIn: e.profiles, allProfiles: profiles.map(\.folder),
+                            names: Dictionary(profiles.map { ($0.folder, $0.name) }, uniquingKeysWith: { a, _ in a }))
+    }
+
+    /// Settings ▸ Extensions ▸ Share: a store install goes into every profile, managed by Cra from now on.
+    func share(_ e: Entry) {
+        var next = shares
+        next.share(e.extensionID)
+        askStoreAgain(e.extensionID)
+        saveShared(next)
+        CraLog.note("shared extension \(e.extensionID): shared with every profile")
+        reconcileLoadedProfiles()
+    }
+
+    /// A profile's checkmark under a shared extension: put in (installed there) or taken out (removed there, with its
+    /// data in that profile).
+    func setShared(_ e: Entry, profile: String, included: Bool) {
+        var next = shares
+        guard included || next.canExclude(e.extensionID, profile: profile, allProfiles: Self.profileFolders) else {
+            CraLog.note("shared extension \(e.extensionID): stays in \(profile), the last of its profiles or not one of \(Self.profileFolders.count)")
+            return
+        }
+        next.setIncluded(e.extensionID, profile: profile, included)
+        if included { askStoreAgain(e.extensionID) }
+        saveShared(next)
+        CraLog.note("shared extension \(e.extensionID): \(included ? "put back in" : "taken out of") \(profile)")
+        reconcileLoadedProfiles()
+    }
+
+    /// Stop Sharing: every install stays where it is, each profile's own again.
+    func stopSharing(_ e: Entry) {
+        var next = shares
+        next.stopSharing(e.extensionID)
+        saveShared(next)
+        CraLog.note("shared extension \(e.extensionID): no longer shared")
+        reload()
+    }
+
+    /// Remove for a shared extension: from every profile, each with its data there.
+    func removeShared(_ e: Entry) {
+        var next = shares
+        next.removeEverywhere(e.extensionID, allProfiles: Self.profileFolders)
+        saveShared(next)
+        CraLog.note("shared extension \(e.extensionID): removed from every profile")
+        reconcileLoadedProfiles()
+    }
+
+    private func askStoreAgain(_ id: String) {
+        sharedAsked = sharedAsked.filter { !$0.hasSuffix("/\(id)") }
+        var refusals = Self.loadRefusals()
+        if refusals.forget(folder: id) { Self.saveRefusals(refusals) }
+    }
+
     // MARK: Profiles of the Extensions/ folders (GitHub #131)
 
     nonisolated private static var profilesFile: URL { AppPaths.file("extension-profiles.json") }
@@ -451,6 +648,7 @@ final class ExtensionStore {
                 }
                 guard let i else { continue }
                 managed[i].profiles?.insert(profile)
+                if WebStoreInstalls.isStoreInstall(settings: settings[profile]?[e.id] as? [String: Any]) { managed[i].fromWebStore = true }
                 if !e.isEnabled { managed[i].disabledProfiles.insert(profile) }
                 if incognito[profile]?.contains(e.id) == true { managed[i].incognitoProfiles.insert(profile) }
             }
@@ -466,6 +664,7 @@ final class ExtensionStore {
         entries = next
         pinned.removeAll { id in !entries.contains { $0.extensionID == id } }
         noteProxyControllers(settings: settings)
+        settleShared(live: live)
     }
 
     // MARK: Proxy (GitHub #107)

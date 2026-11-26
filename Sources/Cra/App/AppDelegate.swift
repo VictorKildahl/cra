@@ -468,6 +468,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Chromium calls each profile what Cra does, after a rename too (#666).
         store.onProfileNamesChanged = { [store] in ChromiumProfileNames.apply(store: store) }
         ChromiumProfileNames.apply(store: store)
+        // Shared extensions belong in every profile, one made later too (discussion #595).
+        ExtensionStore.profileFoldersSource = { [weak self] in ["Default"] + (self?.store.profiles.map(\.directoryName) ?? []) }
+        observeChanges(of: { [store] in store.profiles.map(\.directoryName) }) { _ in ExtensionStore.shared.pushManagedExtensions() }
     }
 
     /// Chromium's secure DNS setting (Settings > Privacy, chrome://settings/security), left on
@@ -1332,6 +1335,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
+            // pageScale=<factor> pinch-zooms the front tab's page as a trackpad does; pageScale=read:<label> logs its
+            // pinch scale and zoom level (GitHub #825: ⌘0 left a pinch in place).
+            if let scale = dict["pageScale"] { main.debugPageScale(scale); return }
             if dict["windowCoverage"] != nil { CraLog.note(main.windowCoverageReadout()); return }
             if let mode = dict["coverWindow"] { main.debugCoverWindow(mode); return }
             if let mode = dict["missionControl"] { main.debugMissionControl(mode); return }
@@ -1905,6 +1911,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 ExtensionStore.shared.reload()
                 let names = target.extensionEntries.map(\.name).sorted().joined(separator: ", ")
                 CraLog.note("extension list \(label): incognito=\(target.pageIsIncognito ? 1 : 0) [\(names)]")
+                return
+            }
+            // extensionProfiles=<label>: the line Settings ▸ Extensions shows under each extension, which profiles have it
+            // (discussion #595).
+            if let label = dict["extensionProfiles"] {
+                ExtensionStore.shared.reload()
+                let profiles = [("Default", store.profileName(nil))] + store.profiles.map { ($0.directoryName, $0.name) }
+                for e in ExtensionStore.shared.entries {
+                    CraLog.note("extension profiles \(label): \(e.extensionID) \(ExtensionStore.shared.profilesLine(for: e, profiles: profiles))")
+                }
+                return
+            }
+            // shareExtension=<id>[&profile=<folder>&included=0|1], stopSharing=<id>, removeShared=<id>: what Settings ▸
+            // Extensions does for a shared extension, past its confirmations (discussion #595).
+            if let id = dict["shareExtension"] {
+                ExtensionStore.shared.reload()
+                guard let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) else {
+                    CraLog.note("shared extension \(id): not installed"); return
+                }
+                if let profile = dict["profile"] {
+                    ExtensionStore.shared.setShared(e, profile: profile, included: dict["included"] != "0")
+                } else {
+                    ExtensionStore.shared.share(e)
+                }
+                return
+            }
+            if let id = dict["stopSharing"] ?? dict["removeShared"],
+               let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) {
+                if dict["stopSharing"] != nil { ExtensionStore.shared.stopSharing(e) } else { ExtensionStore.shared.removeShared(e) }
+                return
+            }
+            // removePage=<id>[&profile=<folder>]: Settings ▸ Extensions ▸ Remove… of a Web Store install, its
+            // chrome://extensions page in a profile that has it, as Settings opens it (#842).
+            if let id = dict["removePage"] {
+                ExtensionStore.shared.reload()
+                guard let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) else {
+                    CraLog.note("extension removal \(id): not installed"); return
+                }
+                let folders = ExtensionRemoval.pageProfiles(installedIn: e.profiles, allProfiles: ExtensionStore.profileFolders)
+                CraLog.note("extension removal \(id): pages in [\(folders.joined(separator: ", "))]")
+                guard let folder = dict["profile"] ?? folders.first else { return }
+                let window = useNormalWindow()
+                openExtensionPage("chrome://extensions/?id=\(id)", window: window.windowID, profile: folder, singleton: true)
                 return
             }
             if let id = dict["removeExtension"] {
@@ -3074,6 +3123,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["blockAds"] {
                 store.settings.blockAdsAndTrackers = v == "on"
                 CraLog.note("block ads and trackers: \(v == "on" ? "on" : "off")")
+                return
+            }
+            // personalFilters=<text, \n between lines>|none: Settings ▸ Privacy ▸ Advanced… ▸ My filters, saved and in use.
+            if let v = dict["personalFilters"] {
+                store.settings.personalBlockFilters = v == "none" ? nil : v.replacingOccurrences(of: "\\n", with: "\n")
+                store.settings.personalFiltersEnabled = v != "none"
+                return
+            }
+            // blockListCounts=<label>: the rule counts the Privacy pane and its Advanced… sheet show, as they read them.
+            if let label = dict["blockListCounts"] {
+                let lists = BlockLists.shared
+                var parts = ["inUse=" + (lists.inUse.map { BlockListCount.inUse(rules: $0.rules, lists: $0.lists) } ?? "-")]
+                for source in BlockLists.builtInSources { parts.append("\(source)=\(lists.builtInCounts[source]?.summary ?? "-")") }
+                for address in store.settings.customBlocklists {
+                    parts.append("\(URL(string: address)?.lastPathComponent ?? "?")=\(lists.count(address)?.summary ?? "-")")
+                }
+                parts.append("mine=\(lists.personalCount(store.settings.personalBlockFilters).summary)")
+                CraLog.note("block list counts \(label): " + parts.joined(separator: " | "))
                 return
             }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
@@ -4330,7 +4397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "stop": if !main.takeOverFromAgent() { main.currentBrowser?.stopLoading() }
         case "zoomIn": main.zoom(by: 0.5)
         case "zoomOut": main.zoom(by: -0.5)
-        case "resetZoom": main.currentBrowser?.setZoomLevel(0)
+        case "resetZoom": main.currentBrowser?.resetZoom()
         case "viewSource": main.currentBrowser?.viewSource()
         // Like Arc: ⌥⌘I closes open DevTools; ⌥⌘J and Network switch to their panel and close
         // DevTools only when that panel already shows (DevToolsToggle.run).

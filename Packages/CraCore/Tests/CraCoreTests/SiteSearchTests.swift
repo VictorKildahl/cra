@@ -51,6 +51,18 @@ struct SiteSearchTests {
         #expect(!deactivated.takesTab)
     }
 
+    /// Arc's "New ChatGPT Message" (⌥⌘G) is a cloud AI partner Cra leaves out (docs/arc-parity.md); a site search
+    /// added on chrome://settings/searchEngines does the same from ⌘T: its shortcut, Tab, the message, Return opens
+    /// ChatGPT with it. What the reply on #828 tells people to set up.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/828"))
+    func anAddedChatSiteSearchTakesTabAndCarriesTheMessage() {
+        let chatGPT = ChromiumSearchEngine(id: 31, name: "ChatGPT", keyword: "gpt", url: "https://chatgpt.com/?q={searchTerms}")
+        #expect(chatGPT.takesTab)
+        let scope = SiteSearch.match("gpt", completion: "github.com", keywords: [Self.google, chatGPT])
+        #expect(scope?.name == "ChatGPT")
+        #expect(scope?.searchURL("Plan a trip to Rome & Florence?") == "https://chatgpt.com/?q=Plan%20a%20trip%20to%20Rome%20%26%20Florence%3F")
+    }
+
     @Test func keywordsAroundArcsSites() {
         let keywords = [Self.google, Self.duck, Self.autoYouTube, Self.history, Self.wiki]
         // Typed out in full: the keyword, before Arc's sites ("goo" for a Google edited to that).
