@@ -148,6 +148,7 @@ to Markdown or `docs/` alone runs nothing.
   cleanup. `scripts/test-tidy-titles-model.sh` checks Arc's answer schema; `--real` also asks the
   Mac's own model (needs Apple Intelligence) for 18 sample titles and prints the names a 230 pt row
   would pick.
+- `scripts/test-filter-group-card.sh`: opens and closes a filter group using its accessibility button and checks the visible rows and selected count. The harness accepts the standard coverage flags.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-skipped-list.sh`: the import window's skipped list (`SkippedList`) off screen: 8,500

@@ -121,7 +121,6 @@ private struct BlockListsSheet: View {
 private struct BlockListRows: View {
     @Environment(SidebarStore.self) private var store
     private let lists = BlockLists.shared
-    @State private var expanded: Set<DesktopFilterList.Category> = [.ads, .tracking, .security]
     @State private var adding = false
     @State private var editingRules = false
     @State private var draft = ""
@@ -143,7 +142,13 @@ private struct BlockListRows: View {
             }
             SettingsHeader("Filter lists").padding(.top, 14)
             ForEach(DesktopFilterList.groups(selected: Set(store.settings.customBlocklists))) { group in
-                categoryCard(group).padding(.bottom, 6)
+                FilterListGroupCard(title: group.category.title, selected: group.selectedCount, total: group.entries.count,
+                                    isExpanded: [.ads, .tracking, .security].contains(group.category)) {
+                    ForEach(group.entries) { list in
+                        SettingsCardDivider()
+                        listRow(list.address, name: list.name, detail: list.detail)
+                    }
+                }.padding(.bottom, 6)
             }
             SettingsFootnote("These lists block connections to third-party domains on pages you visit. Opening a listed address directly does not show a warning.")
             HStack {
@@ -191,35 +196,6 @@ private struct BlockListRows: View {
                             .disabled(draft == (store.settings.personalBlockFilters ?? ""))
                         }
                     }
-                }
-            }
-        }
-    }
-
-    private func categoryCard(_ group: DesktopFilterList.Group) -> some View {
-        let category = group.category
-        let summary = "\(group.selectedCount) of \(group.entries.count) selected"
-        let isExpanded = expanded.contains(category)
-        return SettingsFeatureCard {
-            Button {
-                if isExpanded { expanded.remove(category) } else { expanded.insert(category) }
-            } label: {
-                SettingsCardRow {
-                    Text(category.title).fontWeight(.medium)
-                } trailing: {
-                    Text(summary).foregroundStyle(.secondary).monospacedDigit()
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.forward")
-                        .font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(category.title)
-            .accessibilityValue(isExpanded ? "Expanded, " + summary : "Collapsed, " + summary)
-            if isExpanded {
-                ForEach(group.entries) { list in
-                    SettingsCardDivider()
-                    listRow(list.address, name: list.name, detail: list.detail)
                 }
             }
         }
