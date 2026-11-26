@@ -80,6 +80,8 @@ struct BoostTests {
         b.css = "h1 { color: red }"
         let css = b.stylesheet
         #expect(css.contains("invert(1) hue-rotate(180deg)") && css.contains("contrast(1.5)"))
+        #expect(css.contains("html { background-color: Canvas !important; filter: invert(1)"),
+                "the canvas is inside the filtered subtree, or inverted text is white on white")
         #expect(css.contains("img, video") , "pictures are flipped back under an inverted page")
         #expect(css.contains("\"ui-serif\"") && css.contains("uppercase"))
         #expect(css.contains(".ad, #banner { display: none !important; }") && css.hasSuffix("h1 { color: red }"))
@@ -91,6 +93,7 @@ struct BoostTests {
         #expect(b.stylesheet.isEmpty, "a hue alone, with the handle in the middle, tints nothing")
         b.strength = 0.6
         #expect(b.stylesheet.contains("sepia(0.6)"))
+        #expect(b.stylesheet.contains("background-color: Canvas"), "a CSS filter needs the canvas inside the filtered subtree")
     }
 
     @Test func twentyFontsFiveToARow() {
