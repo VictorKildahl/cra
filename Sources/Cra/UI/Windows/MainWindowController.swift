@@ -755,6 +755,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Arc: a tab switch puts a playing video in Picture in Picture, a space switch doesn't (#703).
             let autoPiP = AutoPictureInPictureMoment.opensOnLeaving(from: pagesShownForSpace, to: focusedSpaceID)
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen, autoPictureInPicture: autoPiP)
+        } else if pagesShownForSpace != focusedSpaceID {
+            browsers.spaceChanged(to: focusedSpaceID)
         }
         pagesShownForSpace = focusedSpaceID
         if overlay.findVisible { syncAskOnPage() } else { askOnPage.service.refresh() }
