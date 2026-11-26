@@ -1866,6 +1866,7 @@
 #847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onePasswordInstalledGetsItsManifestWithoutAnImport  6cd3a3b215da
 #847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onlyWhenInstalledAndNotAlreadyThere  1698d6458511
 #849   Packages/CraCore/Tests/CraCoreTests/BlockListCountsTests.swift::countsShowAndBigDomainListsStayUnderChromiumsLimit  d0a73cb6d7df
+#850   Tests/CaptureOverlayTests.swift::checkArcsColours  d24cf6ec4814
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::theSegmentsTileIsTheIconTheDockShows  fa64d566596d
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconGridTests.swift::theGlassSegmentsTileSitsOnTheGrid  69a07833b8a8
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae

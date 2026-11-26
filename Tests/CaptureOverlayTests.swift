@@ -24,6 +24,7 @@ enum CaptureOverlayTests {
         checkLittleWindow()
         checkOptionPicksDeeper()
         checkFieldKeepsEditingKeys()
+        checkArcsColours()
         print("Capture overlay: \(checks) checks, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
     }
@@ -102,6 +103,18 @@ enum CaptureOverlayTests {
                "the capture says where on the page it was, for an easel's live capture")
         expect(panel.parent == nil && !panel.isVisible && fixture.peekWindow.isVisible,
                "copy ends capture and leaves Peek open")
+    }
+
+    /// Capture looks as Arc's does on any page, dark ones included (#850 asked for more contrast there): the ring is
+    /// Arc's dark navy #161C2F (ARC_Capture.bundle), and the page around the selection turns grey under a 25 % black
+    /// veil (243 → 181, measured on Arc 1.171), so the selection is the one part in colour and at full brightness.
+    // promise: #850
+    @MainActor
+    private static func checkArcsColours() {
+        let ring = CaptureStyle.ring.usingColorSpace(.sRGB)!
+        expect([ring.redComponent, ring.greenComponent, ring.blueComponent].map { Int(($0 * 255).rounded()) } == [22, 28, 47],
+               "the ring is Arc's #161C2F")
+        expect(CaptureStyle.dim == 0.75, "the page around the selection is dimmed as Arc dims it (243 → 181)")
     }
 
     /// The "Send To…" field holding the keyboard keeps ⌘A ⌘V ⌘X ⌘Z for its text: they ended the capture,
