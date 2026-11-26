@@ -31,7 +31,9 @@ The first rule blocks matching scripts. Images at those URLs can load. The secon
 
 Chromium runs network rules locally through Cra’s bundled Manifest V3 helper. The built-in list, domain-only subscriptions such as HaGeZi, and element hiding work without starting the helper. Selecting a list or personal filter with supported network rules loads it in eligible profiles. Removing the last network rule unloads it. While active, the helper receives rule updates from Cra and supplies them to Chromium. It needs no permission to read page content or browsing history. Chromium allows 30,000 dynamic rules for blocking and exceptions. Cra groups domains that share conditions, so a list containing 100,000 domains can fit in a few hundred rules. Combining many regional subscriptions can still exceed the limit. Above the dynamic rule limit, Cra reports the count and keeps the previously accepted filters. With no previously accepted selection, it uses the selected built-in sources. If Privacy reports an activation failure, keep the languages you browse, switch off overlapping lists and update again. The legacy CEF engine uses domain filtering. [Chromium rule limits](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest#dynamic-rules)
 
-With the updated Chromium framework, Cra enables its bundled filter for private windows when it first loads in each profile. The installer respects an existing private-window choice for that profile. Turning off the helper’s private-window permission stops its network rules in that profile’s private windows. This can also disable domain blocking there when advanced rules are active.
+With the updated Chromium framework, Cra enables its bundled filter for private windows when it first loads in each profile. The installer respects an existing private-window choice for that profile.
+
+The helper is part of Cra, like Chrome’s own component extensions: chrome://extensions doesn’t list it and other extensions can’t see it through `chrome.management`, so it can’t be switched off or removed there (#844). **Settings → Privacy** is the one place that controls it.
 
 ## Pause on a website
 

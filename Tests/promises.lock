@@ -1853,6 +1853,7 @@
 #825   Tests/Scenarios/reset-zoom-pinch.scenario  5c8fba8f4b8f
 #829   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::thePlacesSayTheyAreOnTheIPhone  6beac92ad82c
 #829   iOS/CraUITests/BrowserTests.swift::testTheShareSheetSavesThroughTheExtension  8102a922a145
+#844   Tests/Scenarios/filter-helper-hidden.scenario  535df66793d5
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85
