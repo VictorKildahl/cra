@@ -374,4 +374,20 @@ public struct MobileBarCollapse: Equatable {
     public func contentChanged(scrolls: Bool) -> Bool {
         !scrolls && !isOpen
     }
+
+    /// Whether the page's view runs on under the bar (iOS 26) or ends at the bar's top. Under the
+    /// bar, WebKit keeps the bar out of the page's containing block, `innerHeight`, `svh` and a
+    /// fixed `bottom: 0`, but `100vh` and `100lvh` are the view's own height, so an app sized to
+    /// the screen with them has its bottom under the bar, as Excel for the web's sheet tabs had. A
+    /// page the bar never leaves gains nothing by running under it, so it ends at the bar's top,
+    /// as every page did before iOS 26:
+    /// a site whose Collapse Bottom Bar is off (`collapses`), and a page that has `loaded` with
+    /// nothing to scroll (`scrolls`). A page still loading hasn't shown its height yet, and a
+    /// bar that isn't all there keeps the page under it, so the view only shortens under an open
+    /// bar, where the bar hides the change.
+    public func pageRunsUnder(collapses: Bool, scrolls: Bool, loaded: Bool) -> Bool {
+        guard isOpen else { return true }
+        guard collapses else { return false }
+        return !loaded || scrolls
+    }
 }
