@@ -8,7 +8,40 @@ struct PrivacyPane: View {
     var body: some View {
         @Bindable var store = store
         SettingsCardPane {
-            BlockListRows()
+            SettingsHeader("Content blocking")
+            SettingsFeatureCard {
+                SettingsToggleRow("Block ads and trackers",
+                                  detail: "Requests to known ad and tracker domains are cancelled, unless the domain belongs to the site you’re on. To let one site load everything, turn it off in that site’s menu in the address bar.",
+                                  isOn: $store.settings.blocksAdsAndTrackers)
+                if store.settings.blocksAdsAndTrackers {
+                    SettingsCardDivider()
+                    SettingsPlainRow("Blocking",
+                                       detail: store.settings.adBlockingLevel == .strict
+                                           ? "Strict also blocks the ads and trackers EasyList and EasyPrivacy know about. It catches more, and now and then a page needs ads turned off for it."
+                                           : "Standard blocks well-known ad and tracker servers and rarely gets in a page’s way.",
+                                       trailing: {
+                        Picker("Blocking", selection: $store.settings.adBlockingLevel) {
+                            Text("Standard").tag(AdBlockingLevel.standard)
+                            Text("Strict").tag(AdBlockingLevel.strict)
+                        }
+                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    })
+                }
+                SettingsCardDivider()
+                // Arc: Settings ▸ General "Block Cookie Banners", off by default.
+                SettingsToggleRow("Block cookie banners",
+                                  detail: "Cookie banners from the common consent tools are hidden. Pages load again with the change.",
+                                  isOn: $store.settings.blockCookieBanners)
+                SettingsCardDivider()
+                // Not in Arc: Cra's Chromium (fingerprinting-protection.patch).
+                SettingsToggleRow("Fingerprinting protection",
+                                  detail: "Sites that tell browsers apart by reading back drawings, 3D graphics or sound get faint noise in what they read, different for each site and each time Cra opens. Sites also see 8 processor cores.",
+                                  isOn: $store.settings.fingerprintingProtection)
+                SettingsCardDivider()
+                SettingsPlainRow("Block lists",
+                                   detail: "Pick lists one by one, add a list by its address or write your own filters.",
+                                   trailing: { Button("Advanced…") { showsBlockLists = true } })
+            }
 
             SettingsHeader("Connection security").padding(.top, 20)
             SettingsFeatureCard {
@@ -48,14 +81,38 @@ struct PrivacyPane: View {
                 }
             }
         }
+        .sheet(isPresented: $showsBlockLists) { BlockListsSheet().environment(store) }
     }
 
     @State private var dnsError: String?
+    @State private var showsBlockLists = false
 
     private var dnsFootnote: String? {
         let dns = SecureDNSSetting.shared
         guard let summary = dns.inEffect?.summary, !summary.isEmpty else { return nil }
         return dns.isManaged ? "Your organization sets secure DNS. " + summary : summary
+    }
+}
+
+/// Settings ▸ Privacy ▸ Block lists ▸ Advanced…: every list one by one (#507, #791), for people who know
+/// them. The pane itself keeps one switch and Standard/Strict.
+private struct BlockListsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Block lists").font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 24).padding(.top, 18).padding(.bottom, 10)
+            Divider()
+            ScrollView { BlockListRows().padding(24) }
+            Divider()
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+        }
+        .frame(width: 560, height: 480)
     }
 }
 
@@ -78,10 +135,19 @@ private struct BlockListRows: View {
         }
     }
 
+    /// A card's rows with dividers only between them.
+    private func listRows(_ category: DesktopFilterList.Category) -> some View {
+        let entries = DesktopFilterList.catalog.filter { $0.category == category }
+        return ForEach(entries) { list in
+            if list.id != entries.first?.id { SettingsCardDivider() }
+            listRow(list.address, name: list.name, detail: list.detail)
+        }
+    }
+
     var body: some View {
         @Bindable var store = store
         VStack(alignment: .leading, spacing: 0) {
-            SettingsHeader("Ad blocking")
+            SettingsHeader("Ads")
             SettingsFeatureCard {
                 SettingsToggleRow("AdAway", detail: "Built in. Blocks third-party ad and tracker domains, including in-app advertising networks.", isOn: $store.settings.adAwayEnabled)
                 SettingsCardDivider()
@@ -89,20 +155,10 @@ private struct BlockListRows: View {
                 rows(.ads)
             }
             regionalListCard.padding(.top, 14)
-            SettingsHeader("Tracking protection").padding(.top, 14)
-            SettingsFeatureCard {
-                SettingsToggleRow("Fingerprinting protection",
-                                  detail: "Makes it harder to recognise your browser across sites. Cra adds small variations to canvas, WebGL and offline audio readings for each site and session, and reports eight processor cores.",
-                                  isOn: $store.settings.fingerprintingProtection)
-                rows(.tracking)
-            }
-            SettingsHeader("Cookie banners and page annoyances").padding(.top, 14)
-            SettingsFeatureCard {
-                SettingsToggleRow("Hide common cookie banners",
-                                  detail: "Hides notices from common consent tools. Open pages reload when you change this setting.",
-                                  isOn: $store.settings.blockCookieBanners)
-                rows(.annoyances)
-            }
+            SettingsHeader("Trackers").padding(.top, 14)
+            SettingsFeatureCard { listRows(.tracking) }
+            SettingsHeader("Cookie notices and page annoyances").padding(.top, 14)
+            SettingsFeatureCard { listRows(.annoyances) }
             SettingsHeader("Security and privacy lists").padding(.top, 14)
             SettingsFeatureCard {
                 ForEach(DesktopFilterList.catalog.filter { $0.category == .mixed }) { list in

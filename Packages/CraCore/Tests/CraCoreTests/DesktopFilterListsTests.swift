@@ -9,6 +9,52 @@ struct DesktopFilterListsTests {
         #expect(addresses.allSatisfy { CustomBlocklist.listURL(from: $0)?.scheme == "https" })
     }
 
+    @Test func strictIsEasyListAndEasyPrivacyOnTopOfStandard() throws {
+        var settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        #expect(settings.blocksAdsAndTrackers && settings.adBlockingLevel == .standard)
+        #expect(settings.adAwayEnabled && settings.anudeepEnabled && settings.customBlocklists.isEmpty)
+        for address in DesktopFilterList.strictAddresses {
+            #expect(DesktopFilterList.catalog.contains { $0.address == address })
+        }
+        settings.adBlockingLevel = .strict
+        #expect(settings.customBlocklists == DesktopFilterList.strictAddresses)
+        settings = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        #expect(settings.adBlockingLevel == .strict)
+        settings.adBlockingLevel = .standard
+        #expect(settings.customBlocklists.isEmpty)
+        #expect(settings.adAwayEnabled && settings.anudeepEnabled)
+    }
+
+    @Test func oneOfStrictsListsAloneIsStillStandard() throws {
+        var settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        settings.setFilterList(DesktopFilterList.strictAddresses[0], enabled: true)
+        #expect(settings.adBlockingLevel == .standard)
+        settings.adBlockingLevel = .strict
+        #expect(Set(settings.customBlocklists) == Set(DesktopFilterList.strictAddresses))
+    }
+
+    @Test func theMainSwitchTurnsEveryListOffAndComesBackStandard() throws {
+        let added = "https://lists.example/rules.txt"
+        var settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        settings.adBlockingLevel = .strict
+        settings.setFilterList(added, enabled: true)
+        settings.blocksAdsAndTrackers = false
+        #expect(!settings.adAwayEnabled && !settings.anudeepEnabled)
+        #expect(settings.customBlocklists == [added])
+        #expect(!settings.blocksAdsAndTrackers)
+        settings.blocksAdsAndTrackers = true
+        #expect(settings.adAwayEnabled && settings.anudeepEnabled)
+        #expect(settings.adBlockingLevel == .standard && settings.customBlocklists == [added])
+    }
+
+    @Test func strictListsAloneKeepTheMainSwitchOn() throws {
+        var settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        settings.adBlockingLevel = .strict
+        settings.adAwayEnabled = false
+        settings.anudeepEnabled = false
+        #expect(settings.blocksAdsAndTrackers)
+    }
+
     @Test func togglesRememberCustomURLsAndNeverRemovePresets() throws {
         let preset = try #require(DesktopFilterList.catalog.first?.address)
         let custom = "https://lists.example/rules.txt"

@@ -72,6 +72,35 @@ public struct DesktopFilterList: Identifiable {
     ]
 }
 
+/// Settings ▸ Privacy's one choice under "Block ads and trackers" (Victor, 26 Nov: nobody should need to
+/// know filter lists for blocking to work). Standard is Cra's built-in lists; Strict adds EasyList and
+/// EasyPrivacy. Not a stored key: Strict is those two lists being on, so Settings ▸ Privacy ▸ Advanced
+/// shows the same lists switched on, and older Cra reads the file unchanged.
+public enum AdBlockingLevel: Hashable, Sendable {
+    case standard, strict
+}
+
+public extension DesktopFilterList {
+    static let strictAddresses = ["https://easylist.to/easylist/easylist.txt", "https://easylist.to/easylist/easyprivacy.txt"]
+}
+
+public extension AppSettings {
+    var adBlockingLevel: AdBlockingLevel {
+        get { DesktopFilterList.strictAddresses.allSatisfy(customBlocklists.contains) ? .strict : .standard }
+        set { for address in DesktopFilterList.strictAddresses { setFilterList(address, enabled: newValue == .strict) } }
+    }
+
+    /// The pane's main switch. On while any of Cra's lists or Strict's are on; off turns all of them off,
+    /// back on gives Standard. Lists added by hand and the user's own filters keep their own switches.
+    var blocksAdsAndTrackers: Bool {
+        get { blockAdsAndTrackers || adBlockingLevel == .strict }
+        set {
+            blockAdsAndTrackers = newValue
+            if !newValue { adBlockingLevel = .standard }
+        }
+    }
+}
+
 public extension AppSettings {
     var customFilterAddresses: [String] {
         let presets = Set(DesktopFilterList.catalog.map(\.address))

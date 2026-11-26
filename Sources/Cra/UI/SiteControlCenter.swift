@@ -255,7 +255,7 @@ final class SiteControlCenterView: NSView {
         // Chromium's blocker doesn't see a WebKit page: no switch that does nothing there.
         if protectedMedia == nil, let host = AppSettings.filterHost(url) {
             let active = store.settings.pausedFilterHosts?.contains(host) != true
-            rowsSpec.insert(("shield.fill", "Filter lists on this site", active ? "On" : "Paused · Reload page",
+            rowsSpec.insert(("shield.fill", "Ad Blocking", active ? "On" : "Off · Reload page",
                              active, { store.settings.toggleFilters(on: host) }), at: 1)
         }
         // A page that plays DRM, or one in WebKit: which engine plays this site, or for a mixed

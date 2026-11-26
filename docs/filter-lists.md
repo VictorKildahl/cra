@@ -1,6 +1,13 @@
 # Filter lists on macOS
 
-In **Settings → Privacy**, choose each source independently. AdAway and Anudeep’s Blacklist are available offline and enabled by default. The tracking protection section groups EasyPrivacy with fingerprinting protection. Connection security covers HTTPS and Secure DNS. The optional subscriptions start off. Each switch controls one subscription, including custom URLs and files. Switching one off removes its downloaded copy. Switch it on again to fetch a fresh copy. **Remove** forgets a custom address. **Add List…** accepts it again.
+**Settings → Privacy** has one switch, **Block ads and trackers** (on by default), and one choice under it:
+
+- **Standard** uses Cra's built-in lists, AdAway and Anudeep's Blacklist. They work offline and rarely get in a page's way.
+- **Strict** adds EasyList and EasyPrivacy, which catch more ads and trackers. Now and then a page needs ad blocking turned off for it.
+
+Turning the switch off turns all of these off; turning it back on gives Standard. Strict is simply EasyList and EasyPrivacy both switched on, so it shows the same way under **Advanced…**.
+
+**Block lists → Advanced…** is for people who know filter lists: each source has its own switch there. AdAway and Anudeep's Blacklist are available offline. The optional subscriptions start off. Each switch controls one subscription, including custom URLs and files. Switching one off removes its downloaded copy. Switch it on again to fetch a fresh copy. **Remove** forgets a custom address. **Add List…** accepts it again.
 
 **AdGuard Popups** hides supported promotional popups. **AdGuard Widgets** hides supported third-party widgets, including some support chats. You can enable either or both.
 
@@ -24,7 +31,7 @@ With the updated Chromium framework, Cra enables its bundled filter for private 
 
 ## Pause on a website
 
-**Filter lists on this site** in the site menu stores a choice for the exact host across ports and HTTP/HTTPS. Switch it back on to remove the exception. Reload the page after changing it so previously blocked resources and embedded frames load with the new settings. It covers the native domain lists, subscription and personal rules, element hiding and the built-in cookie-banner filter. Connection security and fingerprinting protection have separate settings. The exceptions are browser settings shared across profiles and can be included in settings sync.
+**Ad Blocking** in the site menu (the address bar's site button) stores a choice for the exact host across ports and HTTP/HTTPS. Switch it back on to remove the exception. Reload the page after changing it so previously blocked resources and embedded frames load with the new settings. It covers the native domain lists, subscription and personal rules, element hiding and the built-in cookie-banner filter. Connection security and fingerprinting protection have separate settings. The exceptions are browser settings shared across profiles and can be included in settings sync.
 
 ## Downloads and privacy
 
