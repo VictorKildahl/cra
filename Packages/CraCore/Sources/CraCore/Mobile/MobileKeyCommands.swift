@@ -1,8 +1,8 @@
 /// A hardware keyboard's shortcuts on the iPad (and an iPhone with a keyboard attached).
 ///
-/// No source shows Arc Search with any. These are Cra's Mac ones: ⌘T opens the search for a new
-/// tab and ⌘L opens it on the page's address (Safari's keys on the iPad too), and Escape puts
-/// the sheet away.
+/// ⌘T opens the search for a new tab, as it does in Arc Search on the iPad. ⌘L opens it on the
+/// page's address (Safari's key on the iPad too) and Escape puts the sheet away, as Cra's Mac
+/// keys do.
 public enum MobileKeyCommands {
     public enum Key: Equatable {
         case character(String)
@@ -42,7 +42,7 @@ public enum MobileKeyCommands {
 
     /// What `command` does now, or nil when it does nothing. A command that does nothing is not
     /// claimed, so its key still reaches the page: Escape closes a page's own dialog or video.
-    /// `covered`: something else is over the browser (Settings, the page menu, onboarding).
+    /// `covered`: something else is over the browser (Settings, the page menu, onboarding, a summary).
     public static func effect(of command: Command, searching: Bool, hasPage: Bool, covered: Bool) -> Effect? {
         guard !covered else { return nil }
         switch command {

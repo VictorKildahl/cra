@@ -30,7 +30,7 @@ struct MobileKeyCommandsTests {
         #expect(MobileKeyCommands.effect(of: .openLocation, searching: true, hasPage: true, covered: false) == nil)
     }
 
-    /// Settings, the page menu or onboarding over the browser: nothing opens under it.
+    /// Settings, the page menu, onboarding or a summary over the browser: nothing opens under it.
     @Test func nothingHappensUnderAnotherSheet() {
         for command in MobileKeyCommands.Command.allCases {
             for searching in [false, true] {

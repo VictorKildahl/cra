@@ -23,7 +23,7 @@ extension BrowserViewController {
 
     private func keyCommandEffect(_ command: MobileKeyCommands.Command) -> MobileKeyCommands.Effect? {
         MobileKeyCommands.effect(of: command, searching: isSearching, hasPage: shownPage != nil && switcher == nil,
-                                 covered: presentedViewController != nil || menuHost != nil)
+                                 covered: presentedViewController != nil || menuHost != nil || summaryHost != nil)
     }
 
     @objc private func performKeyCommand(_ sender: UIKeyCommand) {
