@@ -122,6 +122,12 @@ final class HiddenPage: NSObject, @preconcurrency CraBrowserDelegate {
     private var watch: ((String, [String: String]) -> String?)?
     private var isSignIn: (String) -> Bool = { _ in false }
     private var requestURLs: [String: String] = [:]
+    /// When the page's main frame committed, as the engine tells its delegate (#817): what the script waits for, not
+    /// `hasCommittedLoad`, which an engine before -9 cleared when a frame of the page loaded after it.
+    private var committedAt: Date?
+    /// A page still loading this long after it committed gets its script anyway: the scripts wait for what they
+    /// need themselves (Calendar's for its client), and a page that keeps a load going never stops loading (#817).
+    static let runWhileLoadingAfter: TimeInterval = 5
 
     init(url: String, profilePath: String?, script: String, answer: @escaping (String?) -> Void) {
         self.script = script
@@ -133,8 +139,13 @@ final class HiddenPage: NSObject, @preconcurrency CraBrowserDelegate {
         let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, let b = self.browser else { return }
-                if Date().timeIntervalSince(started) > 25 { self.reply(nil); return }
-                guard b.isCreated, b.hasCommittedLoad, !b.isLoading else { return }
+                if Date().timeIntervalSince(started) > 25 {
+                    CraLog.note("hidden page gave up: created=\(b.isCreated ? 1 : 0) committed=\(self.committedAt != nil || b.hasCommittedLoad ? 1 : 0) loading=\(b.isLoading ? 1 : 0)")
+                    self.reply(nil); return
+                }
+                guard b.isCreated, let committed = self.committedAt ?? (b.hasCommittedLoad ? Date() : nil) else { return }
+                if self.committedAt == nil { self.committedAt = committed }
+                guard !b.isLoading || Date().timeIntervalSince(committed) > Self.runWhileLoadingAfter else { return }
                 self.poll?.invalidate()
                 self.poll = nil
                 self.run(in: b)
@@ -235,6 +246,7 @@ final class HiddenPage: NSObject, @preconcurrency CraBrowserDelegate {
         w.orderOut(nil)
     }
 
+    func browser(_ browser: CraBrowser, didChangeCommittedLoad committed: Bool) { committedAt = committed ? Date() : nil }
     func browser(_ browser: CraBrowser, didChangeTitle title: String) {}
     func browser(_ browser: CraBrowser, didChangeURL url: String) {
         if watch != nil, script == nil, isSignIn(url) { reply(#"{"status":401}"#) }

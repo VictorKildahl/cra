@@ -1807,6 +1807,7 @@
 #816   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::onlyTheCardInFocusShowsItsTitle  5eacdc53a690
 #816   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFocusedTitleStopsBeforeTheCardInFront  77639a7af889
 #816   iOS/CraUITests/TabSwitcherIconTests.swift::testOnlyTheFocusedCardIsTitledAndItsTitleStopsBeforeTheNextCard  b046f3fd2493
+#817   Tests/Scenarios/hidden-page-late-frame.scenario  cc6ea4fc470c
 #822   Packages/CraCore/Tests/CraCoreTests/ArcMenuTonesTests.swift::aGreySpaceInLightModeGetsArcsDarkMenu  cb1fce08e6e3
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b

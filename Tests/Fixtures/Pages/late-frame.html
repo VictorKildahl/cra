@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Late frame</title>
+<!-- Made up for scripts/scenario.sh (#817): once loaded, the page loads a frame of its own, as a signed-in Google page
+     (Calendar's embed) does for its sign-in checks. The page has committed and stays committed; only a frame loads.
+     ?hold: the frame answers 30 s late, so the page keeps loading past the hidden page's 25 s. -->
+<p>Late frame</p>
+<script>
+addEventListener("load", () => setTimeout(() => {
+  const f = document.createElement("iframe");
+  f.src = location.search.includes("hold") ? "page.html?n=late-frame-held&delay=30" : "page.html?n=late-frame-child";
+  document.body.appendChild(f);
+}, 0));
+</script>

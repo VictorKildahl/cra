@@ -1,0 +1,21 @@
+# promise: #817
+# A hidden page (Live Calendar's reader for a Google Calendar favorite) runs its script once the page has loaded,
+# though the page then loads a frame of its own, as a signed-in Google page does. The engine took the frame's load for
+# a new page and left it uncommitted for good, so the reader never ran and every fetch "failed" after 25 s.
+# late-frame.html adds its frame as soon as it has loaded; the hidden page is in the profile's own folder, as for a
+# favorite in a profile's Favorites. With ?hold the frame answers 30 s late, so the page keeps loading: the script runs
+# 5 s after the page committed anyway (Calendar's own script waits for its client). The engine itself keeps a tab with
+# such a frame committed (engine 159.0.8154.45-9), which Instant Links and Easel live pages wait on.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://debug?hiddenPageScript=${ORIGIN}/late-frame.html&profile=Default
+wait 8
+expect-log "GET /page\.html\?n=late-frame-child HTTP
+expect-log hidden page script answered 127\.0\.0\.1:[0-9]+ after [0-7] s$
+cra://debug?hiddenPageScript=${ORIGIN}/late-frame.html%3Fhold&profile=Default
+wait 10
+expect-log hidden page script answered 127\.0\.0\.1:[0-9]+ after [5-9] s$
+cra://open?url=${ORIGIN}/late-frame.html%3Fn%3Dtab
+wait 4
+cra://debug?pageState=tab
+expect-log page state tab: committed=1 loading=0$

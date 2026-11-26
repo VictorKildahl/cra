@@ -1657,6 +1657,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 return
             }
+            // pageState=<label>: "page state <label>: committed=… loading=…" for the window's shown page (#817: a frame
+            // loading after the page doesn't make it uncommitted).
+            if let label = dict["pageState"] {
+                let b = main.currentBrowser
+                CraLog.note("page state \(label): committed=\(b?.hasCommittedLoad == true ? 1 : 0) loading=\(b?.isLoading == true ? 1 : 0)")
+                return
+            }
+            // hiddenPageScript=<url>[&profile=<folder>]: a hidden page as Live Calendar's reader makes one (#817), in that profile: it runs a script once the
+            // page has loaded and logs "hidden page script answered <host> after <s> s", or nothing after 25 s.
+            if let url = dict["hiddenPageScript"] {
+                var page: HiddenPage?
+                let started = Date()
+                let profilePath = dict["profile"].map { AppPaths.chromiumCache.appendingPathComponent($0, isDirectory: true).path }
+                page = HiddenPage(url: url, profilePath: profilePath, script: "Promise.resolve(location.host || 'none')") { answer in
+                    CraLog.note("hidden page script answered \(answer ?? "nothing") after \(Int(Date().timeIntervalSince(started))) s")
+                    page?.close()
+                    page = nil
+                }
+                return
+            }
             // recentPages=<linear|notion|figma|confluence>&pages=<n>: that site's recent pages card (n = 0: Arc's empty line).
             if let site = dict["recentPages"].flatMap(RecentPagesPreview.Site.init(rawValue:)), let w = main.window {
                 FavoritePreviewCard.shared.demoRecentPages(site, count: dict["pages"].flatMap(Int.init) ?? 6, in: w); return

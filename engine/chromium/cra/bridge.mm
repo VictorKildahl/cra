@@ -2561,9 +2561,10 @@ bool HandleDebugMethod(content::WebContents* contents,
     return;
   }
   content::NavigationController& history = _contents->GetController();
-  if (_contents->IsLoading() && !_isLoading) {
-    _hasCommittedLoad = NO;
-  }
+  // A load that starts here keeps the page committed: a new main-frame document clears it in -pageStartedNavigation:,
+  // and anything else (a frame of the page, as signed-in Google pages load after theirs) is still the page that
+  // committed. Clearing it here left hasCommittedLoad NO for good once that frame loaded, so Live Calendar's hidden page
+  // never read Calendar and gave up after 25 s (#817).
   _isLoading = _contents->IsLoading();
   _canGoBack = history.CanGoBack();
   _canGoForward = history.CanGoForward();
