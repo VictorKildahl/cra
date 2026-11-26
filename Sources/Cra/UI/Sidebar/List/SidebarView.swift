@@ -679,6 +679,9 @@ final class SidebarTopBarView: NSView {
             buttons[k] = nil
         }
         rowButtons = shown
+        // The regular header's 32 pt buttons stand 2 pt apart, as in Arc; clicks reach across half of each gap (#818).
+        // The narrow and Developer Mode rows touch already.
+        for b in shown { b.hitOutset = narrow || (devNav && b !== toggle) ? 0 : CGFloat(SidebarHeaderLayout.hitOutset) }
         toggleShown = !narrow
         if devNav, !narrow, chevron == nil {
             let c = DevMenuChevron(actions: actions)

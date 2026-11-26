@@ -1808,6 +1808,9 @@
 #816   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFocusedTitleStopsBeforeTheCardInFront  77639a7af889
 #816   iOS/CraUITests/TabSwitcherIconTests.swift::testOnlyTheFocusedCardIsTitledAndItsTitleStopsBeforeTheNextCard  b046f3fd2493
 #817   Tests/Scenarios/hidden-page-late-frame.scenario  cc6ea4fc470c
+#818   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderHitTests.swift::neighbouringButtonsLeaveNoDeadSpace  bcd899a069b8
+#818   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderHitTests.swift::theDrawnBoxesStayArcs  65fac1adc52c
+#818   Tests/Scenarios/sidebar-header-no-dead-space.scenario  025488babe9c
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aTypedAddressWhoseAppIsCraIsSearched  a6692de56b64
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::aWindowOpenedOnlyOnTheAppsAddressCloses  37a32911d3de
 #821   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::anAddressWhoseAppIsCraIsNotHandedBack  c4bfd41c035a

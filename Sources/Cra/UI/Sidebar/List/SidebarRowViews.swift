@@ -352,24 +352,32 @@ final class SidebarGlyphButton: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { takesClickFromChildWindow }
     // Rows hide their buttons rather than remove them: a hidden one must not take the row's
     // clicks or run the action it had when it last showed (AppKit's hitTest skips hidden views).
-    override func hitTest(_ point: NSPoint) -> NSView? { !isHiddenOrHasHiddenAncestor && frame.contains(point) ? self : nil }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        !isHiddenOrHasHiddenAncestor && frame.insetBy(dx: -hitOutset, dy: 0).contains(point) ? self : nil
+    }
+
+    /// Clicks and hover reach this far past the drawn box, left and right (the sidebar header's 2 pt gaps, #818).
+    var hitOutset: CGFloat = 0 { didSet { if hitOutset != oldValue { updateTrackingAreas() } } }
+    private var hitArea: NSRect { bounds.insetBy(dx: -hitOutset, dy: 0) }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
         // A new area under the pointer gets no mouseEntered, so without assumeInside it never sends
         // the mouseExited either and the hover fill sticks (buttons moved under a resting pointer).
-        let inside = window.map { visibleRect.contains(convert($0.mouseLocationOutsideOfEventStream, from: nil)) } ?? false
-        var options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeAlways, .inVisibleRect]
+        let area = hitOutset > 0 ? hitArea : visibleRect
+        let inside = window.map { area.contains(convert($0.mouseLocationOutsideOfEventStream, from: nil)) } ?? false
+        var options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeAlways]
+        if hitOutset == 0 { options.insert(.inVisibleRect) }
         if inside { options.insert(.assumeInside) }
-        addTrackingArea(NSTrackingArea(rect: .zero, options: options, owner: self, userInfo: nil))
+        addTrackingArea(NSTrackingArea(rect: hitOutset > 0 ? hitArea : .zero, options: options, owner: self, userInfo: nil))
         if hovering != inside { hovering = inside }
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         // A button that appears under a resting pointer (a row's hover buttons) is hovered at once.
-        if let w = window { hovering = bounds.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) }
+        if let w = window { hovering = hitArea.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) }
     }
 
     // Rows hide their buttons rather than remove them; a button shown again under the pointer is hovered.
@@ -391,12 +399,12 @@ final class SidebarGlyphButton: NSView {
         if turnsOnPress, enabled { glyph.pressTurn(true) }
     }
     override func mouseDragged(with event: NSEvent) {
-        if turnsOnPress, enabled { glyph.pressTurn(bounds.contains(convert(event.locationInWindow, from: nil))) }
+        if turnsOnPress, enabled { glyph.pressTurn(hitArea.contains(convert(event.locationInWindow, from: nil))) }
     }
     override func mouseUp(with event: NSEvent) {
         if turnsOnPress { glyph.pressTurn(false) }
         if hold.up() { return }
-        if enabled, bounds.contains(convert(event.locationInWindow, from: nil)) { action() }
+        if enabled, hitArea.contains(convert(event.locationInWindow, from: nil)) { action() }
     }
     override func rightMouseDown(with event: NSEvent) {
         guard enabled, let secondaryAction else { return super.rightMouseDown(with: event) }

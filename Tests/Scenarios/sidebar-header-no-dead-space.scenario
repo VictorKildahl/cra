@@ -1,0 +1,21 @@
+# promise: #818
+# With the toolbar hidden the sidebar header draws ← → ↻ as Arc does, 32 pt boxes 2 pt apart, and the pointer between
+# two of them was over neither: a click there did nothing. Each button now takes the half of the gap beside it, so a
+# press anywhere along the row finds a button, while the boxes and their hover fill stay where Arc draws them.
+# The sidebar is 328 pt wide: ← 222–254, → 256–288, ↻ 290–322 (SidebarHeaderLayout), on the 24 pt line.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1200x800
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?hitAt=238,24
+expect-log hit at 238,24: SidebarGlyphButton < SidebarTopBarView
+cra://debug?hitAt=254.5,24
+expect-log hit at 254,24: SidebarGlyphButton < SidebarTopBarView
+cra://debug?hitAt=255.5,24
+expect-log hit at 255,24: SidebarGlyphButton < SidebarTopBarView
+cra://debug?hitAt=288.5,24
+expect-log hit at 288,24: SidebarGlyphButton < SidebarTopBarView
+cra://debug?hitAt=289.5,24
+expect-log hit at 289,24: SidebarGlyphButton < SidebarTopBarView
