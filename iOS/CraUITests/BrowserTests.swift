@@ -1518,9 +1518,16 @@ final class SpacesTests: BrowserTestCase {
                 throw XCTSkip("XCTest screen capture is blank on this display; the pixel check cannot judge Cra here")
             }
             let window = app.windows.firstMatch.frame
-            let y = window.minY + window.height * 0.72
-            let left = colour(shot, at: CGPoint(x: window.minX + 4, y: y))
-            let right = colour(shot, at: CGPoint(x: window.maxX - 4, y: y))
+            let pixels = try XCTUnwrap(shot.cgImage)
+            let width = CGFloat(pixels.width) / shot.scale
+            let height = CGFloat(pixels.height) / shot.scale
+            // Inner-screen fallback captures can be portrait-shaped for a landscape window.
+            if window.width > window.height && abs(width / height - window.width / window.height) > 0.01 {
+                throw XCTSkip("XCTest capture pixel layout does not match the landscape window; the edge check cannot judge this display")
+            }
+            let y = height * 0.72
+            let left = colour(shot, at: CGPoint(x: 4, y: y))
+            let right = colour(shot, at: CGPoint(x: width - 4, y: y))
             XCTAssertTrue(abs(left.r - right.r) <= 6 && abs(left.g - right.g) <= 6 && abs(left.b - right.b) <= 6,
                           "\(state): left \(left), right \(right)")
         }
