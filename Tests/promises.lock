@@ -1861,6 +1861,8 @@
 #842   Packages/CraCore/Tests/CraCoreTests/SharedExtensionsTests.swift::removeOpensTheProfileThatHasIt  aa9ee3fabce9
 #842   Tests/Scenarios/extension-remove-in-its-profile.scenario  1756245b2867
 #844   Tests/Scenarios/filter-helper-hidden.scenario  535df66793d5
+#847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onePasswordInstalledGetsItsManifestWithoutAnImport  6cd3a3b215da
+#847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onlyWhenInstalledAndNotAlreadyThere  1698d6458511
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85
