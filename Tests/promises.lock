@@ -1781,7 +1781,7 @@
 #784   Tests/Scenarios/tab-switcher-favorite-close.scenario  7be27a8cfad5
 #785   Packages/CraCore/Tests/CraCoreTests/AppLinksTests.swift::anOriginChromeMayRememberIsOfferedAlwaysAllow  d72c0542d1d2
 #785   Tests/Scenarios/app-link-always-allow.scenario  2d0f27a9d487
-#786   Tests/ExtensionPopupWindowTests.swift::keepsItsPageInTheFrameWhenChromeMovesItMidDrag  4a0471c6aa4a
+#786   Tests/ExtensionPopupWindowTests.swift::keepsItsPageInTheFrameWhenChromeMovesItMidDrag  947c42582302
 #786   Tests/ExtensionPopupWindowTests.swift::takesItsBubbleBackFromChrome  35fac83b9542
 #788   Packages/CraCore/Tests/CraCoreTests/NewTabRowLookTests.swift::atRestItIsBare  b309d752e1ab
 #788   Packages/CraCore/Tests/CraCoreTests/NewTabRowLookTests.swift::hoveredIsAnOrdinaryHoveredRow  2cb70b0a584a
