@@ -6388,7 +6388,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// What the window server has in front of `window`, its own parts (its child windows, Chrome's page
     /// host windows) told apart. Asked only after macOS said the window isn't visible, and by
     /// `cra://debug?windowCoverage=1`.
-    private static func coverage(of window: NSWindow) -> WindowCoverage.Reading {
+    static func coverage(of window: NSWindow) -> WindowCoverage.Reading {
         let number = CGWindowID(window.windowNumber)
         let own = number > 0 ? (CGWindowListCopyWindowInfo(.optionIncludingWindow, number) as? [[String: Any]])?.first : nil
         let inFront = number > 0 ? CGWindowListCopyWindowInfo(.optionOnScreenAboveWindow, number) as? [[String: Any]] ?? [] : []

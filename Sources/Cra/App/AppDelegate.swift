@@ -1342,6 +1342,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["windowCoverage"] != nil { CraLog.note(main.windowCoverageReadout()); return }
             if let mode = dict["coverWindow"] { main.debugCoverWindow(mode); return }
             if let mode = dict["missionControl"] { main.debugMissionControl(mode); return }
+            // littleBreakNextShow=hide|size: the next Little Window to come up leaves its page hidden or laid out at its
+            // grow-in's start, as #848's white Little Window; littlePage=<label>: what Cra sees of the newest Little
+            // Window's page (LittlePageHealth's verdict and PageProbe's line).
+            if let mode = dict["littleBreakNextShow"] { LittleWindowController.debugBreakNextShow = mode; return }
+            if let label = dict["littlePage"] {
+                guard let w = littleWindows.last else { CraLog.note("little page \(label): no Little Window"); return }
+                w.lookAtPage { verdict, said in
+                    let v: String
+                    switch verdict {
+                    case .drawing: v = "drawing"
+                    case .notJudged: v = "not judged"
+                    case .stuck(let reasons): v = "stuck (" + reasons.joined(separator: ", ") + ")"
+                    }
+                    CraLog.note("little page \(label): \(v), \(said)")
+                }
+                return
+            }
             // pageDrawn=<label>: whether the front tab's page is in its card and draws there. Its frames
             // come in Chromium's CALayerHost under the page's view; a page Chrome attached to its own
             // never-shown window drew there instead, and the tab stayed blank (GitHub #469).

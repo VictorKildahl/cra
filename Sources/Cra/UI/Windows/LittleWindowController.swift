@@ -203,6 +203,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     private(set) var closingPeek = false { didSet { if closingPeek != oldValue { peekParent?.syncPeekAddress() } } }
     /// The Peek is shrinking into place; a page window attaching now waits for the end.
     private var openingPeek = false
+    /// #848: the look at the page after the window comes up, and how often this showing may bring it back.
+    private var pageCheck: DispatchWorkItem?
+    private var pageTries = LittlePageHealth.Tries()
+    private var pageCheckedOnKey = Date.distantPast
+    /// `cra://debug?littleBreakNextShow=hide|size`: the next Little Window to come up leaves its page hidden or laid
+    /// out at its grow-in's start, as a white Little Window from another app was found (#848).
+    static var debugBreakNextShow: String?
     /// The pictures moving while the Peek opens or closes.
     private var transition: PeekTransition?
     /// The link the Peek grew out of, which it closes back into (nil: the whole area).
@@ -562,6 +569,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     func orderFrontInBackground() {
         window?.orderFront(nil)
         rejoinPage()
+        cameUp()
     }
 
     /// The page window is an ordinary window, which can't join another app's full-screen
@@ -962,6 +970,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         // all the same: the command bar would cover a sign-in popup.
         if hasPage || isPopupHost { focusPage() } else { openCommandBar() }
         putBrowserWindowsBackOnceShown()
+        cameUp()
     }
 
     // MARK: Peek
@@ -2100,7 +2109,13 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
-        guard (notification.object as? NSWindow) === window, let host = browser?.hostWindow else { return }
+        guard (notification.object as? NSWindow) === window else { return }
+        // Back from another app or window: the page is looked at again, at most every 10 s (#848).
+        if Date().timeIntervalSince(pageCheckedOnKey) > 10 {
+            pageCheckedOnKey = Date()
+            checkPageDraws("became key")
+        }
+        guard let host = browser?.hostWindow else { return }
         ChromiumPageFocus.focus(host)
     }
 
@@ -2653,6 +2668,111 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 }
 
 /// The navy strip on top, the page edge to edge below.
+// MARK: Page health (#848)
+
+extension LittleWindowController {
+    /// The window came up (shown, or shown behind the app in use): its page is looked at once the arrival settles.
+    private func cameUp() {
+        pageTries.reset()
+        pageCheckedOnKey = Date()
+        if let mode = Self.debugBreakNextShow {
+            Self.debugBreakNextShow = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.debugBreakPage(mode) }
+        }
+        checkPageDraws("came up")
+    }
+
+    /// Looks at the page `delay` seconds from now (a newer call replaces a waiting one).
+    func checkPageDraws(_ why: String, after delay: TimeInterval = 1.2) {
+        pageCheck?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.lookAtPage { [weak self] verdict, probe in
+                guard let self else { return }
+                switch verdict {
+                case .drawing, .notJudged:
+                    if why == "came up" { CraLog.note("little window page \(verdict == .drawing ? "drawing" : "not judged") (\(why)): \(probe)") }
+                case .stuck(let reasons):
+                    guard self.pageTries.take() else {
+                        CraLog.note("little window page still not drawing, left alone (\(reasons.joined(separator: ", "))): \(probe)")
+                        return
+                    }
+                    CraLog.note("little window page not drawing (\(why): \(reasons.joined(separator: ", "))): shown again")
+                    self.bringPageBack()
+                    self.checkPageDraws("after showing it again")
+                }
+                if why == "after showing it again", verdict == .drawing { CraLog.note("little window page drawing again: \(probe)") }
+            }
+        }
+        pageCheck = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    /// The page's view in this window: Chromium's, or the container for a page that hasn't made one yet.
+    private var pageView: NSView? {
+        guard let browser else { return nil }
+        return EmbeddedPages.webContentsView(in: browser.containerView) ?? browser.containerView
+    }
+
+    /// What LittlePageHealth judges, read from the window, the window server and the page (PageProbe).
+    func lookAtPage(_ done: @escaping (LittlePageHealth.Verdict, String) -> Void) {
+        // Chromium pages Cra hosts in the window itself; WebKit, easels and Chrome-hosted page windows draw otherwise.
+        guard let window, let browser, let page = pageView, browser.hostWindow == nil,
+              !(browser is WebKitBrowser), !(browser is EaselBrowser) else { done(.notJudged, "no Chromium page"); return }
+        let shown = window.isVisible && window.isOnActiveSpace && !window.isMiniaturized && window.alphaValue > 0
+            && !MainWindowController.coverage(of: window).covered
+        let meantHidden = isCard || isParked || openingPeek || closingPeek
+        let viewHidden = page.isHiddenOrHasHiddenAncestor
+        let viewSize = browser.containerView.bounds.size
+        let scale = window.backingScaleFactor
+        let loading = browser.isLoading
+        PageProbe.run(browser) { line in
+            let fields = Dictionary(line.split(separator: " ").compactMap { pair -> (String, String)? in
+                let kv = pair.split(separator: "=", maxSplits: 1)
+                return kv.count == 2 ? (String(kv[0]), String(kv[1])) : nil
+            }, uniquingKeysWith: { a, _ in a })
+            let look = LittlePageHealth.Look(windowShown: shown, pageMeantHidden: meantHidden, viewHidden: viewHidden,
+                                             visibility: fields["visibility"], frameRate: fields["frameRate"].flatMap { Int($0) },
+                                             viewport: fields["viewport"].flatMap { LittlePageHealth.viewport($0, backingScale: scale) },
+                                             viewSize: viewSize, loading: loading)
+            let said = "window \(shown ? "in sight" : "out of sight")\(meantHidden ? ", page meant hidden" : "")\(viewHidden ? ", view hidden" : ""), view \(Int(viewSize.width))x\(Int(viewSize.height)), \(line)"
+            done(LittlePageHealth.judge(look), said)
+        }
+    }
+
+    /// What the reporter's resize did, and a little more: the page's view is shown again (Chromium shows a page
+    /// whose view comes back), placed over the whole page area, and the area takes a one-point resize and back, so
+    /// Chromium lays the page out for its size and draws a new frame.
+    private func bringPageBack() {
+        guard let browser, let window, let page = pageView else { return }
+        let container = browser.containerView
+        var v: NSView? = page
+        while let view = v, view !== window.contentView {
+            if view.isHidden { view.isHidden = false }
+            v = view.superview
+        }
+        if page !== container {
+            page.frame = container.bounds
+            page.isHidden = true
+            page.isHidden = false
+        }
+        let frame = container.frame
+        container.setFrameSize(NSSize(width: frame.width, height: max(1, frame.height - 1)))
+        DispatchQueue.main.async { container.frame = frame }
+        // Chromium's own occlusion pass (WindowOcclusionCheckerMac) may be what hid it: an occlusion change of the window
+        // makes it work out every window's state again, and this one is in sight.
+        NotificationCenter.default.post(name: NSWindow.didChangeOcclusionStateNotification, object: window)
+    }
+
+    /// `cra://debug?littleBreakNextShow=…`: leaves the page as #848's white Little Window was, hidden or laid out at
+    /// the grow-in's 48 x 30 start.
+    private func debugBreakPage(_ mode: String) {
+        guard let page = pageView else { return }
+        if mode == "hide" { page.isHidden = true }
+        if mode == "size" { page.frame = NSRect(x: 0, y: 0, width: 48, height: 30) }
+        CraLog.note("little window page broken for the test: \(mode)")
+    }
+}
+
 final class LittleShellView: NSView {
     private(set) var toolbarHost = NSView()
     let page = NSView()
