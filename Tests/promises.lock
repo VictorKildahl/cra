@@ -1805,6 +1805,15 @@
 #806   Tests/StoreTests.swift::removedFavoriteComesBackOnUndo  c33625f266f6
 #807   Packages/CraCore/Tests/CraCoreTests/CommandBarClosingTests.swift::aClickRightAfterOpeningClosesTheBar  d2c109866e10
 #807   Tests/Scenarios/command-bar-quick-click.scenario  a1ae474d93fd
+#809   Packages/CraCore/Tests/CraCoreTests/TypingUndoStepsTests.swift::closingStartsANewStep  1c71f400e23d
+#809   Packages/CraCore/Tests/CraCoreTests/TypingUndoStepsTests.swift::deletingAfterTypingIsTheNextStep  42eae02ca166
+#809   Packages/CraCore/Tests/CraCoreTests/TypingUndoStepsTests.swift::lettersTypedInARowAreOneStep  cd1ced0ba32e
+#809   Packages/CraCore/Tests/CraCoreTests/TypingUndoStepsTests.swift::replacingIsAlwaysItsOwnStep  f53b701d0f55
+#809   Packages/CraCore/Tests/CraCoreTests/TypingUndoStepsTests.swift::typingOrDeletingInTheMiddle  5d126c929447
+#809   Tests/FieldTypingUndoTests.swift::deletingIsAStepOfItsOwn  eab1585eb1c9
+#809   Tests/FieldTypingUndoTests.swift::redoTypesItAgain  e89c774b858f
+#809   Tests/FieldTypingUndoTests.swift::textTheBarPutInIsNotUndone  ffe6b9fe1f07
+#809   Tests/FieldTypingUndoTests.swift::undoTakesBackWhatWasTypedPastTheCompletion  33ce7cf22b1c
 #816   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aLoneCardSitsInTheMiddle  b7c3dcd36125
 #816   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::onlyTheCardInFocusShowsItsTitle  5eacdc53a690
 #816   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFocusedTitleStopsBeforeTheCardInFront  77639a7af889

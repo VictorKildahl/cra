@@ -62,6 +62,7 @@ if [ "${1:-}" != core ]; then
   suite "Feed counts kept on promote" scripts/test-feed-counts.sh
   suite "Command bar glyph" scripts/test-command-bar-glyph.sh
   suite "Command bar address selection" scripts/test-field-editor-selection.sh
+  suite "Command bar typing undo" scripts/test-field-typing-undo.sh
   suite "Folder glyph" scripts/test-folder-glyph.sh
   suite "Tidy title layout" scripts/test-tidy-title-layout.sh
   suite "Tidy title requests" scripts/test-tidy-titles.sh
