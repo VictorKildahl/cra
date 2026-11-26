@@ -186,9 +186,9 @@
 #133   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::customTemplatesMustBeHTTPS  e9d843c17592
 #133   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::eachRowWritesWhatChromeWrites  ac682ed5cdfb
 #133   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::everyProviderRoundTrips  3c5c4c56ebaa
-#133   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::summaryNamesTheServerInEffect  41d7140edca2
+#133   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::summaryNamesTheServerInEffect  c37d872e65c1
 #133   Packages/CraCore/Tests/CraCoreTests/SecureDNSTests.swift::whatChromiumHoldsShowsAsItsRow  45f2ebc088cc
-#133   Packages/CraCore/Tests/CraCoreTests/ShippedPlatformTests.swift::secureDNSMenuProviders  0130b70a4f10
+#133   Packages/CraCore/Tests/CraCoreTests/ShippedPlatformTests.swift::secureDNSMenuProviders  2a7ba72edde9
 #134   Packages/CraCore/Tests/CraCoreTests/PictureInPictureGestureTests.swift::aClickThatDriftsMovesNothing  991f7abe07c1
 #134   Packages/CraCore/Tests/CraCoreTests/PictureInPictureGestureTests.swift::aCornerFollowsTheLongerWay  03176a7ecc35
 #134   Packages/CraCore/Tests/CraCoreTests/PictureInPictureGestureTests.swift::aDragStaysADrag  ffed99ac7e2c

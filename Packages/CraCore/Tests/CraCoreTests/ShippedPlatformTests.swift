@@ -15,7 +15,6 @@ struct ShippedPlatformTests {
         ])
         let malware = SecureDNSProvider.all[2]
         #expect(malware.template == "https://security.cloudflare-dns.com/dns-query")
-        #expect(malware.resolverIPv4 == ["1.1.1.2", "1.0.0.2"])
         #expect(SecureDNSProvider.all.allSatisfy { SecureDNSPrefs.validTemplates($0.template) == $0.template })
     }
 

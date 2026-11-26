@@ -43,15 +43,15 @@ extension SecureDNS {
         let to = servers.joined(separator: ", ")
         switch mode {
         case "": return ""
-        case "off": return "Let the system handle DNS."
+        case "off": return "Hostnames are looked up in plain text by the network’s own resolver."
         case "secure":
             if servers.isEmpty { return "No provider is set, so hostnames can’t be looked up. Choose one above." }
-            return "DNS lookups use \(to). If unavailable, lookups fail."
+            return "Hostnames are looked up over an encrypted connection to \(to). If it can’t be reached, pages don’t load."
         default:
             if servers.isEmpty {
-                return "Uses your system DNS provider over HTTPS when available."
+                return "Automatic uses the network’s own resolver, encrypted when it supports it. Names only a work network knows keep working."
             }
-            return "DNS lookups use \(to) when it answers, else by the network’s own resolver."
+            return "Hostnames are looked up over an encrypted connection to \(to) when it answers, else by the network’s own resolver."
         }
     }
 }
@@ -62,20 +62,19 @@ extension SecureDNS {
 public struct SecureDNSProvider: Hashable, Sendable, Identifiable {
     public let name: String
     public let template: String
-    public let resolverIPv4: [String]
     public var id: String { template }
 
     /// Chrome's providers shown everywhere, plus DNS4EU, which it shows in the EU (named shorter
     /// than Chrome's "DNS4EU Public Service (Protective)", which set the menu's width). NextDNS
     /// needs the user's own profile id in the path, so it goes through Custom.
     public static let all: [SecureDNSProvider] = [
-        SecureDNSProvider(name: "Google Public DNS", template: "https://dns.google/dns-query{?dns}", resolverIPv4: ["8.8.8.8", "8.8.4.4"]),
-        SecureDNSProvider(name: "Cloudflare", template: "https://chrome.cloudflare-dns.com/dns-query", resolverIPv4: ["1.1.1.1", "1.0.0.1"]),
-        SecureDNSProvider(name: "Cloudflare (Malware Filter)", template: "https://security.cloudflare-dns.com/dns-query", resolverIPv4: ["1.1.1.2", "1.0.0.2"]),
-        SecureDNSProvider(name: "Quad9 (Threat Blocking)", template: "https://dns.quad9.net/dns-query", resolverIPv4: ["9.9.9.9", "149.112.112.112"]),
-        SecureDNSProvider(name: "OpenDNS", template: "https://doh.opendns.com/dns-query{?dns}", resolverIPv4: ["208.67.222.222", "208.67.220.220"]),
-        SecureDNSProvider(name: "CleanBrowsing (Family Filter)", template: "https://doh.cleanbrowsing.org/doh/family-filter{?dns}", resolverIPv4: ["185.228.168.168", "185.228.169.168"]),
-        SecureDNSProvider(name: "DNS4EU (Protective)", template: "https://protective.joindns4.eu/dns-query{?dns}", resolverIPv4: ["86.54.11.1", "86.54.11.201"]),
+        SecureDNSProvider(name: "Google Public DNS", template: "https://dns.google/dns-query{?dns}"),
+        SecureDNSProvider(name: "Cloudflare", template: "https://chrome.cloudflare-dns.com/dns-query"),
+        SecureDNSProvider(name: "Cloudflare (Malware Filter)", template: "https://security.cloudflare-dns.com/dns-query"),
+        SecureDNSProvider(name: "Quad9 (Threat Blocking)", template: "https://dns.quad9.net/dns-query"),
+        SecureDNSProvider(name: "OpenDNS", template: "https://doh.opendns.com/dns-query{?dns}"),
+        SecureDNSProvider(name: "CleanBrowsing (Family Filter)", template: "https://doh.cleanbrowsing.org/doh/family-filter{?dns}"),
+        SecureDNSProvider(name: "DNS4EU (Protective)", template: "https://protective.joindns4.eu/dns-query{?dns}"),
     ]
 }
 
