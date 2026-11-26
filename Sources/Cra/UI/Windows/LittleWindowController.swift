@@ -852,6 +852,11 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
                 .min { $0.convert($0.bounds, to: nil).minX < $1.convert($1.bounds, to: nil).minX }
             if let first { window?.makeFirstResponder(first) }
         case "blur": window?.makeFirstResponder(nil)
+        // A click on "Open in <space>" (not its ⌄), through the bar's own mouseUp, as a pointer's would (#852).
+        case "clickOpen":
+            let clicked = (shell.toolbarHost as? LittleToolbarView)?.debugClickOpen() ?? false
+            CraLog.note("littleToolbar clickOpen: \(clicked ? "clicked" : "no button")")
+            return
         // One pointer sample from the page's bottom left, as when the pointer has left the bar: the real
         // pointer of a background copy can be anywhere, the bar included.
         case "away": sampleBar(at: NSPoint(x: shell.page.frame.minX + 1, y: shell.page.frame.minY + 1))
@@ -3542,6 +3547,17 @@ final class LittleToolbarView: NSView {
 
     /// Presses on the empty strip move the window before they get here (mouseDownCanMoveWindow).
     override func mouseDown(with event: NSEvent) {}
+
+    /// cra://debug?littleToolbar=clickOpen: a mouse up on the "Open in" button's name, left of its ⌄ (#852).
+    func debugClickOpen() -> Bool {
+        guard let window, !openButton.isHidden, openButton.frame.width > 0 else { return false }
+        let at = convert(NSPoint(x: openButton.frame.minX + 12, y: openButton.frame.midY), to: nil)
+        guard let up = NSEvent.mouseEvent(with: .leftMouseUp, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                          windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
+        else { return false }
+        mouseUp(with: up)
+        return true
+    }
 
     override func mouseUp(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
