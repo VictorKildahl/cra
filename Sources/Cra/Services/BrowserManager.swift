@@ -1616,15 +1616,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         scheduleHistorySave(id)
         if !browser.isIncognito { LiveFolderManager.shared.pageChanged(tab: id, to: url) }
         protectedVideoPageChanged(id, browser, url: url)
-        routeLinkTab(id, browser, url: url)
+        routeLinkTab(id, incognito: browser.isIncognito, url: url)
         delegate?.browserManagerDidUpdate(id)
     }
 
     /// Air Traffic Control for a link opened in a new tab, as for one from another app: when the new page's
     /// address (after Google's /url?q= hop or a redirect, too) matches a route to another space, the tab
     /// goes there, the window with it when it's in front. The page that opened the link stays (#868).
-    private func routeLinkTab(_ id: UUID, _ browser: CraBrowser, url: String) {
-        guard linkTabsToRoute.contains(id), !browser.isIncognito,
+    /// A link straight to the routed site is checked as its tab is made: no address change follows it.
+    private func routeLinkTab(_ id: UUID, incognito: Bool, url: String) {
+        guard linkTabsToRoute.contains(id), !incognito,
               let space = store.settings.space(forTypedURL: url), space != store.spaceID(ofItem: id) else { return }
         linkTabsToRoute.remove(id)
         store.moveTab(id, toSpace: space, window: windowID)
@@ -1979,6 +1980,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             loadBehind(tab.id)  // load it so the title and favicon fill in
             delegate?.browserManagerOpenedInBackground(tab.id)
         }
+        routeLinkTab(tab.id, incognito: source.flatMap { runtimes[$0]?.browser.isIncognito } ?? false, url: url)
     }
 
     func browser(_ browser: CraBrowser, popupHostForURL url: String, inBackground background: Bool) -> CraBrowser? {
@@ -2006,6 +2008,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         linkTabsToRoute.insert(tab.id)
         let host = makePopupHost(for: tab.id, opener: browser)
         if background { delegate?.browserManagerOpenedInBackground(tab.id) } else { show(tab.id, focus: true) }
+        routeLinkTab(tab.id, incognito: browser.isIncognito, url: url)
         return host
     }
 

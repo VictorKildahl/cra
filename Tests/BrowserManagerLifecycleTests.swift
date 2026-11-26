@@ -724,6 +724,16 @@ enum BrowserManagerLifecycleTests {
         settled.setLoading(false)
         settled.navigate(to: "https://www.scaler.test")
         expect(store.spaceID(ofItem: other) == pro, "a tab that has loaded a page stays where it is")
+
+        // A link straight to the routed site: its tab is made with that address, so no address change follows.
+        let direct = manager.browser(page, popupHostForURL: "https://www.scaler.test/problems/1", inBackground: false)!
+        expect(store.spaceID(ofItem: manager.tabID(of: direct)!) == personal,
+               "a pop-up made with the routed site's address goes to its space at once")
+        let before = Set(store.items.keys)
+        manager.openLinkTab("https://www.scaler.test/problems/2", from: source, inBackground: true)
+        let linked = Set(store.items.keys).subtracting(before).first!
+        expect(store.spaceID(ofItem: linked) == personal && store.spaceID(ofItem: source) == pro,
+               "so does a tab a link opens with the routed site's address")
         manager.closeAll()
     }
 
