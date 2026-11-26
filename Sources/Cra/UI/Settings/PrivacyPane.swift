@@ -142,8 +142,8 @@ private struct BlockListRows: View {
                 }
             }
             SettingsHeader("Filter lists").padding(.top, 14)
-            ForEach(DesktopFilterList.Category.allCases, id: \.self) { category in
-                categoryCard(category).padding(.bottom, 6)
+            ForEach(DesktopFilterList.groups(selected: Set(store.settings.customBlocklists))) { group in
+                categoryCard(group).padding(.bottom, 6)
             }
             SettingsFootnote("These lists block connections to third-party domains on pages you visit. Opening a listed address directly does not show a warning.")
             HStack {
@@ -196,25 +196,16 @@ private struct BlockListRows: View {
         }
     }
 
-    private func categoryCard(_ category: DesktopFilterList.Category) -> some View {
-        var entries = DesktopFilterList.catalog.filter { $0.category == category }
-        if category == .regional {
-            entries.sort {
-                let order = $0.name.localizedStandardCompare($1.name)
-                return order == .orderedSame ? $0.detail.localizedStandardCompare($1.detail) == .orderedAscending : order == .orderedAscending
-            }
-        }
-        let selected = Set(store.settings.customBlocklists)
-        let count = entries.filter { selected.contains($0.address) }.count
-        let selectable = entries.filter { !$0.referenceOnly || selected.contains($0.address) }.count
-        let summary = "\(count) of \(selectable) selected"
+    private func categoryCard(_ group: DesktopFilterList.Group) -> some View {
+        let category = group.category
+        let summary = "\(group.selectedCount) of \(group.entries.count) selected"
         let isExpanded = expanded.contains(category)
         return SettingsFeatureCard {
             Button {
                 if isExpanded { expanded.remove(category) } else { expanded.insert(category) }
             } label: {
                 SettingsCardRow {
-                    Text(category.rawValue).fontWeight(.medium)
+                    Text(category.title).fontWeight(.medium)
                 } trailing: {
                     Text(summary).foregroundStyle(.secondary).monospacedDigit()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.forward")
@@ -223,22 +214,12 @@ private struct BlockListRows: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(category.rawValue)
+            .accessibilityLabel(category.title)
             .accessibilityValue(isExpanded ? "Expanded, " + summary : "Collapsed, " + summary)
             if isExpanded {
-                if category == .security {
+                ForEach(group.entries) { list in
                     SettingsCardDivider()
-                    SettingsPlainRow("Online Malicious URL Blocklist", detail: "URLhaus uses full-page blocking rules that Cra cannot enforce yet.", trailing: {
-                        Link("Source", destination: URL(string: "https://gitlab.com/malware-filter/urlhaus-filter")!)
-                    })
-                }
-                ForEach(entries) { list in
-                    SettingsCardDivider()
-                    if list.referenceOnly && !selected.contains(list.address), let url = URL(string: list.address) {
-                        SettingsPlainRow(list.name, detail: list.detail, trailing: { Link("Source", destination: url) })
-                    } else {
-                        listRow(list.address, name: list.name, detail: list.detail)
-                    }
+                    listRow(list.address, name: list.name, detail: list.detail)
                 }
             }
         }
