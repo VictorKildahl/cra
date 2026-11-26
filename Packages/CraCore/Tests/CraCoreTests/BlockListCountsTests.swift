@@ -51,6 +51,21 @@ struct BlockListCountsTests {
         #expect(BlockListCount(kept, networkRules: true) == BlockListCount(fetched, networkRules: true))
     }
 
+    /// #849 asked for rule counts, a warning when Chromium's 30,000 dynamic rules run out, and a box for one's own
+    /// rules. Each list shows its rules and the ones Cra can't use; a hosts list of 100,000 domains is 100 grouped
+    /// network rules, far under the limit, so nothing is cut silently (BlockLists names the count above it and keeps
+    /// the last accepted set); My filters is the box.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/849"))
+    func countsShowAndBigDomainListsStayUnderChromiumsLimit() {
+        let list = DesktopHidingRules.read(abp, address: "https://lists.example/abp.txt", fetched: .distantPast)
+        #expect(BlockListCount(list, networkRules: true).summary == "6 rules · 2 Cra can’t use")
+        let domains = (1...100_000).map { "ads\($0).example" }
+        let rules = DesktopNetworkRules.compile(domains: domains, lines: [])
+        #expect(rules.count == 100)
+        #expect(rules.count < DesktopNetworkRules.dynamicRuleLimit)
+        #expect(DesktopNetworkRules.dynamicRuleLimit == 30_000)
+    }
+
     @Test func summariesReadAsNumbers() {
         #expect(BlockListCount(applied: 0).summary == "")
         #expect(BlockListCount(applied: 1).summary == "1 rule")
