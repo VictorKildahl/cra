@@ -86,6 +86,8 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Sidebar, tabs and the command bar
 
+- **#794:** with Japanese (Romaji) input on, the Kana key (or Karabiner's ⌘ tap that sends it) switches to Japanese and Eisu back,
+  in the command bar, a tab's rename field and the find bar as on a web page (kana-key-cra-fields checks the routing).
 - **#483:** with no selected tab and the sidebar saved hidden, it comes straight out floating and
   stays visible when the pointer leaves and when another app comes to the front. Its button switches
   between docked and floating. Open a page: it remains while the pointer is over it, then slides away

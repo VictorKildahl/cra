@@ -1,0 +1,27 @@
+# promise: #794
+# Karabiner's ⌘ tap sends the JIS Kana key (Eisu for English). Chrome sends both straight to the key window so a page
+# sees them as keys, skipping AppKit's sendEvent:, which is what hands them to the input method to switch to Japanese.
+# A page's view hands them over itself; Cra's own fields never switched (the command bar, a tab's rename, the find bar).
+# Outside a page they now go AppKit's way; in a page, Chrome's. Switching itself needs Japanese input on and a real key:
+# docs/release-checklist.md. Needs a key window, so the screen: a test copy in the background has none.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=700 stalls50=10
+cra://debug?activate=1
+wait 1
+cra://open?url=${PAGE}?n=1
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"document.body.insertAdjacentHTML('beforeend','<input id=f>');document.getElementById('f').focus();'focused'"}
+expect-log Cra cdp Runtime.evaluate .*focused
+cra://debug?appKey=104
+expect-log app key 104 to RenderWidgetHostViewCocoa
+wait 1
+reject-log Kana key to the input method
+cra://commandbar?query=
+wait 1.5
+cra://debug?appKey=104
+expect-log app key 104 to NSTextView
+expect-log Cra: Kana key to the input method
+cra://debug?appKey=102
+expect-log Cra: Eisu key to the input method
+cra://dismiss

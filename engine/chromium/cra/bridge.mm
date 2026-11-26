@@ -26,6 +26,7 @@
 #include "cra/profile_prefs.h"
 
 #include <fcntl.h>
+#include <objc/message.h>
 #include <objc/runtime.h>
 #include <unistd.h>
 
@@ -4692,6 +4693,19 @@ void DropFirstResponderAfterResigningException() {
 // hook (KeyEvent). Enabled macOS shortcuts (CraIsSystemHotKey) take the normal path, as in Chrome and Arc.
 - (void)sendEvent:(NSEvent*)event {
   cra::NoteLastPress(event);
+  // Chrome sends the JIS Eisu and Kana key-downs straight to the key window so a page sees them as keys
+  // (BrowserCrApplication); AppKit's own sendEvent: is what hands them to the input method, which switches the
+  // input source. A page's view hands them over itself, but Cra's own text fields (the command bar, a tab's rename,
+  // the find bar) never switched to Japanese: Karabiner's ⌘ tap sends Kana (#794). Outside a page they go AppKit's way.
+  if (event.type == NSEventTypeKeyDown && (event.keyCode == 0x66 || event.keyCode == 0x68)) {  // kVK_JIS_Eisu, kVK_JIS_Kana
+    NSResponder* responder = self.keyWindow.firstResponder;
+    if (!([responder isKindOfClass:[NSView class]] && CraIsInPageView(static_cast<NSView*>(responder)))) {
+      NSLog(@"Cra: %@ key to the input method", event.keyCode == 0x68 ? @"Kana" : @"Eisu");
+      struct objc_super appKit = {self, [NSApplication class]};
+      reinterpret_cast<void (*)(struct objc_super*, SEL, NSEvent*)>(objc_msgSendSuper)(&appKit, _cmd, event);
+      return;
+    }
+  }
   if ([_forwardedKeyEvents containsObject:event]) {
     [_forwardedKeyEvents removeObject:event];
     [super sendEvent:event];

@@ -1506,6 +1506,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // characters are percent-encoded. zoomLevel logs the page's zoom. page=1 (devtools=1: its DevTools'): straight to the
             // current page, as the keyboard reaches a page that has it (a background copy has no key window);
             // with target=little, the newest Little Window's or Peek's page (#402).
+            // appKey=<keyCode>: a key-down with no characters through the application's sendEvent:, the way a real key
+            // comes in, to whatever has the keyboard (key=… goes to a window directly). #794: Eisu (102) and Kana (104).
+            if let code = dict["appKey"].flatMap(UInt16.init), let w = NSApp.keyWindow {
+                if let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                            windowNumber: w.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "",
+                                            isARepeat: false, keyCode: code) {
+                    CraLog.note("app key \(code) to \(String(describing: type(of: w.firstResponder ?? w)))")
+                    NSApp.sendEvent(e)
+                }
+                return
+            }
             if let k = dict["key"]?.split(separator: ",", omittingEmptySubsequences: false), k.count == 3,
                let code = UInt16(k[1]), let mods = UInt(k[2]), let w = main.window {
                 let flags = NSEvent.ModifierFlags(rawValue: mods)

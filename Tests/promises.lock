@@ -1775,6 +1775,7 @@
 #792   Packages/CraCore/Tests/CraCoreTests/MobileAISwitchTests.swift::theSwitchShowsWhereTheFeaturesCould  4a21fcc21e76
 #792   iOS/CraUITests/BrowserTests.swift::testSwitchingAppleIntelligenceOffTakesBrowseForMeAway  453574528caf
 #793   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::anOpenPagesOwnFaviconComesBeforeItsTouchIcon  f5c792bdd31b
+#794   Tests/Scenarios/kana-key-cra-fields.scenario  89294bbb3f2a
 #796   Packages/CraCore/Tests/CraCoreTests/MCPTabSearchTests.swift::everyQueryWordCanMatchTitleOrURL  c3d5a243d397
 #796   Packages/CraCore/Tests/CraCoreTests/MCPTabSearchTests.swift::queryAndSidebarFiltersIgnoreCase  0cdd99cfbc19
 #797   Packages/CraCore/Tests/CraCoreTests/BackForwardMenuTests.swift::commandClickOpensTheNearestPageInANewTab  0c5ade47f014
