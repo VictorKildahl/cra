@@ -3,10 +3,10 @@ import Foundation
 import ImageIO
 import Testing
 
-/// The icon Cra.app is bundled with (resources/AppIcon.icns) sits on Apple's icon grid: the tile 824 of 1024 px,
-/// centred, with a transparent margin. macOS draws an icon like that in the Dark, Clear and Tinted icon styles; one
-/// that fills its canvas edge to edge it leaves as drawn, light in the Dark style (EzraNz on #739, 0.1.57).
-/// scripts/make-app-icons.swift --icns renders it.
+/// The .icns Cra.app is bundled with (resources/AppIcon.icns, its icon on macOS 14 and 15) sits on Apple's icon grid:
+/// the tile 824 of 1024 px, centred, with a transparent margin, like the Dock's other icons (EzraNz on #739, 0.1.57).
+/// On macOS 26 the Dock draws the Icon Composer icon instead (AppIconCatalogTests): the grid alone didn't bring the
+/// Dark style. scripts/make-app-icons.swift --icns renders it.
 struct AppIconGridTests {
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/739")) func theBundledIconSitsOnApplesGrid() throws {
         let icns = URL(fileURLWithPath: #filePath)
@@ -23,6 +23,21 @@ struct AppIconGridTests {
         #expect(box.minX >= 90 && box.minY >= 90, "the tile starts at \(box.minX), \(box.minY)")
         #expect(box.maxX <= 934 && box.maxY <= 950, "the tile ends at \(box.maxX), \(box.maxY)")
         #expect(box.width >= 800, "the tile is \(box.width) px wide")
+    }
+
+    /// Settings ▸ Icon's Segments tile on macOS 26 (resources/app-icons/segments-glass.png, scripts/render-app-icon-preview.sh
+    /// renders it from resources/AppIcon.icon) sits on the grid like the picker's other tiles: 412 of 512 px, centred (#865).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/865")) func theGlassSegmentsTileSitsOnTheGrid() throws {
+        let png = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("resources/app-icons/segments-glass.png")
+        let source = try #require(CGImageSourceCreateWithURL(png as CFURL, nil), "segments-glass.png is missing")
+        let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        #expect(image.width == 512 && image.height == 512)
+        let box = try #require(Self.opaqueBox(image))
+        #expect(box.minX >= 45 && box.minY >= 45 && box.maxX <= 467 && box.maxY <= 475, "the tile is at \(box)")
+        #expect(box.width >= 400, "the tile is \(box.width) px wide")
     }
 
     /// The smallest rectangle holding every pixel more than 6 % opaque, in pixels from the top left.

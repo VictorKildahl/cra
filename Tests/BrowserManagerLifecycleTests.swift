@@ -202,6 +202,7 @@ enum BrowserManagerLifecycleTests {
         await snapshotCase()
         loadingTabCase()
         themeDataCase()
+        boostAfterLateAddressCase()
         await sleepCase("an unchanged idle page sleeps", shouldSleep: true) { _, _ in }
         await sleepCase("loading started while the probe was pending stays awake") { _, rt in rt.browser.setLoading(true) }
         await sleepCase("a completed same-URL reload invalidates the old probe") { _, rt in
@@ -262,6 +263,7 @@ enum BrowserManagerLifecycleTests {
         await coveredWindowPictureInPictureCase()
         pictureInPictureMinimizeCase()
         pictureInPictureMinimizeSilentCase()
+        pictureInPictureBackToTabSpaceCase()
         await callPictureInPictureCase()
         await playerMediaSessionCase()
         pageColoursCase()
@@ -1076,6 +1078,56 @@ enum BrowserManagerLifecycleTests {
         expect(rt.probeWork == nil && rt.snapshotWork == nil, "unloading drops the pending probe")
         manager.closeAll()
     }
+
+    /// A boosted site's page opened from a link through a redirect (google.com/url?q=…) or as a popup gets its
+    /// boost (#869): Chromium reports the commit before the page's new address, so the page was styled for the
+    /// redirect's site (or no site at all) and the boosted site's address that came right after was ignored.
+    // promise: #869
+    @MainActor
+    private static func boostAfterLateAddressCase() {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        // By the page's host, as BoostStore matches a boost's site.
+        BrowserManager.boostFor = { url, engineTints in
+            switch URL(string: url)?.host {
+            case "example.test": (css: "h1 { color: red }", js: "window.boosted = 1", tint: engineTints ? "0.7,0.125,0.27,0.5,0.108,0.838" : nil)
+            case "www.google.com": (css: "p { color: blue }", js: "", tint: nil)
+            default: nil
+            }
+        }
+        // The boost stylesheet a page was last given.
+        func boostSheet(_ page: CraBrowser) -> String? { page.isolatedParams.last { $0.contains("__craBoost") } }
+        defer { BrowserManager.boostFor = nil; manager.closeAll() }
+
+        // A link through Google's redirect: the commit comes while the page still shows the redirect's address.
+        let redirected = manager.ensureRuntime(for: store.createTab(url: "https://www.google.com/url?q=https://example.test/linked").id)!.browser
+        manager.browser(redirected, didChangeCommittedLoad: true)
+        redirected.navigate(to: "https://example.test/linked")
+        expect(boostSheet(redirected)?.contains("h1 { color: red }") == true && redirected.scripts == ["window.boosted = 1"],
+               "a page reached through a redirect gets its own site's boost once its address arrives")
+        expect(redirected.boostTint == "0.7,0.125,0.27,0.5,0.108,0.838", "and the engine the boosted site's colours")
+
+        // Within the page, an address of its own (pushState) styles nothing again: the boost's script runs once.
+        let sheets = redirected.isolatedParams.filter { $0.contains("adoptedStyleSheets") }.count
+        redirected.navigate(to: "https://example.test/linked#more")
+        expect(redirected.scripts == ["window.boosted = 1"] && redirected.isolatedParams.filter { $0.contains("adoptedStyleSheets") }.count == sheets,
+               "the page's own address change on its site doesn't run the boost again")
+
+        // A new load's address before it commits (a typed address) waits for that load's commit.
+        manager.browser(redirected, didChangeCommittedLoad: false)
+        redirected.navigate(to: "https://www.google.com/search?q=next")
+        expect(redirected.isolatedParams.filter { $0.contains("adoptedStyleSheets") }.count == sheets,
+               "an address that hasn't committed yet styles nothing")
+
+        // A link's popup: its host page has no address at all when its first page commits.
+        let popup = manager.ensureRuntime(for: store.createTab(url: "https://example.test/popup").id)!.browser
+        popup.currentURL = ""
+        manager.browser(popup, didChangeCommittedLoad: true)
+        popup.navigate(to: "https://example.test/popup")
+        expect(boostSheet(popup)?.contains("h1 { color: red }") == true && popup.scripts == ["window.boosted = 1"],
+               "a link's popup on a boosted site gets the boost")
+    }
+
 
     /// Arc's "Allow websites to get your theme data" (on by default): each page that commits gets the
     /// space's palette as `--arc-palette-*` variables from Cra's world; off, pages get none.
@@ -2536,6 +2588,108 @@ enum BrowserManagerLifecycleTests {
         manager.browser(ra.browser, didChangePictureInPicture: false)
         expect(np.shown.map(\.id) == [a], "a minimized video without a card gets one in the sidebar player")
         expect(np.shown.first?.hasVideo == true, "its card has the Picture in Picture button to bring it back")
+        manager.closeAll()
+    }
+
+    // promise: #843
+    /// Back to Tab on a shared favorite's Picture in Picture returns to the space the video came
+    /// from, rather than letting `spaceID(ofItem:)` fall back to the current space or the first
+    /// space that shares the favorite (#843). Covers manual PiP, delayed auto-PiP, PiP started
+    /// from a background tab (including after staying visible across a space switch), and WebKit PiP.
+    @MainActor
+    private static func pictureInPictureBackToTabSpaceCase() {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.prohibited)
+        let hostWindow = NSWindow(contentRect: NSRect(x: -12000, y: -10000, width: 800, height: 600),
+                                  styleMask: [.borderless], backing: .buffered, defer: false)
+        hostWindow.isReleasedWhenClosed = false
+        defer { hostWindow.close() }
+        let container = NSView(frame: hostWindow.contentView!.bounds)
+        hostWindow.contentView!.addSubview(container)
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: container)
+        let home = UUID(), entertainment = UUID(), work = UUID()
+        let video = store.createTab(url: "https://example.test/video").id
+        let other = store.createTab(url: "https://example.test/other").id
+        let workTab = store.createTab(url: "https://example.test/work").id
+        let rv = manager.ensureRuntime(for: video)!
+
+        // 1. Manual PiP started while visible in Entertainment, then user switches to Work.
+        store.focusedSpace = entertainment
+        manager.show(video, focus: false)
+        rv.browser.isInPictureInPicture = true
+        manager.browser(rv.browser, didChangePictureInPicture: true)
+        store.focusedSpace = work
+        manager.show([workTab], focused: workTab, focus: false, autoPictureInPicture: false)
+        hostWindow.orderOut(nil)
+        PictureInPictureChrome.shared.actions?.backToTab()
+        expect(store.selections.last == video && store.selectedSpaces.last == entertainment
+               && !rv.browser.isInPictureInPicture && rv.browser.pictureInPictureCloses == 0 && hostWindow.isVisible,
+               "Back to Tab returns to the space where Picture in Picture started, exits PiP and raises the window")
+        manager.browser(rv.browser, didChangePictureInPicture: false)
+        expect(rv.pictureInPictureSpaceID == nil, "leaving Picture in Picture clears its origin space")
+
+        // 2. Same-space tab switch triggers auto-PiP in Entertainment, and user switches to Work
+        //    before didChangePictureInPicture(true) lands.
+        store.focusedSpace = entertainment
+        manager.show(video, focus: false)
+        manager.show([other], focused: other, focus: false, autoPictureInPicture: true)
+        store.focusedSpace = work
+        manager.show([workTab], focused: workTab, focus: false, autoPictureInPicture: false)
+        rv.browser.isInPictureInPicture = true
+        manager.browser(rv.browser, didChangePictureInPicture: true)
+        hostWindow.orderOut(nil)
+        PictureInPictureChrome.shared.actions?.backToTab()
+        expect(store.selections.last == video && store.selectedSpaces.last == entertainment
+               && !rv.browser.isInPictureInPicture && hostWindow.isVisible,
+               "delayed auto-PiP still remembers the space the tab was left from")
+        manager.browser(rv.browser, didChangePictureInPicture: false)
+
+        // 3. Background tab's PiP started (e.g. Now Playing) after switching away to Work.
+        rv.browser.isInPictureInPicture = true
+        manager.browser(rv.browser, didChangePictureInPicture: true)
+        hostWindow.orderOut(nil)
+        PictureInPictureChrome.shared.actions?.backToTab()
+        expect(store.selections.last == video && store.selectedSpaces.last == entertainment
+               && !rv.browser.isInPictureInPicture && hostWindow.isVisible,
+               "PiP started from a hidden tab remembers the space it was last shown in")
+        manager.browser(rv.browser, didChangePictureInPicture: false)
+
+        // 4. Shared favorite stayed visible across Entertainment -> Home (MainWindowController
+        //    skips show and notifies spaceChanged), then moved Home -> Work and started PiP from
+        //    the hidden tab (Now Playing): Back to Tab returns to Home, not stale Entertainment.
+        store.focusedSpace = entertainment
+        manager.show(video, focus: false)
+        store.focusedSpace = home
+        manager.spaceChanged(to: home)
+        expect(rv.lastShownSpaceID == home, "keeping a visible tab across a space switch updates its remembered space")
+        store.focusedSpace = work
+        manager.show([workTab], focused: workTab, focus: false, autoPictureInPicture: false)
+        rv.browser.isInPictureInPicture = true
+        manager.browser(rv.browser, didChangePictureInPicture: true)
+        hostWindow.orderOut(nil)
+        PictureInPictureChrome.shared.actions?.backToTab()
+        expect(store.selections.last == video && store.selectedSpaces.last == home
+               && !rv.browser.isInPictureInPicture && hostWindow.isVisible,
+               "PiP started after a tab stayed visible in Home and then moved to Work returns to Home")
+        manager.browser(rv.browser, didChangePictureInPicture: false)
+
+        // 5. WebKit Picture in Picture Back to Tab also returns to the origin space and raises the window.
+        let service = store.createTab(url: "https://www.netflix.com/watch/843").id
+        let webKitRuntime = manager.ensureRuntime(for: service)!
+        let webKit = webKitRuntime.browser
+        store.focusedSpace = entertainment
+        manager.show(service, focus: false)
+        webKit.isInPictureInPicture = true
+        manager.browser(webKit, didChangePictureInPicture: true)
+        store.focusedSpace = work
+        manager.show([workTab], focused: workTab, focus: false, autoPictureInPicture: false)
+        hostWindow.orderOut(nil)
+        (manager as WebKitPageDelegate).webKitPageReturnsFromPictureInPicture(webKit)
+        expect(store.selections.last == service && store.selectedSpaces.last == entertainment
+               && webKit.isInPictureInPicture && hostWindow.isVisible,
+               "WebKit Back to Tab returns to the origin space, raises the window and lets WebKit move the video")
+        manager.browser(webKit, didChangePictureInPicture: false)
         manager.closeAll()
     }
 

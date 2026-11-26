@@ -316,6 +316,21 @@ std::map<content::WebContents*, CraBrowser* __weak>& PagesByContents() {
   static auto* pages = new std::map<content::WebContents*, CraBrowser* __weak>();
   return *pages;
 }
+// A page's entry in PagesByContents goes with the page itself. -pageDestroyed alone left it behind when the app let
+// the CraBrowser go before Chrome deleted the page, as a favorite's preview does with its hidden page (close, then
+// nil, and -close deletes on the next turn): its observer went with it, and the next walk over every page
+// (+setWebsiteAppearance:, View ▸ Appearance) read the deleted page (0.1.56/0.1.57 crash reports,
+// crash-website-appearance-closed-page).
+const char kPageEntry = 0;
+class PageEntry : public base::SupportsUserData::Data {
+ public:
+  explicit PageEntry(content::WebContents* contents) : contents_(contents) {}
+  ~PageEntry() override { PagesByContents().erase(contents_); }
+
+ private:
+  // The page this is part of, so never dangling while this lives; only its address is used.
+  raw_ptr<content::WebContents, DisableDanglingPtrDetection> contents_;
+};
 NSInteger g_live_browsers = 0;
 // Pages made ahead for the next tab, outside any tab strip: they go before Chrome destroys their profile at quit,
 // which CHECKs that no page of it is left (WebContentsOfBrowserContext).
@@ -2504,6 +2519,8 @@ bool HandleDebugMethod(content::WebContents* contents,
   _contents = contents;
   contents->SetUserData(views::CraHostedPageKey(), std::make_unique<base::SupportsUserData::Data>());
   _observer = std::make_unique<PageObserver>(contents, self);
+  // Before the entry: a page adopted again replaces its PageEntry, whose going erases what's there.
+  contents->SetUserData(&kPageEntry, std::make_unique<PageEntry>(contents));
   PagesByContents()[contents] = self;
   _isCreated = YES;
   if (_audioMuted || _isAgent) {
@@ -4651,6 +4668,9 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
 + (void)setWebsiteAppearance:(NSInteger)mode {
   cra::SetWebsiteAppearance(mode);
   for (const auto& [contents, page] : PagesByContents()) {
+    if (!page) {
+      continue;  // Let go by the app while its page closes.
+    }
     [page applyPageCanvasTo:contents->GetRenderWidgetHostView()];
     [page refreshCanvasBase:contents];
   }

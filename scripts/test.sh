@@ -18,6 +18,7 @@ suite "CraCore" swift test --package-path Packages/CraCore
 suite "Shipped-issue tests" scripts/promises.py
 suite "Shipped-issue lock" python3 Tests/test_promises.py
 suite "Engine element checks" python3 Tests/test_element_checks.py
+suite "Chromium filter worker and loader" Tests/test-filter-worker.sh
 suite "Engine security check" python3 Tests/test_engine_security.py
 suite "Web features map" python3 -I scripts/web-features.py
 suite "Web features check" python3 Tests/test_web_features.py
@@ -55,6 +56,7 @@ if [ "${1:-}" != core ]; then
   suite "Tidy Downloads lifecycle" scripts/test-tidy-downloads.sh
   suite "Tidy Tabs model" scripts/test-tidy-tabs-model.sh
   suite "Tidy Tabs lifecycle" scripts/test-tidy-tabs.sh
+  suite "DNS provider menu" scripts/test-dns-provider-menu.sh
   suite "Policies" scripts/test-policies.sh
   suite "Import skipped list" scripts/test-skipped-list.sh
   suite "Content blocker" scripts/test-content-blocker.sh

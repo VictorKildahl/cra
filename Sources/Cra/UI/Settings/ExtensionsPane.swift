@@ -38,7 +38,7 @@ struct ExtensionsPane: View {
                             Button("Remove…") { confirmRemoveShared(e) }
                         } else if e.managedByChrome {
                             if e.fromWebStore && ExtensionStore.canShare { Button("Share…") { confirmShare(e) } }
-                            Button("Remove…") { actions.openURL("chrome://extensions/?id=\(e.extensionID)") }
+                            removeFromProfile(e)
                         } else {
                             Button("Remove") { extensions.remove(e) }
                         }
@@ -70,6 +70,25 @@ struct ExtensionsPane: View {
     }
 
     private func profilesLine(_ e: ExtensionStore.Entry) -> String { extensions.profilesLine(for: e, profiles: profiles) }
+
+    /// A Web Store install's Remove…: its chrome://extensions page in the profile that has it, not the space Settings
+    /// came from; installed separately in several profiles, a menu names them (#842).
+    @ViewBuilder private func removeFromProfile(_ e: ExtensionStore.Entry) -> some View {
+        let folders = ExtensionRemoval.pageProfiles(installedIn: e.profiles, allProfiles: profiles.map(\.folder))
+        let open = { (folder: String) in
+            actions.openProfilePage("chrome://extensions/?id=\(e.extensionID)", store.profiles.first { $0.directoryName == folder }?.id)
+        }
+        if folders.count > 1 {
+            Menu("Remove…") {
+                ForEach(profiles.filter { folders.contains($0.folder) }, id: \.folder) { p in
+                    Button("From \(p.name)…") { open(p.folder) }
+                }
+            }
+            .fixedSize()
+        } else {
+            Button("Remove…") { folders.first.map(open) ?? actions.openURL("chrome://extensions/?id=\(e.extensionID)") }
+        }
+    }
 
     /// A checkmark for each profile the shared extension belongs in; the last one can't be taken out (that is Remove).
     private func profilesMenu(_ e: ExtensionStore.Entry) -> some View {

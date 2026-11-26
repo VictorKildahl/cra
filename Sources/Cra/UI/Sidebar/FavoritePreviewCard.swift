@@ -27,6 +27,11 @@ final class FavoritePreviewCard {
         /// The site's recent pages, read when the card shows (the history is in hand).
         var recentPages: () -> [RecentPagesPreview.Page] = { [] }
         var favicon: (String) -> NSImage? = { _ in nil }
+        var pullRequest: () -> LiveFolderPluginItem? = { nil }
+        var checks: (LiveFolderPluginItem) -> PullRequestChecks? = { _ in nil }
+        var reservesChecksSlot: (LiveFolderPluginItem) -> Bool = { _ in true }
+        var fetchChecks: (LiveFolderPluginItem) -> Void = { _ in }
+
         /// A pinned tab's row: the card goes right of this view (the sidebar's list), level with
         /// the row's top, instead of under a favorite's tile.
         weak var beside: NSView?
@@ -42,7 +47,7 @@ final class FavoritePreviewCard {
     private var observers: [NSObjectProtocol] = []
 
     private init() {
-        observers = [LiveCalendarClient.changed, OutlookClient.changed].map {
+        observers = [LiveCalendarClient.changed, OutlookClient.changed, LiveFolderManager.checksChanged].map {
             NotificationCenter.default.addObserver(forName: $0, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { FavoritePreviewCard.shared.contentChanged() }
             }
@@ -64,6 +69,8 @@ final class FavoritePreviewCard {
         case .calendar, .notionCalendar:
             LiveCalendarClient.shared.refresh(favorite: Self.googleCalendar(target), profilePath: target.profilePath, ifOlderThan: 60)
         case .outlookMail, .outlookCalendar: OutlookClient.shared.refresh(favorite: target.favorite, profilePath: target.profilePath, ifOlderThan: 60)
+        case .pullRequest:
+            if let item = target.pullRequest() { target.fetchChecks(item) }
         case .recentPages, nil: break
         }
         let work = DispatchWorkItem { [weak self, weak tile] in
@@ -135,6 +142,8 @@ final class FavoritePreviewCard {
         guard let target else { return }
         switch SidebarTabPreview.card(for: target.favorite) {
         case .calendar, .notionCalendar, .outlookMail, .outlookCalendar: break
+        case .pullRequest:
+            guard target.pullRequest() != nil else { dismiss(animated: false); return }
         default: return
         }
         if panel != nil { refreshPanel() } else { showIfReady() }
@@ -182,6 +191,11 @@ final class FavoritePreviewCard {
             guard let state = calendarState(target) else { return nil }
             let service = SidebarTabPreview.card(for: target.favorite) == .outlookCalendar ? "Outlook" : "Google Calendar"
             return AnyView(CalendarPreviewView(state: state, now: Date(), service: service, actions: calendarActions(target)))
+        case .pullRequest:
+            guard let item = target.pullRequest() else { return nil }
+            return AnyView(PullRequestPreviewView(card: PullRequestPreview.card(item: item, checks: target.checks(item), now: Date()),
+                                                  reservesChecksSlot: target.reservesChecksSlot(item),
+                                                  open: { [weak self] in self?.open(item.url) }))
         case .outlookMail:
             guard let state = OutlookClient.shared.state(for: target.favorite, profilePath: target.profilePath) else { return nil }
             if state.signedOut || state.inbox == nil {
@@ -268,6 +282,8 @@ final class FavoritePreviewCard {
     }
 
     // MARK: Testing
+
+    var isShown: Bool { panel != nil }
 
     /// cra://debug?gmailPreview=<unread>: the card for a sample inbox where Arc's 264 pt sidebar
     /// has its fourth favorite tile.
@@ -365,6 +381,12 @@ extension FavoritePreviewCard.Target {
         t.favicon = { [weak favicons] page in
             guard let favicons else { return nil }
             return favicons.image(for: page) ?? FaviconKey.key(for: page).flatMap { favicons.image(forKey: FaviconKey.siteKey(of: $0)) }
+        }
+        if beside != nil {
+            t.pullRequest = { LiveFolderManager.shared.pullRequestItem(for: id) }
+            t.checks = { LiveFolderManager.shared.checks(for: $0, tab: id) }
+            t.reservesChecksSlot = { LiveFolderManager.shared.reservesChecksSlot(for: $0, tab: id) }
+            t.fetchChecks = { LiveFolderManager.shared.fetchChecks(for: $0, tab: id) }
         }
         t.beside = beside
         return t
@@ -977,5 +999,144 @@ private struct EventBlock: View {
         .onHover { hovered = $0 }
         .onTapGesture { event.link.map(open) }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Snapshot first, checks when available, in the existing Previews chrome.
+private struct PullRequestPreviewView: View {
+    let card: PullRequestPreview.Card
+    let reservesChecksSlot: Bool
+    let open: () -> Void
+    @State private var hovered = false
+
+    private let green = Color(red: 63 / 255, green: 185 / 255, blue: 80 / 255)
+    private let red = Color(red: 248 / 255, green: 81 / 255, blue: 73 / 255)
+    private let amber = Color(red: 210 / 255, green: 153 / 255, blue: 34 / 255)
+
+    private var meta: String {
+        (["\(card.repo)#\(card.number)"] + [card.author, card.age.map { "Updated " + $0 }].compactMap { $0 }).joined(separator: " · ")
+    }
+
+    var body: some View {
+        CardStyle.card(
+            HStack(alignment: .top, spacing: 8) {
+                PullRequestGlyph(draft: card.draft)
+                    .fill(card.draft ? CardStyle.secondary : green)
+                    .frame(width: 14, height: 14)
+                    .frame(width: 16, height: 16)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(card.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(CardStyle.text)
+                        .lineLimit(3).truncationMode(.tail)
+                    Text(meta).font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if card.showsStatusRow(reservingChecks: reservesChecksSlot) {
+                        FlowRow(spacing: 8) {
+                            if card.draft { status("circle.fill", "Draft", dot: true) }
+                            // Keep the snapshot's status items in place when checks arrive.
+                            if reservesChecksSlot {
+                                ZStack(alignment: .leading) {
+                                    status("checkmark", "00/00").hidden()
+                                    if let checks = card.checks {
+                                        status(checks.state == .passed ? "checkmark" : checks.state == .failed ? "xmark" : "circle.fill",
+                                               "\(checks.passed)/\(checks.total)",
+                                               color: checks.state == .passed ? green : checks.state == .failed ? red : amber,
+                                               dot: checks.state == .pending)
+                                    }
+                                }
+                            }
+                            if let count = card.commentCount { status("bubble.left", "\(count)") }
+                            if let tasks = card.tasks { status("checklist", "\(tasks.done)/\(tasks.total)") }
+                        }
+                    }
+                    ForEach(Array(card.failing.enumerated()), id: \.offset) { _, name in
+                        HStack(spacing: 5) {
+                            Image(systemName: "xmark").font(.system(size: 9)).foregroundStyle(red)
+                            Text(name).lineLimit(1).truncationMode(.tail)
+                        }
+                        .font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
+                    }
+                    if card.extraFailing > 0 {
+                        Text("and \(card.extraFailing) more").font(.system(size: 12)).foregroundStyle(CardStyle.secondary)
+                    }
+                    if !card.labels.isEmpty {
+                        FlowRow(spacing: 5) {
+                            ForEach(Array(card.labels.enumerated()), id: \.offset) { _, label in
+                                let color = label.color.map { Color(red: $0.r, green: $0.g, blue: $0.b) } ?? CardStyle.secondary
+                                let textColor = label.textColor.map { Color(red: $0.r, green: $0.g, blue: $0.b) } ?? CardStyle.secondary
+                                Text(label.name).font(.system(size: 11, weight: .medium)).foregroundStyle(textColor)
+                                    .lineLimit(1).truncationMode(.tail)
+                                    .padding(.horizontal, 7).padding(.vertical, 2)
+                                    .frame(maxWidth: FavoritePreviewMetrics.width - 2 * FavoritePreviewMetrics.inset - 24)
+                                    .background(Capsule().fill(color.opacity(0.18)))
+                                    .overlay(Capsule().strokeBorder(color.opacity(0.35), lineWidth: 1))
+                            }
+                            if card.extraLabels > 0 {
+                                Text("+\(card.extraLabels)").font(.system(size: 11)).foregroundStyle(CardStyle.secondary)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(FavoritePreviewMetrics.inset)
+            .frame(width: FavoritePreviewMetrics.width, alignment: .leading)
+            .background(hovered ? CardStyle.hover : .clear)
+            .contentShape(Rectangle())
+            .onHover { hovered = $0 }
+            .onTapGesture(perform: open)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton))
+    }
+
+    private func status(_ icon: String, _ text: String, color: Color = CardStyle.secondary, dot: Bool = false) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.system(size: dot ? 7 : 12)).foregroundStyle(color)
+            Text(text).foregroundStyle(CardStyle.text)
+        }
+        .font(.system(size: 12))
+    }
+}
+
+// GitHub Octicons git-pull-request(-draft)-16 SVG outlines: github.com/primer/octicons, MIT licence.
+private struct PullRequestGlyph: Shape {
+    let draft: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        func circle(_ x: Double, _ y: Double, _ radius: Double, hole: Bool = false) {
+            path.move(to: CGPoint(x: x + radius, y: y))
+            path.addArc(center: CGPoint(x: x, y: y), radius: radius,
+                        startAngle: .degrees(0), endAngle: .degrees(hole ? -360 : 360), clockwise: hole)
+            path.closeSubpath()
+        }
+        let left = draft ? 3.25 : 3.75
+        for (x, y) in [(left, 3.25), (left, 12.75), (12.75, 12.75)] {
+            circle(x, y, 2.25)
+            circle(x, y, 0.75, hole: true)
+        }
+        path.addRect(CGRect(x: left - 0.75, y: 5.372, width: 1.5, height: 5.256))
+        if draft {
+            circle(12.75, 7.5, 1.25)
+            circle(12.75, 3.25, 1.25)
+        } else {
+            path.move(to: CGPoint(x: 7.177, y: 3.073))
+            path.addLine(to: CGPoint(x: 9.573, y: 0.677))
+            path.addCurve(to: CGPoint(x: 10, y: 0.854), control1: CGPoint(x: 9.731, y: 0.519), control2: CGPoint(x: 10, y: 0.631))
+            path.addLine(to: CGPoint(x: 10, y: 2.5))
+            path.addLine(to: CGPoint(x: 11, y: 2.5))
+            path.addCurve(to: CGPoint(x: 13.5, y: 5), control1: CGPoint(x: 12.381, y: 2.5), control2: CGPoint(x: 13.5, y: 3.619))
+            path.addLine(to: CGPoint(x: 13.5, y: 10.628))
+            path.addLine(to: CGPoint(x: 12, y: 10.628))
+            path.addLine(to: CGPoint(x: 12, y: 5))
+            path.addCurve(to: CGPoint(x: 11, y: 4), control1: CGPoint(x: 12, y: 4.448), control2: CGPoint(x: 11.552, y: 4))
+            path.addLine(to: CGPoint(x: 10, y: 4))
+            path.addLine(to: CGPoint(x: 10, y: 5.646))
+            path.addCurve(to: CGPoint(x: 9.573, y: 5.823), control1: CGPoint(x: 10, y: 5.869), control2: CGPoint(x: 9.731, y: 5.981))
+            path.addLine(to: CGPoint(x: 7.177, y: 3.427))
+            path.addCurve(to: CGPoint(x: 7.177, y: 3.073), control1: CGPoint(x: 7.079, y: 3.329), control2: CGPoint(x: 7.079, y: 3.171))
+            path.closeSubpath()
+        }
+        return path.applying(CGAffineTransform(scaleX: rect.width / 16, y: rect.height / 16)
+            .concatenating(CGAffineTransform(translationX: rect.minX, y: rect.minY)))
     }
 }

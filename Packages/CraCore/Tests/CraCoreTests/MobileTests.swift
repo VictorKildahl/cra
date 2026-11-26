@@ -591,6 +591,38 @@ struct MobileTabCarouselTests {
         #expect(abs(MobileTabCarousel.placement(relative: 0, in: Self.phone).frame.minX - 83) < 0.1)
     }
 
+    /// With several tabs, the first and the last card have no neighbour on one side and Arc
+    /// Search 1.50 rests them in the middle of the screen (recordings of a 390 pt iPhone, 25 and
+    /// 26 Nov 2026: 58 pt in, where a card between two others rests 83 pt in). Cra kept them
+    /// left of centre.
+    @Test func theFirstAndLastCardsRestInTheMiddle() {
+        #expect(MobileTabCarousel.endCentring(position: 0, count: 4) == 1)
+        #expect(MobileTabCarousel.endCentring(position: 3, count: 4) == 1)
+        #expect(MobileTabCarousel.endCentring(position: 1, count: 4) == 0)
+        #expect(MobileTabCarousel.endCentring(position: 2, count: 4) == 0)
+        // Part of the way while the row moves between an end and its neighbour, and whole past an end.
+        #expect(MobileTabCarousel.endCentring(position: 0.5, count: 4) == 0.5)
+        #expect(MobileTabCarousel.endCentring(position: 2.5, count: 4) == 0.5)
+        #expect(MobileTabCarousel.endCentring(position: -0.2, count: 4) == 1)
+        #expect(MobileTabCarousel.endCentring(position: 3.3, count: 4) == 1)
+        // Two tabs: each is an end, so the row stays centred on the way between them.
+        #expect(MobileTabCarousel.endCentring(position: 0, count: 2) == 1)
+        #expect(MobileTabCarousel.endCentring(position: 0.5, count: 2) == 1)
+        #expect(MobileTabCarousel.endCentring(position: 1, count: 2) == 1)
+        // A lone card is `alone`.
+        #expect(MobileTabCarousel.endCentring(position: 0, count: 1) == 0)
+
+        let focus = MobileTabCarousel.placement(relative: 0, in: Self.phone, centring: 1)
+        #expect(abs(focus.frame.midX - 196.5) < 0.001)
+        // The next card comes along, a pitch away; the one behind keeps its place at the left edge.
+        let next = MobileTabCarousel.placement(relative: 1, in: Self.phone, centring: 1)
+        #expect(abs(next.frame.minX - focus.frame.minX - MobileTabCarousel.pitch(in: Self.phone)) < 0.001)
+        #expect(MobileTabCarousel.placement(relative: -1, in: Self.phone, centring: 1) == MobileTabCarousel.placement(relative: -1, in: Self.phone))
+        // Beside a side column the middle is the middle of what is left.
+        let wide = CGSize(width: 477, height: 852)
+        #expect(abs(MobileTabCarousel.placement(relative: 0, in: wide, sideInsets: (84, 0), centring: 1).frame.midX - (84 + 196.5)) < 0.001)
+    }
+
     @Test func draggingFollowsTheFingerAndResistsPastTheEnds() {
         let pitch = MobileTabCarousel.pitch(in: Self.phone)
         #expect(MobileTabCarousel.position(start: 1, translation: -pitch, count: 3, in: Self.phone) == 2)

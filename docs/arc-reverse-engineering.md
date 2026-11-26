@@ -4260,6 +4260,13 @@ Shift-click on a lab page's link, then HID clicks and drags; Peek open or closed
   ~10 pt corners, fill (18,15,44) (Background, dark) even on a light theme: "Send To…" field (13–42.5 pt, white 7 %),
   rows 40 pt apart (Save to Library ○, Copy, Save…, Send via iMessage…), hairline, Edit, Retake, hairline, New Easel.
   Symbols 30 % white centred 25 pt in, 14 pt medium text 90 % white from 41 pt; hairlines 10 pt in from both sides.
+- [O live] Edit (26 Nov 2026, Arc 1.174 Little Arc, real clicks, 2x window captures, #851): `EaselUI.ModalImageEditor`.
+  The whole window goes dark under black at ~78 % (page white 255 → 57), the menu included; the capture shows in a
+  card centred in the window at a point per pixel (a ~260 × 180 pt selection → a 520 × 359.5 pt card), 10.5 pt corners,
+  no border. Easel's toolbar with the seven tools and no Duplicate (272 × 44 pt) sits 12 pt in from the card's left
+  and bottom; Text was picked on opening, a drawn rectangle (Easel's filled green) put the pointer back. Escape does
+  nothing; a click on the dark area closes the editor and the capture stays lit with the drawing on it, the menu still
+  beside it (Copy then takes the edited picture).
   The partial capture does not touch the clipboard by itself. First Esc left the menu up, the second ended the mode.
 - [?] A scripted HID click on an element did not capture (no menu after 0.6 s), so the click result, Copy's toast text
   and Retake were not observed. Arc's strings have "Confirmation toast when copying a captured image" (text inline).
@@ -5602,3 +5609,22 @@ ignore a press with no hover before it), read off full-screen 2x captures with t
   selected. Arc moves the live page and reloads the Favorite; Cra loads the page in the new tab and a Favorite at
   home keeps its own. Scenario `favorite-command-click`.
 - **Open questions:** a ⌘-click on a Favorite that isn't open (not loaded), on a Favorite split's pane, and ⌘⇧/⌘⌥.
+
+## GitHub pull request card (24 Nov 2026)
+
+Research job 012 inspected strings in `/Applications/Arc.app/Contents/MacOS/Arc`, searching
+for `GitHubClient+PullRequestsParsing.swift` and the pull-request model, fetcher and UI action
+names. The binary contains `Checks`/`FailingCheck`, `StatusChecks`/`Count`/`Check`,
+`fetchPullRequestChecks` and `fetchPullRequestStatusChecks`. Its card actions include
+`pullRequestViewCheck` and `pullRequestShowAllFailures`. These findings establish a checks
+card as Arc parity; they do not establish a row glyph.
+
+The same inspection found `Status` (open, closed, merged, draft), `ReviewStatus`
+(`latestOpinionatedReviews`, `pendingReviewRequests`, APPROVED, CHANGES_REQUESTED, COMMENTED,
+DISMISSED, PENDING), `DiffStats`, `MergeBox`, and fetchers for merge boxes, threads, diffs and
+user hovercards. HTML/XPath strings include `data-pr-has-conflicts`,
+`data-pr-has-unresolved-conversations`, `data-pr-files-changed`, `review-status-*` and diff
+colours. Other actions are `pullRequestResolveConflicts` and `pullRequestShowComments`.
+The client uses `GitHub-Verified-Fetch`, `X-Requested-With` and embedded
+`pullsDashboardSurfaceContentRoute` JSON. Cra limits this phase to a snapshot card and
+GET-only checks on hover; review state and the other actions remain out of scope.

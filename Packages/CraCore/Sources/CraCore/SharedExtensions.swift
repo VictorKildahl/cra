@@ -199,4 +199,12 @@ public enum ExtensionRemoval {
         if isCraCopy, profileCount.map({ $0 > 1 }) ?? true { return "It will be removed from every profile that has it." }
         return "It will be removed from this profile, with its data."
     }
+
+    /// The profiles whose chrome://extensions page can remove a Web Store extension that isn't shared (#842):
+    /// Chrome uninstalls a profile's own install from that profile's page only, so Settings opens the page there,
+    /// not in the space it was opened from. Two or more: Remove… asks which, in Settings' profile order. A folder
+    /// no profile of Cra's owns any more has no page to open; `installedIn` nil is every profile.
+    public static func pageProfiles(installedIn: Set<String>?, allProfiles: [String]) -> [String] {
+        allProfiles.filter { installedIn?.contains($0) ?? true }
+    }
 }

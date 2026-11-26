@@ -130,6 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Before any page is made: an easel's tab opens its canvas.
         EaselBrowser.register()
         CaptureOverlay.easels = { EaselFiles.all().map { CaptureMenuLayout.Destination(id: $0.id, title: $0.title) } }
+        CaptureEditors.make = { frame, image in CaptureEditorView(frame: frame, image: image) }
         EaselBrowser.registerServices(self)
         // Arc's Boosts: each page on a boosted site gets its boosts; an edit shows at once.
         BrowserManager.boostFor = { [store] url, engineTints in
@@ -1316,7 +1317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         case "import":
             // Headless import (scripting): cra://import?source=arc&archive=1&settings=1, source any
-            // ImportSource id that reads from disk (arc, dia, yab, ardia, phi, chrome, zen…).
+            // ImportSource id that reads from disk (arc, dia, yab, ardia, phi, crest, chrome, zen…).
             let source = ImportSource.allCases.first { $0.id == (q("source") ?? "arc") }
             let plan = try? source.flatMap { $0.needsExportedFile ? nil : try $0.plan() }
             if let plan {
@@ -1335,9 +1336,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let js = dict["devtoolsjs"] { main.debugRunInDevTools(js) }
             if dict["embedDump"] != nil { NSLog("%@", main.embeddedPagesDump()); return }
             if dict["pageInsets"] != nil { CraLog.note(main.pageInsetsReadout()); return }
+            // pageScale=<factor> pinch-zooms the front tab's page as a trackpad does; pageScale=read:<label> logs its
+            // pinch scale and zoom level (GitHub #825: ⌘0 left a pinch in place).
+            if let scale = dict["pageScale"] { main.debugPageScale(scale); return }
             if dict["windowCoverage"] != nil { CraLog.note(main.windowCoverageReadout()); return }
             if let mode = dict["coverWindow"] { main.debugCoverWindow(mode); return }
             if let mode = dict["missionControl"] { main.debugMissionControl(mode); return }
+            // littleBreakNextShow=hide|size: the next Little Window to come up leaves its page hidden or laid out at its
+            // grow-in's start, as #848's white Little Window; littlePage=<label>: what Cra sees of the newest Little
+            // Window's page (LittlePageHealth's verdict and PageProbe's line).
+            if let mode = dict["littleBreakNextShow"] { LittleWindowController.debugBreakNextShow = mode; return }
+            if let label = dict["littlePage"] {
+                guard let w = littleWindows.last else { CraLog.note("little page \(label): no Little Window"); return }
+                w.lookAtPage { verdict, said in
+                    let v: String
+                    switch verdict {
+                    case .drawing: v = "drawing"
+                    case .notJudged: v = "not judged"
+                    case .stuck(let reasons): v = "stuck (" + reasons.joined(separator: ", ") + ")"
+                    }
+                    CraLog.note("little page \(label): \(v), \(said)")
+                }
+                return
+            }
             // pageDrawn=<label>: whether the front tab's page is in its card and draws there. Its frames
             // come in Chromium's CALayerHost under the page's view; a page Chrome attached to its own
             // never-shown window drew there instead, and the tab stayed blank (GitHub #469).
@@ -1700,6 +1721,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let site = dict["recentPages"].flatMap(RecentPagesPreview.Site.init(rawValue:)), let w = main.window {
                 FavoritePreviewCard.shared.demoRecentPages(site, count: dict["pages"].flatMap(Int.init) ?? 6, in: w); return
             }
+            // PR scenario: persist the checkbox across relaunch, and read the real panel.
+            if let value = dict["pullRequestPreviews"] { store.settings.pullRequestPreviews = value == "1"; return }
+            if let label = dict["previewShown"] {
+                CraLog.note("preview card \(label): \(FavoritePreviewCard.shared.isShown ? "shown" : "none")"); return
+            }
             // previewDismiss=1: the card goes, as when the pointer leaves it.
             if dict["previewDismiss"] != nil { FavoritePreviewCard.shared.dismiss(animated: false); return }
             // boostZap=1|0: Boost editor's Zap on or off for the open page.
@@ -1826,6 +1852,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let history = dict["mcpHistory"] { MCPServer.shared.allowsHistory = history == "on"; return }
             // mcpStop=1: the latest pill's Stop (that agent disconnects, MCP stays on).
             if dict["mcpStop"] != nil { MCPServer.shared.stopLatestPill(); return }
+            // mcpPill=open|close|takeover: a click on the pill's face (opens the whole pill), on its ×, or ⌘.
+            if let part = dict["mcpPill"] { main.pressAgentPill(part); return }
             // mcpWatched=on|off: a shown tab counts as watched even while its window is covered.
             if let watched = dict["mcpWatched"] { MainWindowController.agentTabsWatchedUnseen = watched == "on"; return }
             // translatePrompts=never:<host>|block:<lang>|reset|state[&profile=<name>][&label=<label>]: Settings ▸
@@ -1937,6 +1965,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let id = dict["stopSharing"] ?? dict["removeShared"],
                let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) {
                 if dict["stopSharing"] != nil { ExtensionStore.shared.stopSharing(e) } else { ExtensionStore.shared.removeShared(e) }
+                return
+            }
+            // removePage=<id>[&profile=<folder>]: Settings ▸ Extensions ▸ Remove… of a Web Store install, its
+            // chrome://extensions page in a profile that has it, as Settings opens it (#842).
+            if let id = dict["removePage"] {
+                ExtensionStore.shared.reload()
+                guard let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) else {
+                    CraLog.note("extension removal \(id): not installed"); return
+                }
+                let folders = ExtensionRemoval.pageProfiles(installedIn: e.profiles, allProfiles: ExtensionStore.profileFolders)
+                CraLog.note("extension removal \(id): pages in [\(folders.joined(separator: ", "))]")
+                guard let folder = dict["profile"] ?? folders.first else { return }
+                let window = useNormalWindow()
+                openExtensionPage("chrome://extensions/?id=\(id)", window: window.windowID, profile: folder, singleton: true)
                 return
             }
             if let id = dict["removeExtension"] {
@@ -3106,6 +3148,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["blockAds"] {
                 store.settings.blockAdsAndTrackers = v == "on"
                 CraLog.note("block ads and trackers: \(v == "on" ? "on" : "off")")
+                return
+            }
+            // personalFilters=<text, \n between lines>|none: Settings ▸ Privacy ▸ Advanced… ▸ My filters, saved and in use.
+            if let v = dict["personalFilters"] {
+                store.settings.personalBlockFilters = v == "none" ? nil : v.replacingOccurrences(of: "\\n", with: "\n")
+                store.settings.personalFiltersEnabled = v != "none"
+                return
+            }
+            // blockListCounts=<label>: the rule counts the Privacy pane and its Advanced… sheet show, as they read them.
+            if let label = dict["blockListCounts"] {
+                let lists = BlockLists.shared
+                var parts = ["inUse=" + (lists.inUse.map { BlockListCount.inUse(rules: $0.rules, lists: $0.lists) } ?? "-")]
+                for source in BlockLists.builtInSources { parts.append("\(source)=\(lists.builtInCounts[source]?.summary ?? "-")") }
+                for address in store.settings.customBlocklists {
+                    parts.append("\(URL(string: address)?.lastPathComponent ?? "?")=\(lists.count(address)?.summary ?? "-")")
+                }
+                parts.append("mine=\(lists.personalCount(store.settings.personalBlockFilters).summary)")
+                CraLog.note("block list counts \(label): " + parts.joined(separator: " | "))
                 return
             }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
@@ -4362,7 +4422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "stop": if !main.takeOverFromAgent() { main.currentBrowser?.stopLoading() }
         case "zoomIn": main.zoom(by: 0.5)
         case "zoomOut": main.zoom(by: -0.5)
-        case "resetZoom": main.currentBrowser?.setZoomLevel(0)
+        case "resetZoom": main.currentBrowser?.resetZoom()
         case "viewSource": main.currentBrowser?.viewSource()
         // Like Arc: ⌥⌘I closes open DevTools; ⌥⌘J and Network switch to their panel and close
         // DevTools only when that panel already shows (DevToolsToggle.run).

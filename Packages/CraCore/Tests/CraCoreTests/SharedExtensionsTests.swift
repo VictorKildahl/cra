@@ -122,6 +122,20 @@ struct SharedExtensionsTests {
         #expect(shares.plan(profile: "Profile H", installed: [], refused: refused) == .init(install: [ublock]))
     }
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/842"))
+    func removeOpensTheProfileThatHasIt() {
+        // Chrome uninstalls a profile's own install from that profile's chrome://extensions only, so Remove… opens
+        // the page there, never in the space Settings was opened from.
+        #expect(ExtensionRemoval.pageProfiles(installedIn: ["Profile W"], allProfiles: all) == ["Profile W"],
+                "only in Work: Work's page, also when Settings was opened from a Personal space")
+        #expect(ExtensionRemoval.pageProfiles(installedIn: ["Profile H", "Default"], allProfiles: all) == ["Default", "Profile H"],
+                "installed separately in two: both, in Settings' profile order, so Remove… asks which")
+        #expect(ExtensionRemoval.pageProfiles(installedIn: ["Profile Gone", "Profile W"], allProfiles: all) == ["Profile W"],
+                "a deleted profile's folder has no page to open")
+        #expect(ExtensionRemoval.pageProfiles(installedIn: nil, allProfiles: all) == all, "loads everywhere")
+        #expect(ExtensionRemoval.pageProfiles(installedIn: [], allProfiles: all).isEmpty)
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/595"))
     func settingsSaysWhichProfilesHaveIt() {
         let names = ["Default": "Personal", "Profile W": "Work", "Profile H": "Hobbies"]

@@ -7,11 +7,33 @@ import CoreGraphics
 /// what it clicks, so a page never changes without the user seeing what was clicked. These are the
 /// decisions; the app draws them.
 public enum MCPAgentPresence {
-    /// The sidebar face stays this long after the agent's last call in the tab.
-    public static let lingers: TimeInterval = 8
-    /// The cursor fades this long after its last move, press or scroll: as long as the face marks
-    /// the tab, so it doesn't vanish while the agent thinks between steps (18 Nov 2026).
-    public static let cursorLingers: TimeInterval = lingers
+    /// How long the agent stays on screen after its last step: the pill, the cursor over a watched
+    /// tab and the face on its tab's row (Settings ▸ Advanced ▸ Agents, discussion #862). Agents
+    /// often think 5–15 s between steps, and a pill or cursor that went in each pause came back on
+    /// the next step, over and over. The three go together, so the cursor never vanishes while
+    /// the tab's face says the agent is still there (18 Nov 2026).
+    public enum Linger: Int, CaseIterable, Sendable {
+        case five = 5, ten = 10, thirty = 30, minute = 60
+
+        public static let standard: Linger = .ten
+        public var seconds: TimeInterval { TimeInterval(rawValue) }
+        public var title: String { self == .minute ? "1 minute" : "\(rawValue) seconds" }
+        /// A saved number of seconds, or the standard when it is missing or not one of the choices.
+        public init(saved: Int?) { self = saved.flatMap(Linger.init(rawValue:)) ?? .standard }
+    }
+
+    /// How the pill looks while an agent acts (discussion #579). In the tab the user is looking at,
+    /// the whole pill: what the agent does, each step, and Take Over. In a tab out of sight, only
+    /// the agent's face, still, where the pill would be: an agent that works in the background for
+    /// minutes doesn't move words over the page the user reads. A click on the face opens the
+    /// whole pill until it goes; ⌘. takes over either way.
+    public enum PillLook: Sendable, Equatable {
+        case full, face
+    }
+
+    public static func pillLook(tabWatched: Bool, opened: Bool) -> PillLook {
+        tabWatched || opened ? .full : .face
+    }
     /// The longest a watched page takes to scroll smoothly to an agent's target before it jumps
     /// the rest of the way, so a page that never settles can't hold the agent up.
     public static let revealLimit: TimeInterval = 1.2

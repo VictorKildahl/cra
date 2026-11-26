@@ -268,7 +268,7 @@ struct SpacesView: View {
         .frame(maxWidth: .infinity)
         .frame(height: Metrics.bar)
         .background {
-            palette.bar.ignoresSafeArea(edges: .bottom)
+            palette.bar.ignoresSafeArea(edges: [.horizontal, .bottom])
                 .overlay(alignment: .top) { Rectangle().fill(palette.barEdge).frame(height: 1 / 3) }
         }
     }
@@ -452,7 +452,7 @@ struct SyncIntroView: View {
 
     var body: some View {
         ZStack {
-            SyncGlow(background: SyncGlow.connectingBackground).ignoresSafeArea(edges: .bottom)
+            SyncGlow(background: SyncGlow.connectingBackground).ignoresSafeArea(edges: [.horizontal, .bottom])
             Group {
                 switch page {
                 case .intro: intro

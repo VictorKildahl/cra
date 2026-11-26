@@ -35,8 +35,8 @@ enum ExtensionImporter {
     /// one entry per extension with the profiles that have it.
     static func extensions(inUserData userData: URL) -> [ImportableExtension] {
         let profiles = ((try? FileManager.default.contentsOfDirectory(atPath: userData.path)) ?? [])
-            // Chrome's "Default" and "Profile <n>" (Ardia's "Profile <id>"), and Yab's "space-<id>".
-            .filter { $0 == "Default" || $0.hasPrefix("Profile ") || $0.hasPrefix("space-") }.sorted()
+            // Chrome's "Default" and "Profile <n>" (Ardia's "Profile <id>"), Yab's "space-<id>" and Crest's "Crest-<id>".
+            .filter { $0 == "Default" || $0.hasPrefix("Profile ") || $0.hasPrefix("space-") || $0.hasPrefix("Crest-") }.sorted()
         var out: [ImportableExtension] = []
         for profile in profiles {
             let dir = userData.appendingPathComponent(profile, isDirectory: true)

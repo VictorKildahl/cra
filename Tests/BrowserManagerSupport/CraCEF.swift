@@ -148,6 +148,7 @@ open class CraBrowser {
         if inDevTools { devToolsScripts.append(script) } else { scripts.append(script) }
     }
     public private(set) var lastIsolatedParams = ""
+    /// Every isolated-world evaluation's params, in order.
     public private(set) var isolatedParams: [String] = []
     /// Recorded as "<world>:Runtime.evaluate".
     public func evaluate(inIsolatedWorld world: String, params: String, completion: @escaping (String?, String?) -> Void) {

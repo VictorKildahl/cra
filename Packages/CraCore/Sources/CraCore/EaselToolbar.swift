@@ -79,6 +79,8 @@ public enum EaselToolbarLayout {
     }
 
     public static var width: CGFloat { rect(of: .duplicate).maxX + inset }
+    /// The toolbar without Duplicate, as Arc's capture editor has it (#851): 272 pt.
+    public static var toolsWidth: CGFloat { toolsEnd + inset }
 
     public static func item(at point: CGPoint) -> Item? {
         items.first { rect(of: $0).contains(point) }

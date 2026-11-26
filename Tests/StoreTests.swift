@@ -23,6 +23,7 @@ enum StoreTests {
         setenv("CRA_ARDIA_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Ardia").path, 1)
         setenv("CRA_YAB_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Yab").path, 1)
         setenv("CRA_PHI_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Phi").path, 1)
+        setenv("CRA_CREST_DIR", URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Crest").path, 1)
 
         try arcImport()
         try arcKeepsAnyAddress()
@@ -32,6 +33,7 @@ enum StoreTests {
         try diaIconsFromItsDatabase()
         try ardiaImport()
         try phiImport()
+        try crestImport()
         try arcImportReport()
         try arcSpacesOnOneProfileCountTheirFavoritesOnce()
         try arcArchiveBeyondItsLimitIsListed()
@@ -53,6 +55,8 @@ enum StoreTests {
         iconFilesAreDecodedSmall()
         faviconDatabaseLookup()
         try chromiumAndFirefoxPlansBringIcons()
+        plansReadOffTheMainThread()
+        planLoaderReadsOffMainAndKeepsTheLastPick()
         try yabKeepsAnyAddress()
         chromiumProfile()
         try firefoxImport()
@@ -105,6 +109,7 @@ enum StoreTests {
         closeSuccessor()
         favoritesEmptyState()
         sharedFavorites()
+        selectSharedFavoriteInSpace()
         removedFavoriteComesBackOnUndo()
         profileTabsSpaceBySpace()
         newDocumentApps()
@@ -1069,6 +1074,66 @@ enum StoreTests {
         for id in result.spaceIDs { store.deleteSpace(id) }
     }
 
+    // promise: #688
+    /// Crest (Discussion #688): its session file (Tests/Fixtures/Crest/ControlPlane/session.sqlite, in
+    /// Crest's own format, see make-session.txt). Spaces come in Crest's order; tile-row tabs are
+    /// favorites and saved tabs the pinned section, both at the page they were saved with, saved
+    /// folders nested; current tabs are Today, a current folder's tabs on their own. Crest's own
+    /// pages and blank tabs stay behind, cra: addresses are listed, and archived tabs come over
+    /// newest first. The first Space stays on Default; the others land on a Cra profile for their
+    /// "Crest-<id>" Chromium folder, Spaces sharing one on the same Cra profile.
+    @MainActor
+    private static func crestImport() throws {
+        expect(CrestImporter.isAvailable, "ControlPlane/session.sqlite counts as Crest data")
+        let plan = try CrestImporter.plan()
+        expect(plan.source == "Crest" && plan.spaces.map(\.title) == ["Work", "Personal", "Side"], "Crest's Spaces come over in its order")
+        let work = plan.spaces[0], personal = plan.spaces[1], side = plan.spaces[2]
+        expect(work.favorites.compactMap(\.url) == ["https://mail.example.com/"] && work.favorites[0].pageTitle == "Inbox",
+               "a tile-row tab is a favorite, at the page it was saved with")
+        expect(work.skipped == [cra("Cra Settings", "cra://settings", .favorites)], "a cra: favorite is listed")
+        expect(work.pinned.map { $0.url ?? "folder " + $0.pageTitle } == ["folder Projects", "https://status.example.com/now"],
+               "saved tabs are the pinned section, a folder where its first tab is; Crest's own Settings page stays behind")
+        let projects = work.pinned[0].children
+        expect(projects.count == 2 && projects[0].url == "https://github.com/" && projects[0].customTitle == "Code"
+               && projects[1].isFolder && projects[1].pageTitle == "Reading" && projects[1].children.compactMap(\.url) == ["https://docs.example.com/"],
+               "saved folders nest through parentID, renamed tabs keep their name")
+        expect(work.today.compactMap(\.url) == ["https://news.example.com/", "https://left.example.com/"],
+               "current tabs are Today, a current folder's tabs on their own; a blank tab and the Start Page stay behind")
+        expect(work.profile == nil && work.emoji == "" && work.symbol == "hammer.fill" && work.theme?.colors == ["#3C0E1A", "#722030"],
+               "the first Space stays on Default, with its SF Symbol and its branding colours")
+        expect(personal.favorites.compactMap(\.url) == ["https://calendar.example.com/"] && personal.pinned.compactMap(\.url) == ["file:///Users/me/notes.html"],
+               "each Space reads its own tabs; a file: page comes over")
+        expect(personal.emoji == "🏡" && personal.theme?.accent == "#1F7D85", "a crest.emoji: icon, and the accent's swatch without branding colours")
+        expect(personal.profile == ImportedProfile(folder: "Crest-B0000000-0000-4000-8000-00000000000B", name: "Personal"),
+               "a later Space signs in on its own \"Crest-<id>\" folder")
+        expect(side.profile == personal.profile && side.pinned.isEmpty && side.symbol == "leaf",
+               "a Space sharing another's Chromium profile goes on the same one; an empty Space still comes over")
+        expect(plan.archive.map(\.url) == ["https://spec.example.com/", "https://plan.example.com/"]
+               && plan.archive.map(\.reason) == [.manual, .auto] && plan.archive[0].customTitle == "Spec" && plan.archive[0].spaceTitle == "Work",
+               "archived tabs come over newest first, a cleanup as auto-archived")
+        expect(plan.archiveSkipped.map(\.url) == ["blob:https://files.example.com/5c1e"], "an archived blob: tab is listed")
+
+        let crest = ImportSource.allCases.first { $0.id == "crest" }
+        expect(crest?.isAvailable == true && crest?.keychainService == "Crest Safe Storage" && crest?.keychainAccount == "com.pauldavis.crest",
+               "Crest is listed from its folder, its passwords and cookies open with Crest's Keychain item")
+        expect(crest?.credentialProfiles.map(\.id) == ["Crest-A0000000-0000-4000-8000-00000000000A", "Crest-B0000000-0000-4000-8000-00000000000B"]
+               && crest?.credentialProfiles.map(\.name) == ["Work", "Personal"],
+               "Crest's \"Crest-<id>\" folders are found, shown by Space; its Default and a folder no Space uses are left out")
+
+        let composition = AppComposition(clock: ManualScheduler())
+        let store = composition.store
+        let result = store.apply(plan, includeArchive: true, includeSettings: false)
+        expect(result.spaces == 3 && result.folders == 2 && result.archived == 2, "applying adds the Spaces, their folders and the archive")
+        let spaces = result.spaceIDs.compactMap { store.space($0) }
+        expect(spaces[0].profileID == nil && spaces[1].profileID != nil && spaces[1].profileID == spaces[2].profileID,
+               "Personal and Side share one Cra profile, Work stays on Default")
+        expect(result.profiles.craFolder(forSource: "Crest-B0000000-0000-4000-8000-00000000000B") != "Default"
+               && result.profiles.craFolder(forSource: "Crest-A0000000-0000-4000-8000-00000000000A") == "Default",
+               "Personal's cookies go to its Cra profile, Work's to Default")
+        expect(store.integrityProblems().isEmpty, "the imported sidebar is sound")
+        for id in result.spaceIDs { store.deleteSpace(id) }
+    }
+
     // promise: #734
     /// Yab (X request, 18 Nov): spaces.json plus one session file per space
     /// (Tests/Fixtures/Yab). Tiles are favorites, kept tabs the pinned section in their folders,
@@ -1259,6 +1324,79 @@ enum StoreTests {
         let second = try ChromiumImporter.plan(browser: "Brave", userData: other)
         expect(pixelsWide(second.spaces.first?.pinned.first?.faviconPath) == 12 && pixelsWide(plans[0].1.spaces.first?.pinned.first?.faviconPath) == 11,
                "a second browser's plan leaves the first one's icon files alone")
+    }
+
+    /// The import window reads the picked browser's plan on a background thread (#748 made it slow
+    /// with icons): each fixture browser's plan reads there without the main thread, as it does on main.
+    private static func plansReadOffTheMainThread() {
+        func lines(_ plan: ImportPlan?) -> [String] {
+            func icon(_ path: String?) -> String { path.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) }?.base64EncodedString() ?? "-" }
+            func items(_ list: [ImportedItem]) -> [String] {
+                list.flatMap { ["\($0.customTitle ?? $0.pageTitle) \($0.url ?? "folder") \(icon($0.faviconPath))"] + items($0.children) }
+            }
+            guard let plan else { return [] }
+            return items(plan.favorites) + plan.spaces.flatMap { ["space \($0.title)"] + items($0.favorites + $0.pinned + $0.today) }
+                + plan.archive.map { "archive \($0.url) \(icon($0.faviconPath))" }
+        }
+        for source in ImportSource.allCases where [.arc, .dia, .yab, .ardia, .phi].contains(source.kind) {
+            let onMain = lines(try? source.plan())
+            var offMain: [String] = []
+            let done = DispatchSemaphore(value: 0)
+            DispatchQueue.global(qos: .userInitiated).async { offMain = lines(try? source.plan()); done.signal() }
+            expect(done.wait(timeout: .now() + 60) == .success, "\(source.name): its plan reads on a background thread without waiting for the main thread")
+            expect(!onMain.isEmpty && offMain == onMain, "\(source.name): read on a background thread, the plan is the one read on main")
+            expect(source.kind != .arc || offMain.contains { !$0.hasSuffix(" -") && !$0.hasPrefix("space ") }, "Arc's plan read there brings its icons")
+        }
+    }
+
+    /// Picking a browser reads its plan through ImportPlanLoader: off the main thread, and a read for
+    /// an earlier pick never lands after a later one, slow archive or not.
+    @MainActor
+    private static func planLoaderReadsOffMainAndKeepsTheLastPick() {
+        let loader = ImportPlanLoader()
+        var delivered: [String] = []
+        func record(_ result: Result<ImportPlan, Error>) { delivered.append((try? result.get().source) ?? "error") }
+        func spin(until done: () -> Bool) {
+            let deadline = Date().addingTimeInterval(10)
+            while !done() && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+        }
+        /// A read that waits for `gate`.
+        func slowRead(_ gate: DispatchSemaphore) -> @Sendable () throws -> ImportPlan {
+            { gate.wait(); return ImportPlan(source: "slow") }
+        }
+        /// Spins until `load`'s task has delivered or dropped its result.
+        func finish(_ load: Task<Void, Never>) {
+            var finished = false
+            Task { @MainActor in await load.value; finished = true }
+            spin { finished }
+            expect(finished, "the earlier pick's read finishes")
+        }
+
+        loader.load({ ImportPlan(source: Thread.isMainThread ? "main thread" : "background") }, done: record)
+        spin { !delivered.isEmpty }
+        expect(delivered == ["background"], "the plan is read off the main thread")
+
+        delivered = []
+        loader.load({ throw CocoaError(.fileReadNoPermission) }, done: record)
+        spin { !delivered.isEmpty }
+        expect(delivered == ["error"], "a read that fails hands over its error")
+
+        delivered = []
+        var gate = DispatchSemaphore(value: 0)
+        var slow = loader.load(slowRead(gate), done: record)
+        loader.load({ ImportPlan(source: "fast") }, done: record)
+        spin { !delivered.isEmpty }
+        gate.signal()
+        finish(slow)
+        expect(delivered == ["fast"], "a slow read for an earlier pick is dropped once a later pick's plan is in")
+
+        delivered = []
+        gate = DispatchSemaphore(value: 0)
+        slow = loader.load(slowRead(gate), done: record)
+        loader.cancel()
+        gate.signal()
+        finish(slow)
+        expect(delivered.isEmpty, "a later pick that reads nothing (Full Disk Access, Safari's export) drops the read in flight")
     }
 
     /// A Chrome-family "User Data" folder whose Default profile has `bookmarks` on its bar and an icon
@@ -3022,6 +3160,62 @@ enum StoreTests {
                "a tab in a space reads back its space's profile and folder (#172)")
         store.deleteSpace(pathSpace)
         store.deleteProfile(paths.id)
+    }
+
+    // promise: #843
+    /// Selecting a shared favorite with an explicit origin space (Picture in Picture's Back to Tab,
+    /// #843) focuses that space instead of staying in the current space or falling back to the
+    /// first space in sidebar order, while falling back cleanly if the space no longer holds it.
+    @MainActor
+    private static func selectSharedFavoriteInSpace() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let home = store.focusedSpaceID
+        for s in store.orderedSpaces where s.id != home { store.deleteSpace(s.id) }
+        store.setProfile(nil, forSpace: home)
+        let entertainment = store.createSpace(title: "Entertainment", emoji: "🎬", focus: false).id
+        let workProfile = store.createProfile(name: "PiP Work")
+        let work = store.createSpace(title: "Work", emoji: "💼", focus: false).id
+        store.setProfile(workProfile.id, forSpace: work)
+        store.setFavoritesShared(true)
+
+        let video = store.createTab(url: "https://example.com/pip-video", in: entertainment, select: false).id
+        store.addToFavorites(video, in: entertainment)
+
+        // Baseline: without an origin space, selecting a shared favorite from another profile's
+        // space lands on Home (the first space in sidebar order that shares it).
+        store.focusSpace(work)
+        store.selectTab(video)
+        expect(store.focusedSpaceID == home && store.selectedTabID == video,
+               "without an origin space, a shared favorite falls back to the first space that shares it")
+
+        // From a space on a different profile: with `in: entertainment`, it returns to Entertainment.
+        store.focusSpace(work)
+        store.selectTab(video, in: entertainment)
+        expect(store.focusedSpaceID == entertainment && store.selectedTabID == video,
+               "selecting a shared favorite with its origin space returns there from another profile's space")
+
+        // From another space on the same profile (Home also shares the favorite): returns to Entertainment.
+        store.focusSpace(home)
+        store.selectTab(video, in: entertainment)
+        expect(store.focusedSpaceID == entertainment && store.selectedTabID == video,
+               "selecting a shared favorite with its origin space returns there even when the current space shares it")
+
+        // If the origin space no longer lists the favorite (different profile or deleted), fall back cleanly.
+        store.focusSpace(work)
+        store.selectTab(video, in: work)
+        expect(store.focusedSpaceID == home && store.selectedTabID == video,
+               "a space that no longer shares the favorite falls back to the default space lookup")
+
+        store.deleteSpace(entertainment)
+        store.focusSpace(work)
+        store.selectTab(video, in: entertainment)
+        expect(store.focusedSpaceID == home && store.selectedTabID == video,
+               "a deleted origin space falls back cleanly instead of focusing a missing space")
+
+        store.removeFromFavorites(video)
+        store.setFavoritesShared(false)
+        store.deleteSpace(work)
+        store.deleteProfile(workProfile.id)
     }
 
     // promise: #86

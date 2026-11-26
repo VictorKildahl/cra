@@ -11,8 +11,9 @@ extension MainWindowController {
     /// is taken at once and moves to the middle of the page with the menu beside it, as in Arc.
     func capturePage(liftImageAt point: NSPoint? = nil, in peek: LittleWindowController? = nil) {
         if let open = captureOverlay, open.isOpen {
+            let sameWindow = open.parentWindow === (peek?.window ?? self.window)
             open.close()
-            if point == nil { return }
+            if point == nil && sameWindow { return }
         }
         guard captureRequest == nil, let source = captureSource(in: peek) else { return }
         let b = source.browser
@@ -91,7 +92,7 @@ extension MainWindowController {
                 guard let b, let source = self.captureSource(in: peek), source.browser === b else { return }
                 guard let image = Self.screenshotImage(shot) else {
                     NSLog("Cra: capture failed: %@", error ?? "no data")
-                    if let peek { peek.showToast("Capture Failed") } else { self.showToast("Capture Failed") }
+                    self.showCaptureToast("Capture Failed", in: peek)
                     return
                 }
                 let overlay = CaptureOverlay(over: source.window, pageRect: source.rect, shot: image, browser: b)
@@ -106,10 +107,26 @@ extension MainWindowController {
         }
     }
 
+    func hasCapture(in peek: LittleWindowController) -> Bool {
+        guard let window = peek.window else { return false }
+        return captureOverlay?.isOpen == true && captureOverlay?.parentWindow === window
+    }
+
     func closeCapture(in peek: LittleWindowController) {
         guard let window = peek.window else { return }
         if captureRequest?.window === window { captureRequest = nil }
         if captureOverlay?.parentWindow === window { captureOverlay?.close() }
+    }
+
+    /// Reveals the host browser window if hidden when an ordinary Little Window sends a capture to
+    /// an easel, so the new or updated easel is visible (#835).
+    func revealForLittleWindowEasel(from peek: LittleWindowController?) {
+        if peek?.isPeek == false, window?.isVisible != true { showWindow(nil) }
+    }
+
+    /// Shows a Capture toast on the Little Window when Capture originated there, else on this window (#835).
+    func showCaptureToast(_ text: String, in peek: LittleWindowController?) {
+        if let peek { peek.showToast(text) } else { showToast(text) }
     }
 
     /// The focused page on screen, whether its view is embedded in the card or in its own window.
