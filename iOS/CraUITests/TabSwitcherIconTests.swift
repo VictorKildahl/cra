@@ -58,6 +58,28 @@ final class TabSwitcherIconTests: BrowserTestCase {
         XCTAssertEqual(card.frame.midX, screen.midX, accuracy: 2, "the lone card is centred: \(card.frame) in \(screen)")
     }
 
+    /// With several tabs, the first and the last card rested 23 pt right of the middle, where a
+    /// card between two others belongs. They have no neighbour on one side, and Arc Search 1.50
+    /// rests them in the middle (recordings of 25 and 26 Nov 2026).
+    func testTheFirstAndTheLastCardRestInTheMiddle() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        app.buttons["bar-tabs"].tap()
+        let first = app.buttons["tab-card-0"], newest = app.buttons["tab-card-1"]
+        XCTAssertTrue(newest.waitForExistence(timeout: 10))
+        sleep(1)
+        let screen = app.windows.firstMatch.frame
+        // The row opens on the card left of the page: the first tab.
+        XCTAssertEqual(first.frame.midX, screen.midX, accuracy: 2, "the first card is centred: \(first.frame) in \(screen)")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)),
+                   withVelocity: .fast, thenHoldForDuration: 0)
+        sleep(1)
+        keep("last-card")
+        XCTAssertEqual(newest.frame.midX, screen.midX, accuracy: 2, "the newest card is centred: \(newest.frame) in \(screen)")
+    }
+
     /// Every card's icon was a rounded square: the page's touch icon, an app icon most sites list
     /// first and largest, was fetched first, and the header clipped whatever it showed to a
     /// rounded square. The fixture names a blue square touch icon, then its own icon, a red
