@@ -5136,6 +5136,9 @@ enum StoreTests {
         syncNeverSendsAnUnreadableEaselAsDeletedAfterARelaunch()
         syncHoldsItsBundleWhileAnUnreadableEaselHasNoCopyToSend()
         useThatSidebarThatFailsAsksAgainOnlyForANewBundle()
+        syncNeverFollowsALinkedEaselsFolder()
+        syncWritesNoPictureThroughALinkedEaselFolder()
+        syncNeverCopiesInALinkedPicture()
     }
 
     /// Sync carried an easel's sidebar row but not the easel: on the other Mac it opened empty.
@@ -5381,6 +5384,78 @@ enum StoreTests {
         expect(relaunched.error?.contains(easel.id.uuidString + ".json") == true, "Settings names the easel file it can't read")
         expect(macs.manifest?.deviceID == "studio" && macs.manifest?.easels?["Easels/\(easel.id.uuidString).json"] != nil,
                "and the folder's bundle still names the easel")
+    }
+
+    // MARK: Links a peer plants in a shared sync folder
+
+    /// A folder outside the sync folder, with a file and a subfolder in it, that a peer's link points at.
+    private static func outsideFolder(in macs: EaselMacs) -> URL {
+        let outside = macs.dir.appendingPathComponent("outside", isDirectory: true)
+        try? FileManager.default.createDirectory(at: outside.appendingPathComponent("sub"), withIntermediateDirectories: true)
+        try? Data("keep".utf8).write(to: outside.appendingPathComponent("keep.txt"))
+        try? Data("x".utf8).write(to: outside.appendingPathComponent("sub/x.txt"))
+        return outside
+    }
+
+    /// A peer replaces the bundle's `Easels` with a link to a folder elsewhere: writes and prune never reach it.
+    @MainActor
+    private static func syncNeverFollowsALinkedEaselsFolder() {
+        let macs = EaselMacs([pictured("Synced")])
+        defer { macs.done() }
+        let outside = outsideFolder(in: macs)
+        let easels = macs.bundle.appendingPathComponent(SettingsSync.easelsName)
+        try? FileManager.default.removeItem(at: easels)
+        try? FileManager.default.createSymbolicLink(at: easels, withDestinationURL: outside)
+        // The folder now lacks what the manifest names: the writing Mac writes its bundle again after a minute.
+        _ = macs.a.createTab(url: "https://example.com/a-change-to-write")
+        macs.clockA.advance(by: 120)
+        let left = (try? FileManager.default.subpathsOfDirectory(atPath: outside.path))?.sorted()
+        expect(left == ["keep.txt", "sub", "sub/x.txt"], "the folder the link points at keeps its files and gets none (\(left ?? []))")
+    }
+
+    /// A peer replaces an easel's picture folder in the bundle with a link: no picture is written through it.
+    @MainActor
+    private static func syncWritesNoPictureThroughALinkedEaselFolder() {
+        let (easel, pictures) = pictured("Its pictures relinked")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        let outside = outsideFolder(in: macs)
+        let pictureFolder = macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(easel.id.uuidString)")
+        try? FileManager.default.removeItem(at: pictureFolder)
+        try? FileManager.default.createSymbolicLink(at: pictureFolder, withDestinationURL: outside)
+        // The folder now lacks what the manifest names: the writing Mac writes its bundle again after a minute.
+        _ = macs.a.createTab(url: "https://example.com/a-change-to-write")
+        macs.clockA.advance(by: 120)
+        let left = (try? FileManager.default.subpathsOfDirectory(atPath: outside.path))?.sorted()
+        expect(left == ["keep.txt", "sub", "sub/x.txt"], "the folder the link points at gets no picture and loses nothing (\(left ?? []))")
+    }
+
+    /// A peer's bundle names a picture that is a link to a file elsewhere on this Mac, with that file's hash:
+    /// it is never read through the link and copied in.
+    @MainActor
+    private static func syncNeverCopiesInALinkedPicture() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let secret = macs.dir.appendingPathComponent("secret.txt")
+        let secretBytes = Data("a file of this Mac's".utf8)
+        try? secretBytes.write(to: secret)
+        let hash = { (data: Data) in SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+        let name = UUID().uuidString + ".png"
+        let planted = Easel(title: "Planted", items: [Easel.Item(kind: .image(file: name), frame: .init(x: 0, y: 0, width: 10, height: 10))])
+        let json = (try? JSONEncoder().encode(planted)) ?? Data()
+        let folder = macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(planted.id.uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? json.write(to: macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(planted.id.uuidString).json"))
+        try? FileManager.default.createSymbolicLink(at: folder.appendingPathComponent(name), withDestinationURL: secret)
+        guard var m = macs.manifest else { return expect(false, "the first Mac wrote a manifest") }
+        m.easels?["\(SettingsSync.easelsName)/\(planted.id.uuidString).json"] = hash(json)
+        m.easels?["\(SettingsSync.easelsName)/\(planted.id.uuidString)/\(name)"] = hash(secretBytes)
+        m.device = "Mini"; m.deviceID = "mini"; m.id = UUID()
+        m.writtenAt = macs.clockB.now.addingTimeInterval(5)
+        macs.write(m)
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        expect(!FileManager.default.fileExists(atPath: macs.easelsB.appendingPathComponent("\(planted.id.uuidString)/\(name)").path),
+               "the file the link points at is not copied into this Mac's easels")
     }
 
     /// Use That Sidebar that fails on an easel says so once: the question comes back only for a new bundle.

@@ -583,7 +583,7 @@ final class SettingsSyncService {
     /// The copy of an easel file this Mac last wrote or applied, read from the sync folder; nil when it isn't there.
     private func sentCopy(_ path: String) -> (hash: String, easel: Easel, json: Data)? {
         guard let folder, let hash = state.lastWritten?.easels?[path], let (id, _) = SettingsSync.easelPath(path),
-              let json = coordinatedRead(folder.appendingPathComponent(path)) else { return nil }
+              let url = bundleURL(path, in: folder), let json = coordinatedRead(url) else { return nil }
         easelReads += 1
         guard Self.hash(json) == hash, let easel = decodeEasel(json), easel.id == id else { return nil }
         return (hash, easel, json)
@@ -667,7 +667,7 @@ final class SettingsSyncService {
         var written: [String: String] = [:]
         for pictures in [true, false] {
             for (path, hash) in easels.files where (SettingsSync.easelPath(path)?.picture != nil) == pictures {
-                let target = folder.appendingPathComponent(path)
+                guard let target = bundleURL(path, in: folder, unlink: true) else { throw CocoaError(.fileWriteNoPermission, userInfo: [NSFilePathErrorKey: path]) }
                 // A picture never changes under its name: one there, or on its way, stays.
                 let there = pictures
                     ? FileManager.default.fileExists(atPath: target.path) || FileManager.default.fileExists(atPath: placeholder(of: target).path)
@@ -692,28 +692,53 @@ final class SettingsSyncService {
         return manifest
     }
 
-    /// Removes the files in the folder's `Easels` that `named` leaves out, and iCloud's placeholders for them.
-    /// Only after this Mac wrote its manifest: a manifest without `easels` (an older Cra's) prunes nothing.
+    /// Removes, file by file and never through a link, the easel paths under the folder's `Easels` that `named` leaves out,
+    /// and their iCloud placeholders. Only after this Mac wrote its manifest: an older Cra's manifest prunes nothing.
     private func prune(_ folder: URL, keeping named: [String: String]) {
         let fm = FileManager.default
-        /// The name is a file `named` has, or iCloud's placeholder for one.
-        func kept(_ name: String, in parent: String) -> Bool {
-            if named["\(parent)/\(name)"] != nil { return true }
-            guard name.hasPrefix("."), name.hasSuffix(".icloud") else { return false }
-            return named["\(parent)/\(name.dropFirst().dropLast(7))"] != nil
+        /// A name sync writes under `parent`, or iCloud's placeholder for one, that `named` leaves out.
+        func gone(_ name: String, in parent: String) -> Bool {
+            let file = name.hasPrefix(".") && name.hasSuffix(".icloud") ? String(name.dropFirst().dropLast(7)) : name
+            return SettingsSync.easelPath("\(parent)/\(file)") != nil && named["\(parent)/\(file)"] == nil
         }
-        let root = folder.appendingPathComponent(SettingsSync.easelsName, isDirectory: true)
+        /// A file goes, or a link as a link; a folder stays.
+        func remove(_ url: URL) {
+            switch (try? fm.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType {
+            case .typeSymbolicLink?: try? fm.removeItem(at: url)
+            case .typeRegular?: coordinatedRemove(url)
+            default: break
+            }
+        }
+        guard let root = bundleURL(SettingsSync.easelsName, in: folder) else { return }
         for name in (try? fm.contentsOfDirectory(atPath: root.path)) ?? [] {
             let url = root.appendingPathComponent(name)
             var isFolder: ObjCBool = false
-            guard fm.fileExists(atPath: url.path, isDirectory: &isFolder), isFolder.boolValue else {
-                if !kept(name, in: SettingsSync.easelsName) { coordinatedRemove(url) }
+            guard !Self.isLink(url), fm.fileExists(atPath: url.path, isDirectory: &isFolder), isFolder.boolValue else {
+                if gone(name, in: SettingsSync.easelsName) { remove(url) }
                 continue
             }
-            let inside = (try? fm.contentsOfDirectory(atPath: url.path)) ?? []
-            let gone = inside.filter { !kept($0, in: "\(SettingsSync.easelsName)/\(name)") }
-            if gone.count == inside.count { coordinatedRemove(url) } else { for f in gone { coordinatedRemove(url.appendingPathComponent(f)) } }
+            // An easel's picture folder, emptied file by file; rmdir takes it only once nothing is left.
+            guard UUID(uuidString: name)?.uuidString == name else { continue }
+            let parent = "\(SettingsSync.easelsName)/\(name)"
+            for file in (try? fm.contentsOfDirectory(atPath: url.path)) ?? [] where gone(file, in: parent) { remove(url.appendingPathComponent(file)) }
+            rmdir(url.path)
         }
+    }
+
+    /// Where a path under `Easels/` is in a bundle folder; nil when a part of it from the folder down is a link, which a
+    /// peer on a shared folder may plant to point elsewhere on this Mac. `unlink` removes such links (the links only) first.
+    private func bundleURL(_ path: String, in folder: URL, unlink: Bool = false) -> URL? {
+        var url = folder
+        for part in path.split(separator: "/") {
+            url.appendPathComponent(String(part))
+            guard Self.isLink(url) else { continue }
+            guard unlink, (try? FileManager.default.removeItem(at: url)) != nil else { return nil }
+        }
+        return url
+    }
+
+    private static func isLink(_ url: URL) -> Bool {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeSymbolicLink
     }
 
     private func coordinatedWrite(_ data: Data, to url: URL) throws {
@@ -826,7 +851,7 @@ final class SettingsSyncService {
     private func easelStates(_ paths: [String: String], in folder: URL) -> [String: SyncFileState] {
         var states: [String: SyncFileState] = [:]
         for path in paths.keys where SettingsSync.easelPath(path) != nil {
-            let url = folder.appendingPathComponent(path)
+            guard let url = bundleURL(path, in: folder) else { states[path] = .missing; continue }
             states[path] = isArriving(url) ? .downloading : fileHash(url, coordinated: true).map { .present(hash: $0) } ?? .missing
         }
         return states
@@ -838,7 +863,7 @@ final class SettingsSyncService {
         for (path, hash) in paths {
             guard let (id, picture) = SettingsSync.easelPath(path), picture == nil else { continue }
             let read = { () -> Easel? in
-                guard let data = self.coordinatedRead(folder.appendingPathComponent(path)) else { return nil }
+                guard let url = self.bundleURL(path, in: folder), let data = self.coordinatedRead(url) else { return nil }
                 self.easelReads += 1
                 return Self.hash(data) == hash ? self.decodeEasel(data) : nil
             }
@@ -948,7 +973,7 @@ final class SettingsSyncService {
             guard let (id, picture) = SettingsSync.easelPath(path), touched.contains(id) else { continue }
             let target = localURL(path)
             if picture != nil, fm.fileExists(atPath: target.path) { continue }
-            guard let data = coordinatedRead(from.appendingPathComponent(path)), Self.hash(data) == hash else {
+            guard let source = bundleURL(path, in: from), let data = coordinatedRead(source), Self.hash(data) == hash else {
                 throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: path])
             }
             if picture == nil { bytes[id] = data; continue }
