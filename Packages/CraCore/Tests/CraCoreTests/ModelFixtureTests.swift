@@ -207,6 +207,19 @@ struct ModelFixtureTests {
         #expect(NSDictionary(dictionary: saved).isEqual(to: file))
     }
 
+    /// Since easels sync, each bundle in sync-history.json keeps its easels (without pictures), what
+    /// Easel.merge merges against. An entry, or a whole history, from an older Cra has none.
+    @Test func syncHistoryWithEaselsLoadsAsRecorded() throws {
+        let (loaded, recorded) = try Self.load("sync-history-easels.json", as: SyncHistory.self)
+        #expect(loaded == recorded)
+        #expect(loaded.entries.map { $0.easels?.map(\.title) } == [["Board", "Plan"], nil])
+        #expect(try Self.load("sync-history.json", as: SyncHistory.self).loaded.entries.allSatisfy { $0.easels == nil })
+        #expect(try Self.roundTrips(loaded))
+        let saved = try #require(JSONSerialization.jsonObject(with: Self.encoder.encode(loaded)) as? [String: Any])
+        let file = try #require(JSONSerialization.jsonObject(with: Self.data("recorded", "sync-history-easels.json")) as? [String: Any])
+        #expect(NSDictionary(dictionary: saved).isEqual(to: file))
+    }
+
     @Test func archiveHistoryAndRankingLoadAsRecorded() throws {
         let archive = try Self.load("archive.json", as: [ArchivedItem].self)
         #expect(archive.loaded == archive.recorded)

@@ -141,11 +141,15 @@ public struct SyncHistory: Codable, Equatable {
         /// The bundle's settings, what SettingsMerge merges against. Nil in a history an older Cra wrote: that bundle's
         /// settings replace this Mac's whole, as before.
         public var settings: AppSettings?
+        /// The bundle's easels without their pictures, what Easel.merge merges against. Nil for a bundle without
+        /// easels and in a history an older Cra wrote: then no easel is deleted.
+        public var easels: [Easel]?
 
-        public init(id: UUID, document: SidebarDocument, settings: AppSettings? = nil) {
+        public init(id: UUID, document: SidebarDocument, settings: AppSettings? = nil, easels: [Easel]? = nil) {
             self.id = id
             self.document = document
             self.settings = settings
+            self.easels = easels
         }
     }
 
@@ -155,9 +159,9 @@ public struct SyncHistory: Codable, Equatable {
 
     public init() {}
 
-    public mutating func remember(_ id: UUID, _ document: SidebarDocument, settings: AppSettings? = nil) {
+    public mutating func remember(_ id: UUID, _ document: SidebarDocument, settings: AppSettings? = nil, easels: [Easel]? = nil) {
         entries.removeAll { $0.id == id }
-        entries.insert(Entry(id: id, document: document, settings: settings), at: 0)
+        entries.insert(Entry(id: id, document: document, settings: settings, easels: easels), at: 0)
         if entries.count > Self.limit { entries.removeLast(entries.count - Self.limit) }
     }
 
@@ -176,6 +180,11 @@ public struct SyncHistory: Codable, Equatable {
     /// The settings of the same bundle `base(for:)` picks; nil when it has none (written by an older Cra).
     public func baseSettings(for manifest: SyncManifest) -> AppSettings? {
         baseEntry(for: manifest)?.settings
+    }
+
+    /// The easels of the same bundle `base(for:)` picks; nil when it has none (no easels, or an older Cra's).
+    public func baseEasels(for manifest: SyncManifest) -> [Easel]? {
+        baseEntry(for: manifest)?.easels
     }
 
     private func baseEntry(for manifest: SyncManifest) -> Entry? {
