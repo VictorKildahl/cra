@@ -138,7 +138,6 @@ struct SharedBoostTests {
     }
 
     static let everyFieldSheet = """
-        :where(html) { background-color: Canvas; }
         html { filter: invert(1) hue-rotate(180deg) sepia(0.4) hue-rotate(178deg) saturate(1.8) contrast(1.2) brightness(0.9) saturate(1.1) !important; }
         img, video, picture, canvas, iframe, svg image { filter: invert(1) hue-rotate(180deg) !important; }
         body, body * { font-family: "Georgia", sans-serif !important; }
@@ -157,13 +156,11 @@ struct SharedBoostTests {
         let boost = try #require(SharedBoost.from(json: Data(Self.everyField.utf8)))
         #expect(boost.boost().stylesheet(engineTints: true) == Self.everyFieldEngineSheet)
         let tintOnly = try #require(SharedBoost.from(json: Data(#"{"v":1,"name":"Blue","host":"example.com","hue":0.6,"strength":0.4}"#.utf8)))
-        #expect(tintOnly.boost().stylesheet(engineTints: true) == ":where(html) { background-color: Canvas; }",
-                "the engine tints the page, but the canvas needs a background inside the tinted subtree")
+        #expect(tintOnly.boost().stylesheet(engineTints: true) == "", "a boost that only tints puts no CSS on the page")
         #expect(tintOnly.boost().tint != nil, "the engine draws its tint")
     }
 
     static let everyFieldEngineSheet = """
-        :where(html) { background-color: Canvas; }
         html { filter: invert(1) hue-rotate(180deg) contrast(1.2) brightness(0.9) saturate(1.1) !important; }
         img, video, picture, canvas, iframe, svg image { filter: invert(1) hue-rotate(180deg) !important; }
         body, body * { font-family: "Georgia", sans-serif !important; }

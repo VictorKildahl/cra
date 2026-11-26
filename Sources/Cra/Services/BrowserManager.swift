@@ -1673,8 +1673,29 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         // A new document has nothing adopted: no call unless there is a boost to put on it.
         guard boost != nil || clearing else { return }
         adopt(boost?.css ?? "", as: "__craBoost", in: browser)
+        applyBoostCanvasFallback(boost?.css.contains("filter:") == true, in: browser)
         if engineTints { browser.setBoostTint(boost?.tint) }
         if let js = boost?.js, !js.isEmpty { browser.executeJavaScript(js) }
+    }
+
+    /// A CSS filter on `html` also needs the page's background inside the filtered subtree, but only
+    /// when the page has no background of its own: a fallback would otherwise replace a site's
+    /// colours. Both `html` and `body` must compute transparent; a tint-only boost has no CSS filter
+    /// and is left alone (#846).
+    private func applyBoostCanvasFallback(_ needed: Bool, in browser: CraBrowser) {
+        guard !(browser is NativePage), PageEngines.engine(of: browser) == .chromium else { return }
+        adopt("", as: "__craBoostCanvas", in: browser)
+        guard needed else { return }
+        let js = "(()=>{const h=getComputedStyle(document.documentElement).backgroundColor;"
+            + "const b=getComputedStyle(document.body||document.documentElement).backgroundColor;"
+            + "const clear=s=>!s||s==='transparent'||s==='rgba(0, 0, 0, 0)';"
+            + "return clear(h)&&clear(b)?'yes':'no';})()"
+        browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { result, _ in
+            DispatchQueue.main.async {
+                guard Self.stringResult(result) == "yes" else { return }
+                self.adopt("html { background-color: Canvas !important; }", as: "__craBoostCanvas", in: browser)
+            }
+        }
     }
 
     /// Every page on `host` gets its boost again (the editor's changes, live).

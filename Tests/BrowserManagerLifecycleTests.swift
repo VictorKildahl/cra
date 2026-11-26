@@ -1107,9 +1107,11 @@ enum BrowserManagerLifecycleTests {
         store.settings.blockCookieBanners = false
         rt.browser.navigate(to: "https://example.test/themed")
         manager.browser(rt.browser, didChangeCommittedLoad: true)
-        expect(rt.browser.replies.contains { $0.method == isolatedProbe } && rt.browser.lastIsolatedParams.contains("__craBoost")
-               && rt.browser.lastIsolatedParams.contains("h1 { color: red }") && rt.browser.scripts.last == "window.boosted = 1",
-               "a boosted site's page gets the boost's CSS and runs its script")
+        expect(rt.browser.replies.contains { $0.method == isolatedProbe }
+               && rt.browser.isolatedParams.contains { $0.contains("__craBoost") && $0.contains("h1 { color: red }") }
+               && rt.browser.isolatedParams.contains { $0.contains("__craBoostCanvas") }
+               && rt.browser.scripts.last == "window.boosted = 1",
+               "a boosted site's page gets the boost's CSS, a Canvas fallback check, and its script")
         expect(rt.browser.boostTint == "0.7,0.125,0.27,0.5,0.108,0.838", "and the engine its colours, drawn around images (#602)")
         BrowserManager.boostFor = nil
         manager.closeAll()
