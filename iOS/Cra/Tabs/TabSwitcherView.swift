@@ -20,6 +20,10 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     private var row = MobileTabRow(cards: [])
     private var views: [UUID: TabCardView] = [:]
     private var cards: [TabCardView] { row.cards.compactMap { views[$0] } }
+    /// The strip between the page's bottom and the screen's edge (the bar's own band), in the
+    /// page's own colour while a card fills the screen: the bar's material must not show the row's
+    /// backdrop there mid-transition.
+    private let bottomFill = UIView()
     private(set) var position: CGFloat = 0
     private var dragStart: CGFloat = 0
     private var draggedCard: TabCardView?
@@ -33,6 +37,10 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     var expandedID: UUID?
     /// The status band's height at full size: each card's own band is that, scaled with the card.
     var bandHeight: CGFloat = 0 { didSet { setNeedsLayout() } }
+    /// The page's view bottom at full size: the safe area's edge under the bar (the bar's top
+    /// before iOS 26). A card that fills the screen stops there, under the bar too, so the page it
+    /// becomes is exactly where the card was.
+    var pageBottom: CGFloat? { didSet { setNeedsLayout() } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -40,6 +48,9 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         background.startPoint = CGPoint(x: 0, y: 0)
         background.endPoint = CGPoint(x: 1, y: 1)
         layer.addSublayer(background)
+        bottomFill.isUserInteractionEnabled = false
+        bottomFill.alpha = 0
+        addSubview(bottomFill)
         applyColors()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: TabSwitcherView, _) in view.applyColors() }
 
@@ -95,11 +106,21 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         background.frame = bounds
         CATransaction.commit()
         layoutCards()
+        let bottom = pageBottom ?? bounds.height
+        bottomFill.frame = CGRect(x: 0, y: bottom, width: bounds.width, height: max(0, bounds.height - bottom))
+    }
+
+    /// The strip below the page takes `colour` while a card fills the screen; hidden (`alpha` 0)
+    /// with the row, so the bar's own slab and this strip come and go together.
+    func setBottomFill(_ colour: UIColor?, alpha: CGFloat) {
+        bottomFill.backgroundColor = colour
+        bottomFill.alpha = alpha
     }
 
     private func layoutCards() {
         let screen = bounds.size
         guard screen.width > 0 else { return }
+        let bottom = pageBottom ?? screen.height
         let expandedIndex = cards.firstIndex { $0.tabID == expandedID }
         var frames: [(frame: CGRect, placement: MobileTabCarousel.Placement)] = []
         var fills: [CGFloat] = []
@@ -129,7 +150,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
             let (frame, placement) = frames[index]
             // The card in front covers this one's right part: the title stops before it (#816).
             let next = index + 1 < cards.count && !row.isThrown(cards[index + 1].tabID) ? frames[index + 1].frame.minX : nil
-            card.layout(frame: frame, screen: screen, bandHeight: bandHeight, fill: fills[index],
+            card.layout(frame: frame, screen: screen, bottom: bottom, bandHeight: bandHeight, fill: fills[index],
                         dim: placement.dim * (1 - expansion), headerAlpha: 1 - min(1, expansion * 2),
                         titleAlpha: MobileTabCarousel.titleAlpha(relative: CGFloat(index) - position),
                         nextCardLeft: next, scale: placement.scale)
@@ -256,7 +277,7 @@ final class TabCardView: UIView {
         clip.layer.cornerCurve = .continuous
         clip.backgroundColor = Palette.dynamic(light: .white, dark: Palette.rgb(0x2a2a2e))
         addSubview(clip)
-        picture.contentMode = .scaleToFill
+        picture.contentMode = .scaleAspectFill
         clip.addSubview(picture)
         dimmer.backgroundColor = Palette.rgb(0x1a1a3a)
         dimmer.alpha = 0
@@ -304,10 +325,11 @@ final class TabCardView: UIView {
     }
 
     /// Places the card. `frame` is its place in the row; `fill` (0…1) grows it to the whole
-    /// `screen`, where its band takes the status bar's strip and its picture the rest.
-    func layout(frame row: CGRect, screen: CGSize, bandHeight: CGFloat, fill: CGFloat, dim: CGFloat,
+    /// `screen` down to `bottom`, where its band takes the status bar's strip and its picture the
+    /// page's own area.
+    func layout(frame row: CGRect, screen: CGSize, bottom: CGFloat, bandHeight: CGFloat, fill: CGFloat, dim: CGFloat,
                 headerAlpha: CGFloat, titleAlpha: CGFloat, nextCardLeft: CGFloat?, scale: CGFloat) {
-        let full = CGRect(origin: .zero, size: screen)
+        let full = CGRect(x: 0, y: 0, width: screen.width, height: bottom)
         let frame = CGRect(x: row.minX + (full.minX - row.minX) * fill, y: row.minY + (full.minY - row.minY) * fill,
                            width: row.width + (full.width - row.width) * fill, height: row.height + (full.height - row.height) * fill)
         cardFrame = frame

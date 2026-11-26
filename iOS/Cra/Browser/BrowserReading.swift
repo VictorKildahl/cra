@@ -43,7 +43,7 @@ extension BrowserViewController {
         guard let page = shownPage, summaryHost == nil else { return }
         let id = page.tabID
         let tab = store.tabs.first { $0.id == id }
-        page.takeSnapshot { [weak self] image in
+        page.takeSnapshot(height: pageViewHeight) { [weak self] image in
             guard let self else { return }
             if let image { self.store.setSnapshot(image, for: id) }
             let model = SummaryModel(title: tab?.displayTitle ?? "", favicon: tab.flatMap { self.favicons.icon(for: $0.url) },
@@ -164,13 +164,21 @@ extension BrowserViewController {
 
     /// Above the bar at the right; only with the device's own model, and only while the page is
     /// on screen with its bar.
-    func layoutBrowseToggle(barTop: CGFloat) {
+    /// `recheck` false is a frame of the bar's travel: whether the switch is offered cannot change
+    /// then, and working it out asks the device's model, so the last answer stands.
+    func layoutBrowseToggle(barTop: CGFloat, recheck: Bool = true) {
         browseToggle.frame = MobileBrowseToggle.frame(screenWidth: view.bounds.width, barTop: barTop)
-        let visible = browseToggleState != nil && BrowseForMe.isAvailable && !isSearching && switcher == nil
-            && !barHiddenByScroll && !(shownPage?.isBrowsing ?? false) && readerView == nil
-        browseToggle.alpha = visible ? 1 : 0
-        browseToggle.isUserInteractionEnabled = visible
-        browseToggle.accessibilityElementsHidden = !visible
+        if recheck {
+            browseToggleOffered = browseToggleState != nil && BrowseForMe.isAvailable && !isSearching && switcher == nil
+                && !(shownPage?.isBrowsing ?? false) && readerView == nil
+        }
+        // It rides above the bar and goes with it, out of reach once the bar is not all there.
+        browseToggle.alpha = browseToggleOffered ? 1 - barCollapse.progress : 0
+        let live = browseToggleOffered && barCollapse.progress < 0.01
+        if browseToggle.isUserInteractionEnabled != live {
+            browseToggle.isUserInteractionEnabled = live
+            browseToggle.accessibilityElementsHidden = !live
+        }
     }
 
     func browseTogglePicked(_ side: MobileBrowseToggle.Side) {

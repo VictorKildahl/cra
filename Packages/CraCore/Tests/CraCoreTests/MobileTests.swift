@@ -83,6 +83,17 @@ struct MobileChromeTests {
         #expect(frames.pill.midX == 187.5)
     }
 
+    /// Dragged down, the bar's top edge runs from its open place to the safe area's line: 776 to
+    /// 818 on this phone, its own 42 pt of travel, and no further.
+    @Test func theBarsTopEdgeRidesItsTravel() {
+        let size = CGSize(width: 393, height: 852)
+        #expect(MobileBottomBar.top(in: size, safeBottom: 34, progress: 0) == 776)
+        #expect(MobileBottomBar.top(in: size, safeBottom: 34, progress: 0.5) == 797)
+        #expect(MobileBottomBar.top(in: size, safeBottom: 34, progress: 1) == 818)
+        #expect(MobileBottomBar.top(in: size, safeBottom: 34, progress: 2) == 818, "clamped")
+        #expect(MobileBottomBar.top(in: size, safeBottom: 34, progress: -1) == 776, "clamped")
+    }
+
     /// With the bar scrolled away, a tap on the home indicator's strip brings it back (#509).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/509"))
     func aTapUnderThePageBringsTheBarBack() {
@@ -1330,6 +1341,15 @@ struct MobileFavoritesTests {
 }
 
 struct MobileMotionTests {
+    /// The shared ease-out starts quick, ends soft and stays inside 0...1.
+    @Test func theEaseOutLeavesQuicklyAndSettlesSoftly() {
+        #expect(MobileMotion.easeOut(0) == 0 && MobileMotion.easeOut(1) == 1)
+        #expect(MobileMotion.easeOut(0.5) == 0.875)
+        #expect(MobileMotion.easeOut(-1) == 0 && MobileMotion.easeOut(2) == 1)
+        #expect(MobileMotion.easeOut(0.1) > 0.25, "a quick start")
+        #expect(MobileMotion.easeOut(0.9) > 0.99, "a soft end")
+    }
+
     /// Arc Search's tab row: each frame leaves about 0.54 of the distance of the frame before,
     /// once the motion is under way.
     @Test func theTabRowSettlesAtArcSearchsRate() {

@@ -125,7 +125,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         case .began:
             guard let page = shownPage else { return }
             let id = page.tabID
-            page.takeSnapshot { [weak self] image in
+            page.takeSnapshot(height: pageViewHeight) { [weak self] image in
                 guard let self, self.barSwipeOpensRow, self.switcher == nil else { return }
                 if let image { self.store.setSnapshot(image, for: id) }
                 _ = self.prepareSwitcher()
@@ -203,7 +203,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 fitOld(1)
             } else {
                 // Ease out: the drop off the page is quick to start and settles softly.
-                let raised = 1 - pow(1 - l, 3)
+                let raised = MobileMotion.easeOut(l)
                 let landed = frame(from: source, to: liftFrame, raised)
                 let settled = frame(from: landed, to: oldFrame, p)
                 oldCard.bounds = CGRect(origin: .zero, size: settled.size)
@@ -593,6 +593,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         switch pan.state {
         case .began:
             captureSnapshot()
+            showSwapBackdrop(for: shownPage)
             swipeNeighbourCard?.removeFromSuperview()
             swipeNeighbourCard = nil
         case .changed:
@@ -601,16 +602,18 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 swipeNeighbourCard = nil
                 swipeNeighbourStep = step
                 if let tab {
-                    let top = pageContentFrame.minY
+                    let top = view.safeAreaInsets.top
+                    let background = pageBackground(for: tab.id)
                     let card = UIView(frame: view.bounds)
-                    card.backgroundColor = .systemBackground
+                    card.backgroundColor = background
                     card.clipsToBounds = true
                     let content = UIImageView(image: store.snapshot(tab.id))
-                    content.backgroundColor = .systemBackground
+                    content.backgroundColor = background
                     content.contentMode = .scaleAspectFill
                     content.clipsToBounds = true
-                    // The page's content sits below its band, not under it.
-                    content.frame = pageContentFrame
+                    // The page's content sits below its band and runs on under the bar, as the
+                    // page it becomes will.
+                    content.frame = restingPageViewFrame
                     card.addSubview(content)
                     // The incoming tab already has its band at full height: only the tab row
                     // animates the band's size.
@@ -651,6 +654,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 self.pageContainer.transform = .identity
                 picture?.removeFromSuperview()
                 if self.swipeNeighbourCard === picture { self.swipeNeighbourCard = nil }
+                self.hideSwapBackdrop()
             }
         default: break
         }
@@ -707,11 +711,14 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             // Follows the finger where the swipe leads somewhere, and drags its feet where it doesn't.
             let leads = outcome(x > 0 ? width : -width, 0) != .none
             pageContainer.transform = CGAffineTransform(translationX: leads ? x : x / 4, y: 0)
+            if pageContainer.transform != .identity { showSwapBackdrop(for: page) }
         case .ended, .cancelled:
             let decided = pan.state == .ended ? outcome(x, pan.velocity(in: view).x) : .none
             guard decided != .none else {
                 UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: []) {
                     self.pageContainer.transform = .identity
+                } completion: { _ in
+                    self.hideSwapBackdrop()
                 }
                 return
             }
@@ -750,12 +757,16 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             }
         case .none: break
         }
-        // What comes next arrives from the side the old page left to.
+        // What comes next arrives from the side the old page left to. The floor under it takes
+        // the arriving page's colour, if it is another tab.
+        showSwapBackdrop(for: shownPage)
         pageContainer.transform = CGAffineTransform(translationX: -away * 0.3, y: 0)
         pageContainer.alpha = 0
         UIView.animate(withDuration: 0.28, delay: 0, options: [.curveEaseOut]) {
             self.pageContainer.transform = .identity
             self.pageContainer.alpha = 1
+        } completion: { _ in
+            self.hideSwapBackdrop()
         }
     }
 

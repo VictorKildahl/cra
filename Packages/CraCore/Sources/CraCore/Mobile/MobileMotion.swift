@@ -3,6 +3,16 @@ import Foundation
 
 /// The iPhone app's springs, fitted to Arc Search's footage (30 frames a second, docs/ios.md).
 public enum MobileMotion {
+    /// A cubic ease-out over `t` from 0 to 1: it leaves quickly and settles softly. The bottom
+    /// bar's snap, the pull's ring and a closing tab's drop share it.
+    public static func easeOut(_ t: CGFloat) -> CGFloat {
+        let t = min(1, max(0, t))
+        return 1 - pow(1 - t, 3)
+    }
+
+    /// How long the bottom bar takes to walk to an end once the finger lets go.
+    public static let barSnap: Double = 0.25
+
     /// A spring by how long one period would take and how damped it is; 1 is critically damped
     /// (no overshoot).
     public struct Spring: Equatable, Sendable {

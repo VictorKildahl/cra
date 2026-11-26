@@ -24,8 +24,11 @@ final class BottomBar: UIView {
     private let hairline = UIView()
     /// The white ring Arc Search draws round the menu button while its blocker tip points at it.
     private let menuRing = UIView()
+    /// Whether the slab was last hidden for the tab row or the home screen, rather than faded by
+    /// the search sheet: coming back from those, it has to appear whole.
+    private var wasFloating = false
     var ringsMenu = false {
-        didSet { menuRing.alpha = ringsMenu ? 1 : 0 }
+        didSet { applyFade() }
     }
 
     /// 1 with every control showing; 0 while the search sheet is open and only the pill's place
@@ -34,6 +37,21 @@ final class BottomBar: UIView {
         didSet {
             applyMode()
         }
+    }
+
+    /// 0 with the bar open, 1 with it closed away along the safe area. Its controls fade out with
+    /// it and stop taking touches, so the strip it leaves is only the way back.
+    var collapseProgress: CGFloat = 0 {
+        didSet {
+            guard collapseProgress != oldValue else { return }
+            // Set on every frame of the bar's slide: only the fade changes.
+            applyFade()
+        }
+    }
+
+    /// 1 while the pill is the page's, 0 while the search sheet's field stands in for it.
+    var pillVisibility: CGFloat = 1 {
+        didSet { applyFade() }
     }
 
     override init(frame: CGRect) {
@@ -61,19 +79,52 @@ final class BottomBar: UIView {
         applyMode()
     }
 
-    /// Shows the page's controls or the tab switcher's. Animates inside an animation block.
+    /// The controls' opacity, faded as the bar slides away, and whether they take touches. The
+    /// only part of the bar's look that its slide changes.
+    private func applyFade() {
+        let visible = controlsVisibility
+        let fade = 1 - collapseProgress
+        let tabs = mode == .tabs
+        tabsButton.alpha = (tabs ? 0 : visible) * fade
+        menuButton.alpha = (tabs ? 0 : visible) * fade
+        spacesButton.alpha = (tabs ? visible : 0) * fade
+        settingsButton.alpha = (tabs ? visible : 0) * fade
+        // The pill has its own visibility: it is the search field's starting point, and the field
+        // stands in for it while the sheet is open.
+        pill.alpha = pillVisibility * fade
+        menuRing.alpha = (ringsMenu ? 1 : 0) * fade
+        // Faded or away, the controls take no touches: the strip along the safe area is the way
+        // back, not a half-faded button.
+        let live = visible > 0.01 && collapseProgress < 0.01
+        // The slide sets this every frame; the controls only change at its ends.
+        guard live != pill.isUserInteractionEnabled else { return }
+        [tabsButton, spacesButton, pill, menuButton, settingsButton].forEach { $0.isUserInteractionEnabled = live }
+    }
+
+    /// Shows the page's controls or the tab switcher's, faded as the bar slides away. Animates
+    /// inside an animation block.
     private func applyMode() {
+        applyFade()
         let visible = controlsVisibility
         let tabs = mode == .tabs
-        tabsButton.alpha = tabs ? 0 : visible
-        menuButton.alpha = tabs ? 0 : visible
-        spacesButton.alpha = tabs ? visible : 0
-        settingsButton.alpha = tabs ? visible : 0
         // Over the switcher the bar has no slab of its own: the buttons float on the backdrop,
         // tinted with its lavender (Arc Search: pill #dfddf2, circles #f0effd on #fcfafd). The
-        // empty home screen's bar floats the same way.
+        // empty home screen's bar floats the same way. The blur goes with the bar, not the fade:
+        // its strip is all that is left of the bar when it is closed.
         let floats = tabs || overBackdrop
-        blur.alpha = floats ? 0 : visible
+        let slabAlpha = floats ? 0 : visible
+        if wasFloating, !floats {
+            // The slab comes back with the page, whole: animating its opacity up from the row's
+            // no-slab state leaves the material see-through for the length of the close.
+            blur.layer.removeAnimation(forKey: "opacity")
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            blur.layer.opacity = Float(slabAlpha)
+            CATransaction.commit()
+        } else {
+            blur.alpha = slabAlpha
+        }
+        wasFloating = floats
         pill.backgroundColor = tabs ? Palette.switcherPillFill : overBackdrop ? Palette.homeButtonFill : Palette.barControlFill
         menuButton.backgroundColor = overBackdrop ? Palette.homeButtonFill : Palette.barControlFill
         pill.setSymbol("plus", pointSize: tabs ? 20.5 : 16, weight: .semibold)
