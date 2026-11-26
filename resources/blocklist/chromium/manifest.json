@@ -2,14 +2,16 @@
   "manifest_version": 3,
   "name": "Cra network filters",
   "description": "Applies the filter lists selected in Cra\u2019s Privacy settings.",
-  "version": "1.1",
+  "version": "1.2",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuCa0v+zNMw+fT8ArJ4vYkSzdzBNzcRcGZN0LONjLCSZ1BC3OJ9Q1qsjZ8/D4DlaPgE7lYbdSyFWtGA3FeRIvxBIx3GrpG+t+rLr26JdhRyg6X3HM60k39jv4VHs0FJm8t4wuoT9PO7xBNZtchbf/XEJG+v4+U8Fxd+t4wymAIICXUA3Gqv5/7FjVrQj+Erz3E0zTUn9+8AFuhJkPwXPLMSzHOnp7uOZd7abu1kLSfewRWG4Fgm8wSkL6LPMByuHwcFGcFKJfcz0g7QUjbPXYNJUQBPciIr3LEl7MSr9D9HyO+CT8ztXtSMNJ5cUdopBLiE/tQiE/ZN7L/rthOo33wwIDAQAB",
   "permissions": [
     "declarativeNetRequest",
     "nativeMessaging",
     "storage",
-    "alarms"
+    "alarms",
+    "scripting"
   ],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "filters.js"
   }

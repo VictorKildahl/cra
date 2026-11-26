@@ -16,6 +16,11 @@ expect-log Cra cdp Runtime.evaluate .*"value":"added:none"
 # neighbouring story stays visible, and removing the unit restores the slot.
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const slot=document.createElement('aside'),story=document.createElement('aside');slot.innerHTML='<div>Advertisement</div>';story.textContent='Story';document.body.append(slot,story);const visible=e=>getComputedStyle(e).display!=='none';const before=visible(slot);const unit=document.createElement('div');unit.dataset.adUnitId='banner';slot.firstChild.append(unit);const hidden=!visible(slot),storyVisible=visible(story);unit.remove();return [before,hidden,storyVisible,visible(slot)].join(',')})()"}
 expect-log Cra cdp Runtime.evaluate .*"value":"true,true,true,true"
+# The replacement hide rule matches only slots outside the style exclusion.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const slot=document.createElement('div');slot.id='div-gpt-ad-1';slot.textContent='Reserved';document.body.append(slot);const hidden=slot.offsetHeight===0;slot.setAttribute('style','width: 1px; height: 1px;');return 'qualified:'+hidden+','+(slot.offsetHeight>0)})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"qualified:true,true"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const slot=document.createElement('div');slot.dataset.ad='unit';slot.dataset.adUnit='banner';document.body.append(slot);const empty=getComputedStyle(slot).display;slot.textContent='Publisher content';return ['empty-slot',empty,getComputedStyle(slot).display].join(',')})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"empty-slot,none,block"
 cra://debug?toggleSiteFilters=http://reader.example:47134/page.html
 cra://debug?cdp=Runtime.evaluate&params={"expression":"'paused:'+getComputedStyle(document.getElementById('filter-list-fixture')).display"}
 expect-log Cra cdp Runtime.evaluate .*"value":"paused:block"

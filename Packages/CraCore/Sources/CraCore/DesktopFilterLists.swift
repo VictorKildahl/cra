@@ -146,9 +146,27 @@ public struct DesktopHidingRules {
     private static let scopedToken = try! NSRegularExpression(pattern:
         #"(?::(?:has|not|is|where)\(|\)|[ >+~,]|[.#]?[a-zA-Z_][a-zA-Z0-9_-]*|\*|\[[a-zA-Z][a-zA-Z0-9_-]*(?:[~|^$*]?=(?:"[a-zA-Z0-9_ .:/?=&%-]*"|'[a-zA-Z0-9_ .:/?=&%-]*'|[a-zA-Z0-9_-]+))?\])"#)
 
+    // Native class and attribute exclusions on a simple selector can also be global.
+    // Semicolons are valid inside a quoted style attribute value.
+    private static let simpleExclusion = try! NSRegularExpression(pattern:
+        #":not\((?:\.[a-zA-Z_][a-zA-Z0-9_-]*|\[[a-zA-Z][a-zA-Z0-9_-]*(?:[~|^$*]?=(?:"[a-zA-Z0-9_ .:/?=&%;-]*"|'[a-zA-Z0-9_ .:/?=&%;-]*'|[a-zA-Z0-9_-]+))?\])\)"#)
+
     private static func supports(_ value: String, scoped: Bool) -> Bool {
         var range = NSRange(value.startIndex..., in: value)
         if selector.firstMatch(in: value, range: range) != nil { return true }
+        if value.hasSuffix(":empty") {
+            let base = String(value.dropLast(6))
+            return selector.firstMatch(in: base, range: NSRange(base.startIndex..., in: base)) != nil
+        }
+        if let exclusion = value.range(of: ":not("),
+           selector.firstMatch(in: value, range: NSRange(value.startIndex..<exclusion.lowerBound, in: value)) != nil {
+            var rest = NSRange(exclusion.lowerBound..<value.endIndex, in: value)
+            while let token = simpleExclusion.firstMatch(in: value, options: .anchored, range: rest) {
+                rest.location += token.range.length
+                rest.length -= token.range.length
+                if rest.length == 0 { return true }
+            }
+        }
         guard scoped, value.contains(":has(") else { return false }
         let source = value as NSString
         var depth = 0
@@ -209,7 +227,14 @@ public struct DesktopHidingRules {
             }
         }
         hidden.subtract(exceptions)
-        return hidden.sorted().map { $0 + "{display:none!important}" }.joined(separator: "\n")
+        var css = hidden.sorted().map { $0 + "{display:none!important}" }.joined(separator: "\n")
+        // Some utility styles force an ad slot back to display:block and reserve a fixed height.
+        // Collapse only slots whose hide rule survived the user's cosmetic exceptions.
+        let slots = [".ad-container", ".dfp-slot", #"[id^="div-gpt-ad"]"#].filter(hidden.contains)
+        if !slots.isEmpty {
+            css += "\n" + slots.joined(separator: ",") + "{min-block-size:0!important;max-block-size:0!important;overflow:clip!important}"
+        }
+        return css
     }
 
     public static func read(_ text: String, address: String, fetched: Date) -> CachedBlocklist {

@@ -8,6 +8,7 @@ final class TabRuntime {
     let tabID: UUID
     let browser: CraBrowser
     var hasElementHidingStyle = false
+    var recoveryOptions = 0
     var progress: Double = 0
     /// The toolbar's colour as read off the page (ToolbarSampler), "" until read.
     var themeColor: String = ""
@@ -1627,6 +1628,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         if committed {
             if let runtime = runtimes[id] {
                 runtime.hasElementHidingStyle = false
+                runtime.recoveryOptions = 0
                 applyElementHiding(to: runtime)
             }
             shareTheme(id, with: browser)
@@ -1644,9 +1646,20 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         let browser = runtime.browser
         guard let url = URL(string: browser.currentURL), let scheme = url.scheme,
               ["http", "https"].contains(scheme.lowercased()), let host = url.host else { return }
+        let active = !BlockLists.shared.isPaused(url: browser.currentURL)
+        let cookies = active && store.settings.blockCookieBanners
+        let warnings = active && store.settings.customBlocklists.contains(DesktopFilterList.warningListAddress)
+            && !store.settings.disabledCustomBlocklists.contains(DesktopFilterList.warningListAddress)
+        let options = (cookies ? 1 : 0) + (warnings ? 2 : 0)
+        if options != runtime.recoveryOptions, let recovery = Self.pageRecovery {
+            runtime.recoveryOptions = options
+            runPageScript("(\(recovery))(\(cookies),\(warnings))", in: browser)
+        }
         let css = BlockLists.shared.style(for: host)
         guard runtime.hasElementHidingStyle || !css.isEmpty else { return }
-        adopt(css, as: "__craListFilters", in: browser)
+        // Important declarations in a layer outrank unlayered site author styles.
+        let layered = css.isEmpty ? "" : "@layer cra-list-filters {\n" + css + "\n}"
+        adopt(layered, as: "__craListFilters", in: browser)
         runtime.hasElementHidingStyle = !css.isEmpty
     }
 
@@ -1684,12 +1697,19 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         }
     }
 
+    private static let pageRecovery = Bundle.main.url(forResource: "page-recovery", withExtension: "js", subdirectory: "blocklist")
+        .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+
     /// A stylesheet adopted by the page's document from Cra's world, kept under `name` there so a
     /// later commit of the same document replaces it.
     private func adopt(_ css: String, as name: String, in browser: CraBrowser) {
         guard let literal = String(data: (try? JSONSerialization.data(withJSONObject: [css], options: [])) ?? Data(), encoding: .utf8) else { return }
         let script = "(()=>{let s=window.\(name);if(!s){s=window.\(name)=new CSSStyleSheet();"
             + "document.adoptedStyleSheets=[...document.adoptedStyleSheets,s];}s.replaceSync(\(literal)[0]);})()"
+        runPageScript(script, in: browser)
+    }
+
+    private func runPageScript(_ script: String, in browser: CraBrowser) {
         guard let params = try? JSONSerialization.data(withJSONObject: ["expression": script]),
               let json = String(data: params, encoding: .utf8) else { return }
         browser.evaluate(inIsolatedWorld: PageScript.world, params: json) { _, _ in }

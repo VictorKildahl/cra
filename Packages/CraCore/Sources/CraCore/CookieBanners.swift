@@ -13,7 +13,7 @@ public enum CookieBanners {
         ".truste_box_overlay", "#usercentrics-root", "#usercentrics-cmp-ui", ".cky-consent-container", ".cky-overlay",
         ".osano-cm-window", "#iubenda-cs-banner", "#cmplz-cookiebanner-container", ".cmplz-cookiebanner", "#termly-code-snippet-support",
         "[id^=\"sp_message_container\"]", ".klaro .cookie-notice", "#BorlabsCookieBox", "#axeptio_overlay",
-        ".fc-consent-root", ".cc-window", ".cc-banner", "#cookie-law-info-bar", "#cookie-notice",
+        "#fides-banner-container", ".fc-consent-root", ".cc-window", ".cc-banner", "#cookie-law-info-bar", "#cookie-notice",
     ]
 
     /// The stylesheet a page gets: the banners hidden, scrolling back where a banner locked it.
@@ -21,6 +21,12 @@ public enum CookieBanners {
         let hide = selectors.joined(separator: ", ") + " { display: none !important; visibility: hidden !important; }"
         let unlock = "html.sp-message-open, body.didomi-popup-open, body.cmplz-blocked-content, body.cky-modal-open, "
             + "body.onetrust-consent-sdk-open { overflow: auto !important; position: static !important; }"
-        return hide + " " + unlock
+        // Sourcepoint can fix the body as well as the root while its message is open.
+        let sourcepointBody = "html.sp-message-open:has([id^=sp_message_container]) > body"
+            + " { overflow: auto !important; position: static !important; }"
+        // Fides keeps its preferences dialog in the DOM even when closed.
+        let fidesBody = #"body.fides-no-scroll:has(#fides-banner-container):not(:has(#fides-modal:not([aria-hidden="true"]), dialog[open]))"#
+            + " { overflow-y: auto !important; }"
+        return [hide, unlock, sourcepointBody, fidesBody].joined(separator: " ")
     }()
 }

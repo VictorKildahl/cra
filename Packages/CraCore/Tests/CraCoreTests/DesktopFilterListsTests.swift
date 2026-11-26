@@ -190,8 +190,40 @@ struct DesktopFilterListsTests {
         #expect(hiding.css(host: "www.20min.ch") == selector + "{display:none!important}")
         #expect(hiding.css(host: "reader.20min.ch").isEmpty)
         #expect(hiding.css(host: "other.ch").isEmpty)
-        let previous = list.text.replacingOccurrences(of: "# network-format: 2", with: "# network-format: 1")
+        let previous = list.text.replacingOccurrences(of: "# network-format: 3", with: "# network-format: 2")
         #expect(CachedBlocklist(text: previous)?.hasNetworkSource == false)
+    }
+
+    @Test func attributeExclusionsReplaceGenericSlotRuleAndRespectHostExceptions() {
+        let slot = #"[id^="div-gpt-ad"]"#
+        let refined = slot + #":not([style^="width: 1px; height: 1px; position: absolute; left: -10000px; top: -"]):not([style="pointer-events: none; height: 1px; width: 0px; opacity: 0; visibility: hidden; position: fixed; bottom: 0px;"])"#
+        let lines = ["##" + slot, "#@#" + slot, "~except.example##" + refined,
+                     "other.example#@#" + refined, "##" + refined + "{color:red}",
+                     "##" + refined + ":style(height:0)", "##" + refined + ","]
+        let list = DesktopHidingRules.read(lines.joined(separator: "\n"), address: "", fetched: .now)
+        #expect(list.hidingRules == Array(lines.prefix(4)))
+        let rules = DesktopHidingRules(lines: list.hidingRules)
+        #expect(rules.css(host: "news.example") == refined + "{display:none!important}")
+        #expect(rules.css(host: "sub.except.example").isEmpty)
+        #expect(rules.css(host: "other.example").isEmpty)
+    }
+
+    @Test func compoundClassExceptionsAndEmptySlotsPreserveTheWholeSelector() {
+        let refined = ".ad-slot:not(.adsbox):not(.adsbygoogle)"
+        let empty = "[data-ad][data-ad-unit]:empty"
+        let lines = ["##.ad-slot", "#@#.ad-slot", "##" + refined, "##" + empty,
+                     "except.example#@#" + refined, "##.ad-slot:not(.a,.b)", "##:empty"]
+        let list = DesktopHidingRules.read(lines.joined(separator: "\n"), address: "", fetched: .now)
+        #expect(list.hidingRules == Array(lines.prefix(5)))
+        let rules = DesktopHidingRules(lines: list.hidingRules)
+        #expect(rules.css(host: "example.org").contains(refined + "{display:none!important}"))
+        #expect(rules.css(host: "except.example") == empty + "{display:none!important}")
+    }
+
+    @Test func collapsingReservedSpaceRespectsCosmeticExceptions() {
+        let rules = DesktopHidingRules(lines: ["##.dfp-slot", "reader.example#@#.dfp-slot", "##.sponsor"])
+        #expect(rules.css(host: "news.example").contains(".dfp-slot{min-block-size:0!important"))
+        #expect(rules.css(host: "reader.example") == ".sponsor{display:none!important}")
     }
 
     @Test func hidingAndExceptionsUseDomainBoundaries() {
