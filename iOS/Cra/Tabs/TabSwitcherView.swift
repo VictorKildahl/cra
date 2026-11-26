@@ -105,7 +105,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         var fills: [CGFloat] = []
         for (index, card) in cards.enumerated() {
             let relative = CGFloat(index) - position
-            let placement = MobileTabCarousel.placement(relative: relative, in: screen, sideInsets: sideInsets)
+            let placement = MobileTabCarousel.placement(relative: relative, in: screen, sideInsets: sideInsets, alone: cards.count == 1)
             var frame = placement.frame
             frame = frame.insetBy(dx: frame.width * (1 - placement.scale) / 2, dy: frame.height * (1 - placement.scale) / 2)
             if row.isThrown(card.tabID) {

@@ -566,6 +566,20 @@ struct MobileTabCarouselTests {
         #expect(MobileTabCarousel.placement(relative: -0.5, in: Self.phone).dim == 0.08)
     }
 
+    /// With only one tab, Arc Search puts its card in the middle of the screen (Brady Sewall's picture on #816, an
+    /// iPhone 440 pt wide: the card 66 to 374 pt); Cra kept it left of centre, where a card with a neighbour sits.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/816")) func aLoneCardSitsInTheMiddle() {
+        for screen in [Self.phone, CGSize(width: 440, height: 956)] {
+            let alone = MobileTabCarousel.placement(relative: 0, in: screen, alone: true).frame
+            #expect(abs(alone.midX - screen.width / 2) < 0.5, "centred on \(screen.width): \(alone)")
+            #expect(alone.size == MobileTabCarousel.placement(relative: 0, in: screen).frame.size)
+        }
+        let big = MobileTabCarousel.placement(relative: 0, in: CGSize(width: 440, height: 956), alone: true).frame
+        #expect(abs(big.minX - 66) < 2 && abs(big.maxX - 374) < 2, "where Arc Search has it: \(big)")
+        // With a neighbour the card in focus stays where Arc Search puts it, left of centre.
+        #expect(abs(MobileTabCarousel.placement(relative: 0, in: Self.phone).frame.minX - 83) < 0.1)
+    }
+
     @Test func draggingFollowsTheFingerAndResistsPastTheEnds() {
         let pitch = MobileTabCarousel.pitch(in: Self.phone)
         #expect(MobileTabCarousel.position(start: 1, translation: -pitch, count: 3, in: Self.phone) == 2)

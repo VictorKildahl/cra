@@ -1804,8 +1804,10 @@
 #806   Tests/StoreTests.swift::removedFavoriteComesBackOnUndo  c33625f266f6
 #807   Packages/CraCore/Tests/CraCoreTests/CommandBarClosingTests.swift::aClickRightAfterOpeningClosesTheBar  d2c109866e10
 #807   Tests/Scenarios/command-bar-quick-click.scenario  a1ae474d93fd
+#816   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aLoneCardSitsInTheMiddle  b7c3dcd36125
 #816   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::onlyTheCardInFocusShowsItsTitle  5eacdc53a690
 #816   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theFocusedTitleStopsBeforeTheCardInFront  77639a7af889
+#816   iOS/CraUITests/TabSwitcherIconTests.swift::testALoneCardSitsInTheMiddle  a525b83c8604
 #816   iOS/CraUITests/TabSwitcherIconTests.swift::testOnlyTheFocusedCardIsTitledAndItsTitleStopsBeforeTheNextCard  b046f3fd2493
 #817   Tests/Scenarios/hidden-page-late-frame.scenario  cc6ea4fc470c
 #818   Packages/CraCore/Tests/CraCoreTests/SidebarHeaderHitTests.swift::neighbouringButtonsLeaveNoDeadSpace  bcd899a069b8

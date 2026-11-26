@@ -29,11 +29,13 @@ public enum MobileTabCarousel {
     }
 
     /// Where a card sits when it is `relative` cards right of the one in focus (negative: left of
-    /// it; fractions while the row is being dragged).
-    public static func placement(relative: CGFloat, in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0)) -> Placement {
+    /// it; fractions while the row is being dragged). `alone`: the only tab, which Arc Search puts in the
+    /// middle of the screen (#816); a card with neighbours sits left of centre.
+    public static func placement(relative: CGFloat, in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0),
+                                 alone: Bool = false) -> Placement {
         let width = screen.width - sideInsets.left - sideInsets.right
         let size = cardSize(in: CGSize(width: width, height: screen.height))
-        let focusLeft = sideInsets.left + width * 0.2112
+        let focusLeft = sideInsets.left + (alone ? (width - size.width) / 2 : width * 0.2112)
         let step = relative >= 0 ? pitch(in: screen, sideInsets: sideInsets) : width * 0.1858
         let left = focusLeft + relative * step
         let top = screen.height * 0.5147 - size.height / 2

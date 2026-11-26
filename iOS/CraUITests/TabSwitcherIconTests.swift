@@ -43,6 +43,21 @@ final class TabSwitcherIconTests: BrowserTestCase {
         XCTAssertLessThanOrEqual(end, cards[2].frame.minX - 8, "its title stops before the card in front")
     }
 
+    // promise: #816
+    /// With one tab, Arc Search puts its card in the middle of the screen (Brady Sewall's picture on #816); Cra kept it left
+    /// of centre, where a card with a neighbour sits.
+    func testALoneCardSitsInTheMiddle() {
+        launch(["-CraOpenURL", Self.page("Alone"), "-CraSearch", "NO"])
+        waitForPage("Alone")
+        app.buttons["bar-tabs"].tap()
+        let card = app.buttons["tab-card-0"]
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        sleep(1)
+        keep("lone-card")
+        let screen = app.windows.firstMatch.frame
+        XCTAssertEqual(card.frame.midX, screen.midX, accuracy: 2, "the lone card is centred: \(card.frame) in \(screen)")
+    }
+
     /// Every card's icon was a rounded square: the page's touch icon, an app icon most sites list
     /// first and largest, was fetched first, and the header clipped whatever it showed to a
     /// rounded square. The fixture names a blue square touch icon, then its own icon, a red
