@@ -16,6 +16,8 @@ enum FloatingSidebarTests {
         let shell = ShellView(frame: NSRect(origin: .zero, size: window.frame.size))
         window.contentView = shell
         let sidebar = FloatingSidebarController(shell: shell, window: window, palette: { SpacePalette() })
+        // No mouse button held, whatever the Mac's real mouse is doing: another test's drag made the hide checks fail.
+        sidebar.pressedMouseButtons = { 0 }
         sidebar.sidebarHidden = { true }
         // Do not install the pointer timer or post input events. The real controller
         // and AppKit animation completions run with an offscreen disposable panel.
@@ -352,6 +354,12 @@ enum FloatingSidebarTests {
         sample(120, mid, at: 501.1)
         expect(sidebar.isShown, "coming back in over the sidebar keeps it")
         sample(-100, mid, at: 501.2)
+        // A held button keeps it out (a drag); this check used to read the Mac's real mouse, so another test's drag
+        // running at the same time made the next one fail.
+        sidebar.pressedMouseButtons = { 1 }
+        sample(-100, shell.bounds.maxY + 30, at: 501.25)
+        expect(sidebar.isShown, "while a button is held it stays out")
+        sidebar.pressedMouseButtons = { 0 }
         sample(-100, shell.bounds.maxY + 30, at: 501.3)
         expect(!sidebar.isShown, "above the window's top it goes, as in Arc")
         sidebar.hide(animated: false)

@@ -1,0 +1,47 @@
+# promise: #844
+# Cra's own network-filter helper (Resources/blocklist/chromium, "Cra network filters") runs the network rules of
+# Settings ▸ Privacy, and is shown nowhere else (#844): chrome://extensions doesn't list it or open its page,
+# chrome.management doesn't see it and can't switch it off or remove it, and its rules keep blocking after
+# every try. 0.1.58 listed it in chrome://extensions with Remove and a switch, which looked like a fake ad blocker.
+port 47136
+pace 0.5
+budget rss=800 stalls50=30
+arg --host-resolver-rules=MAP assets.fixture.example 127.0.0.1, MAP other.example 127.0.0.1
+cra://debug?blockAds=off
+expect-log block ads and trackers: off
+cra://open?url=http://other.example:47136/page.html
+expect-log loaded other\.example \(HTTP 200\)
+# A list with a network rule starts the helper.
+cra://debug?blockLists=http://127.0.0.1:47136/network-filter-test.txt
+expect-log GET /network-filter-test\.txt
+expect-log network filter revision active:
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://assets.fixture.example:47136/icon-blue.png?before',{mode:'no-cors'}).then(()=>'sent',e=>'before:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"before:TypeError"
+reject-log GET /icon-blue\.png\?before
+
+# chrome://extensions: not in the list, no page of its own. (No & in an expression: it ends the cra:// query.)
+cra://open?url=chrome://extensions
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.developerPrivate.getExtensionsInfo({includeDisabled:true,includeTerminated:true}).then(l=>'listed:'+l.filter(i=>i.id==='nddccjlgchhhajchaphmkffkclfmcemb').length)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"listed:0"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.developerPrivate.getExtensionInfo('nddccjlgchhhajchaphmkffkclfmcemb').then(i=>'info:'+i.name,e=>'info:none')","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"info:none"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const m=document.querySelector('extensions-manager');const l=m?m.shadowRoot.querySelector('extensions-item-list'):null;const ids=l?(l.extensions||[]).map(e=>e.id):[];return 'shown:'+ids.filter(i=>i==='nddccjlgchhhajchaphmkffkclfmcemb').length+'/'+(l?'list':'nolist')})()"}
+expect-log Cra cdp Runtime.evaluate .*"value":"shown:0/list"
+
+# chrome.management (which chrome://extensions and other extensions use): unseen, can't be switched off or removed.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.management.getAll().then(l=>'management:'+l.filter(i=>i.id==='nddccjlgchhhajchaphmkffkclfmcemb').length)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"management:0"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.management.setEnabled('nddccjlgchhhajchaphmkffkclfmcemb',false).then(()=>'disable went through',e=>'disable refused')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*disable (refused|went through)
+reject-log disable went through
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.management.uninstall('nddccjlgchhhajchaphmkffkclfmcemb',{showConfirmDialog:false}).then(()=>'uninstall went through',e=>'uninstall refused')","awaitPromise":true,"userGesture":true}
+expect-log Cra cdp Runtime.evaluate .*uninstall (refused|went through)
+reject-log uninstall went through
+
+# Its rules still block.
+cra://open?url=http://other.example:47136/page.html?after
+expect-log loaded other\.example \(HTTP 200\)
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('http://assets.fixture.example:47136/icon-blue.png?after',{mode:'no-cors'}).then(()=>'sent',e=>'after:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"after:TypeError"
+reject-log GET /icon-blue\.png\?after

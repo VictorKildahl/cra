@@ -1822,6 +1822,13 @@ struct MobileSelectionQueryTests {
 
 /// Links from other apps' share sheets, waiting in the App Group for the app.
 struct MobileShareInboxTests {
+    /// #829: "Tabs" and "Favorites" read like the Mac's synced Spaces, so a link seemed to go to the Mac and didn't. The
+    /// share sheet's places say they are the iPhone's own, until the phone can save into a Mac Space (Arc Search's places).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/829")) func thePlacesSayTheyAreOnTheIPhone() {
+        #expect(MobileShareInbox.Destination.tabs.label == "iPhone Tabs")
+        #expect(MobileShareInbox.Destination.favorites.label == "iPhone Favorites")
+    }
+
     /// A saved link joins the row behind what is on screen.
     @Test func aSavedLinkJoinsTheRowWithoutTakingTheScreen() {
         let now = Date(timeIntervalSince1970: 0)

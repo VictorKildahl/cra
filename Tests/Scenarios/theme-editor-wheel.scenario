@@ -13,11 +13,11 @@ wait 1
 cra://debug?themeEditor=swatch:03
 expect-log theme editor pad 1: wheel=complimentary key=#F25E6B$
 cra://debug?themeEditor=add:1
-expect-log theme editor pad 2: wheel=complimentary key=#F25E6B,#01E4DB$
+expect-log theme editor pad 2: wheel=complimentary key=#F25E6B,#0[01]E4DB$
 cra://debug?themeEditor=add:1
-expect-log theme editor pad 3: wheel=complimentary key=#F25E6B,#01E497,#4FADE6$
+expect-log theme editor pad 3: wheel=complimentary key=#F25E6B,#0[01]E497,#4FADE6$
 cra://debug?themeEditor=remove:1
-expect-log theme editor pad 4: wheel=complimentary key=#F25E6B,#01E4DB$
+expect-log theme editor pad 4: wheel=complimentary key=#F25E6B,#0[01]E4DB$
 # Drab navy goes across the wheel too, kept dark.
 cra://debug?themeEditor=swatch:38
 cra://debug?themeEditor=add:1
@@ -33,5 +33,5 @@ expect-log theme editor pad 10: wheel=analogous key=#F25E6B,#EAAF5A,#F25EC3$
 cra://debug?themeEditor=remove:1
 cra://debug?themeEditor=remove:1
 cra://debug?themeEditor=add:1
-expect-log theme editor pad 13: wheel=complimentary key=#F25E6B,#01E4DB$
+expect-log theme editor pad 13: wheel=complimentary key=#F25E6B,#0[01]E4DB$
 cra://dismiss

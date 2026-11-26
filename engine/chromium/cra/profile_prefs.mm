@@ -3,6 +3,8 @@
 
 #include "cra/profile_prefs.h"
 
+#include "cra/managed_extensions.h"
+
 #include <map>
 #include <memory>
 #include <optional>
@@ -201,6 +203,8 @@ class Profiles : public ProfileManagerObserver, public ProfileObserver {
  private:
   void Added(Profile* profile, bool notify) {
     ApplySettings(profile);
+    // Shared extensions stay installed in it (GitHub discussion #595).
+    WatchManagedExtensions(profile);
     if (!observations_.IsObservingSource(profile)) {
       observations_.AddObservation(profile);
     }

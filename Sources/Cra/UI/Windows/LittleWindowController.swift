@@ -1810,7 +1810,7 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
         case "stop": browser?.stopLoading()
         case "zoomIn": if let b = browser { b.setZoomLevel(b.zoomLevel() + 0.5) }
         case "zoomOut": if let b = browser { b.setZoomLevel(b.zoomLevel() - 0.5) }
-        case "resetZoom": browser?.setZoomLevel(0)
+        case "resetZoom": browser?.resetZoom()
         case "copyURL": copyURL()
         case "copyURLMarkdown":
             copy("[\(browser?.currentTitle ?? state.title)](\(currentURL))")

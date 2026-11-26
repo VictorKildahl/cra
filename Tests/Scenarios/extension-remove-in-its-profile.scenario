@@ -1,0 +1,30 @@
+# promise: #842
+# Settings ▸ Extensions ▸ Remove… on a Web Store extension that isn't shared opens its chrome://extensions page in a
+# profile that has it: Chrome removes a profile's own install from that profile's page only. It opened in the space
+# Settings came from, and there the page didn't know the extension (reported by Anoninz, discussion #595). The
+# extension ends up only in Hobbies (shared, taken out of Default, then no longer shared), and Remove… is asked for
+# from the Personal space, on Default.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+extension ${FIXTURES}/Extension
+cra://open?url=${PAGE}?n=personal&space=A0000000-0000-0000-0000-000000000001
+wait 3
+cra://debug?shareExtension=${EXTENSION_ID}
+expect-log shared extension ${EXTENSION_ID}: shared with every profile
+cra://open?url=${PAGE}?n=random&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?shareExtension=${EXTENSION_ID}&profile=Default&included=0
+expect-log shared extension ${EXTENSION_ID}: taken out of Default
+cra://debug?stopSharing=${EXTENSION_ID}
+expect-log shared extension ${EXTENSION_ID}: no longer shared
+cra://debug?extensionProfiles=hobbies-only
+expect-log extension profiles hobbies-only: ${EXTENSION_ID} In Hobbies$
+cra://open?url=${PAGE}?n=personal-again&space=A0000000-0000-0000-0000-000000000001
+wait 3
+cra://debug?removePage=${EXTENSION_ID}
+expect-log extension removal ${EXTENSION_ID}: pages in \[Profile B0000000-0000-0000-0000-000000000001\]
+wait 3
+# The page that opened knows the extension: it is Hobbies' chrome://extensions, not Default's.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.developerPrivate.getExtensionInfo('${EXTENSION_ID}').then(i=>'removal-page:'+location.href+' found '+i.name,e=>'removal-page:'+location.href+' missing '+e.message)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*removal-page:chrome://extensions/\?id=${EXTENSION_ID} found Cra Scenario Fixture

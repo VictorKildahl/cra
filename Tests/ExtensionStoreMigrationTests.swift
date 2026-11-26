@@ -268,7 +268,92 @@ enum ExtensionStoreMigrationTests {
         }
     }
 
+    /// Shared extensions (discussion #595): what Settings' Share, profile checkmarks and Remove do to each profile.
+    static func sharedExtensions() throws {
+        let work = "Profile W"
+        let workPath = { AppPaths.chromiumCache.appendingPathComponent(work, isDirectory: true).path }
+        /// A store install in Default only, Work loaded with nothing; Settings lists Default and Work.
+        func setUp(_ install: Install) throws -> ExtensionStore {
+            try FileManager.default.removeItem(at: install.copy)
+            try install.installStoreCopy()
+            try install.liveSettings(install.settings())
+            try install.liveSettings([:], profile: work)
+            CraCEFRuntime.managed = [:]
+            CraCEFRuntime.installs = []
+            ExtensionStore.profileFoldersSource = { ["Default", work] }
+            let store = ExtensionStore()
+            store.reload()
+            return store
+        }
+        func liveIDs(_ key: String) -> Set<String> {
+            let json = CraCEFRuntime.settingsByProfile[key] ?? "{}"
+            return Set(((try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any] ?? [:]).keys)
+        }
+        func savedShares() -> SharedExtensions { ExtensionStore.loadShared() }
+
+        try run("shared-into-every-profile") { install in
+            let store = try setUp(install)
+            guard let e = store.entries.first(where: { $0.extensionID == install.id }) else { return check(false, "the store install is listed") }
+            check(e.fromWebStore && e.managedByChrome, "a store install is one Settings can share")
+            store.share(e)
+            check(savedShares().isShared(install.id), "the share is saved, so it survives a relaunch")
+            check(CraCEFRuntime.managed == ["Default": [install.id], work: [install.id]], "Chrome keeps it in both profiles")
+            check(CraCEFRuntime.installs.map(\.profile) == [workPath()], "only the profile that lacks it gets the store's install")
+            check(CraCEFRuntime.uninstallExtension(install.id, profilePath: nil) == false && liveIDs("Default").contains(install.id),
+                  "chrome://extensions can't remove it while it is shared")
+        }
+
+        try run("shared-taken-out-of-a-loaded-profile") { install in
+            let store = try setUp(install)
+            guard let e = store.entries.first(where: { $0.extensionID == install.id }) else { return check(false, "listed") }
+            store.share(e)
+            try install.liveSettings(install.settings(), profile: work)  // the store installed it there
+            store.setShared(e, profile: work, included: false)
+            check(!liveIDs(workPath()).contains(install.id), "taken out of Work: removed there")
+            check(liveIDs("Default").contains(install.id), "Default keeps it")
+            check(CraCEFRuntime.managed == ["Default": [install.id]], "Chrome lets go of it in Work only")
+            store.reload()
+            check(savedShares().removals.isEmpty, "the removal is done, so a later install in Work stays")
+        }
+
+        try run("shared-removal-waits-for-the-profile") { install in
+            let store = try setUp(install)
+            guard let e = store.entries.first(where: { $0.extensionID == install.id }) else { return check(false, "listed") }
+            store.share(e)
+            CraCEFRuntime.settingsByProfile[workPath()] = nil  // Work not loaded this session
+            let onDisk = AppPaths.chromiumCache.appendingPathComponent(work, isDirectory: true)
+            try install.writeSettings(install.settings(), in: onDisk)
+            store.setShared(e, profile: work, included: false)
+            check(savedShares().removals[work] == [install.id], "Work owes the removal until it loads")
+            try install.liveSettings(install.settings(), profile: work)  // a space on Work opens
+            store.reconcileShared(profile: work)
+            check(!liveIDs(workPath()).contains(install.id), "removed from Work once it loaded")
+            check(savedShares().removals.isEmpty, "and owed no more")
+        }
+
+        try run("shared-removed-everywhere") { install in
+            let store = try setUp(install)
+            guard let e = store.entries.first(where: { $0.extensionID == install.id }) else { return check(false, "listed") }
+            store.share(e)
+            try install.liveSettings(install.settings(), profile: work)
+            store.removeShared(e)
+            check(!liveIDs("Default").contains(install.id) && !liveIDs(workPath()).contains(install.id), "Remove takes it out of every profile")
+            check(!savedShares().isShared(install.id) && CraCEFRuntime.managed.isEmpty, "and stops sharing it")
+        }
+
+        try run("stop-sharing-keeps-installs") { install in
+            let store = try setUp(install)
+            guard let e = store.entries.first(where: { $0.extensionID == install.id }) else { return check(false, "listed") }
+            store.share(e)
+            store.stopSharing(e)
+            check(liveIDs("Default").contains(install.id), "Stop Sharing removes nothing")
+            check(CraCEFRuntime.managed.isEmpty, "chrome://extensions manages it again")
+            check(!FileManager.default.fileExists(atPath: AppPaths.file("shared-extensions.json").path), "nothing shared: no file")
+        }
+    }
+
     static func main() throws {
+        try sharedExtensions()
         try removedCopiesStayRemoved()
         try pinnedComeOnlyFromAnImportedBrowser()
 

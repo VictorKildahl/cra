@@ -23,6 +23,7 @@ suite "Web features map" python3 -I scripts/web-features.py
 suite "Web features check" python3 Tests/test_web_features.py
 suite "Notarize dist (#720)" scripts/test-notarize-dist.sh
 suite "Load paths (#720)" scripts/test-load-paths.sh
+suite "Scenario lines" scripts/test-scenario-line.sh
 if [ "${1:-}" != core ]; then
   suite "Browser manager" Tests/test-browser-manager.sh
   suite "Ask on Page DOM" scripts/test-ask-on-page-content.sh
@@ -62,6 +63,7 @@ if [ "${1:-}" != core ]; then
   suite "Feed counts kept on promote" scripts/test-feed-counts.sh
   suite "Command bar glyph" scripts/test-command-bar-glyph.sh
   suite "Command bar address selection" scripts/test-field-editor-selection.sh
+  suite "Command bar typing undo" scripts/test-field-typing-undo.sh
   suite "Folder glyph" scripts/test-folder-glyph.sh
   suite "Tidy title layout" scripts/test-tidy-title-layout.sh
   suite "Tidy title requests" scripts/test-tidy-titles.sh

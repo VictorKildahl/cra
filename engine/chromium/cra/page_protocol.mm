@@ -539,14 +539,11 @@ using WebStoreDone = base::OnceCallback<void(base::DictValue result, std::string
 // as the store's "Add to Chrome" does: WebstoreInstaller fetches the signed CRX, CrxInstaller checks the store's
 // signature, and it lands as INTERNAL and from the Web Store. No prompt: Cra asks only for extensions the person
 // chose to bring over. The CEF patch's code (freezing-vote.patch).
-void InstallFromWebStore(content::WebContents* contents, const base::DictValue* params, WebStoreDone done) {
-  const std::string* id = params ? params->FindString("id") : nullptr;
-  const base::DictValue* manifest = params ? params->FindDict("manifest") : nullptr;
+void InstallInProfile(Profile* profile, const std::string* id, const base::DictValue* manifest, WebStoreDone done) {
   if (!id || !crx_file::id_util::IdIsValid(*id) || !manifest) {
     std::move(done).Run(base::DictValue(), "needs a valid extension id and its manifest");
     return;
   }
-  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
   if (!profile || profile->IsOffTheRecord()) {
     std::move(done).Run(base::DictValue(), "not in an off-the-record profile");
     return;
@@ -583,6 +580,11 @@ void InstallFromWebStore(content::WebContents* contents, const base::DictValue* 
           page, std::move(split.second)),
       page->contents.get(), *id, std::move(approval), extensions::WebstoreInstaller::INSTALL_SOURCE_OTHER);
   installer->Start();
+}
+
+void InstallFromWebStore(content::WebContents* contents, const base::DictValue* params, WebStoreDone done) {
+  InstallInProfile(Profile::FromBrowserContext(contents->GetBrowserContext()), params ? params->FindString("id") : nullptr,
+                   params ? params->FindDict("manifest") : nullptr, std::move(done));
 }
 
 // Cra.* methods. Fills `result` or `error`.
@@ -693,6 +695,16 @@ void HandleCraMethod(content::WebContents* contents,
 }
 
 }  // namespace
+
+void InstallFromWebStore(Profile* profile,
+                         const std::string& id,
+                         const base::DictValue& manifest,
+                         base::OnceCallback<void(std::string error)> done) {
+  InstallInProfile(profile, &id, &manifest,
+                   base::BindOnce([](base::OnceCallback<void(std::string)> done, base::DictValue,
+                                     std::string error) { std::move(done).Run(std::move(error)); },
+                                  std::move(done)));
+}
 
 bool MediaPositionNow(content::WebContents* contents, double* position, double* duration) {
   MediaSessionWatch* watch = MediaSessionWatch::FromWebContents(contents);

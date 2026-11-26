@@ -21,6 +21,7 @@
 #include "cra/downloads.h"
 #include "cra/fetch.h"
 #include "cra/history.h"
+#include "cra/managed_extensions.h"
 #include "cra/page_protocol.h"
 #include "cra/permission_prompt.h"
 #include "cra/profile_prefs.h"
@@ -41,6 +42,7 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/json/json_reader.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
@@ -675,6 +677,22 @@ void PlaceChromeWindow(NSWindow* window) {
   window.animationBehavior = NSWindowAnimationBehaviorNone;
 }
 
+// Whether a window's centre is on no Cra window on screen (and there is one).
+BOOL AwayFromCraWindows(NSWindow* window) {
+  NSPoint centre = NSMakePoint(NSMidX(window.frame), NSMidY(window.frame));
+  BOOL anyCraWindow = NO;
+  for (NSWindow* w in NSApp.windows) {
+    if (w == window || !w.isVisible || w.parentWindow || w.alphaValue == 0 || [g_host_windows containsObject:w]) {
+      continue;
+    }
+    if (NSPointInRect(centre, w.frame)) {
+      return NO;
+    }
+    anyCraWindow = YES;
+  }
+  return anyCraWindow;
+}
+
 // A window of Chrome's for a page, where it is now: away when its centre is on no Cra window on screen.
 void NoteChromeWindowShown(NSWindow* window) {
   if (!window) {
@@ -684,19 +702,44 @@ void NoteChromeWindowShown(NSWindow* window) {
   if (window.animationBehavior != NSWindowAnimationBehaviorNone) {
     g_page_windows_animated++;
   }
-  NSPoint centre = NSMakePoint(NSMidX(window.frame), NSMidY(window.frame));
-  BOOL anyCraWindow = NO;
-  for (NSWindow* w in NSApp.windows) {
-    if (w == window || !w.isVisible || w.parentWindow || w.alphaValue == 0 || [g_host_windows containsObject:w]) {
-      continue;
-    }
-    if (NSPointInRect(centre, w.frame)) {
-      return;
-    }
-    anyCraWindow = YES;
-  }
-  if (anyCraWindow) {
+  if (AwayFromCraWindows(window)) {
     g_page_windows_away++;
+  }
+}
+
+// Every window of Chrome's views (NativeWidgetMacNSWindow: a bubble, a popup, an animation, Chrome's own windows) as
+// it comes on screen, and the ones that came on screen off every Cra window, with where the last of those was: for
+// cra://debug?pageWindows=. With Cra on a second display, a window of Cra's ordered in on the primary display takes
+// that display off a full-screen Space to a desktop: Chrome's download arrow did, from the primary display's corner
+// (GitHub #774), as page windows did (#354).
+NSInteger g_chrome_windows_shown = 0;
+NSInteger g_chrome_windows_away = 0;
+NSString* g_chrome_window_away_last = @"none";
+
+void CountChromeWindowsShown() {
+  Class cls = NSClassFromString(@"NativeWidgetMacNSWindow");
+  SEL selector = @selector(orderWindow:relativeTo:);
+  Method method = cls ? class_getInstanceMethod(cls, selector) : nullptr;
+  if (!method) {
+    return;
+  }
+  using OrderIMP = void (*)(id, SEL, NSWindowOrderingMode, NSInteger);
+  OrderIMP original = reinterpret_cast<OrderIMP>(method_getImplementation(method));
+  IMP counting = imp_implementationWithBlock(^(NSWindow* me, NSWindowOrderingMode place, NSInteger other) {
+    if (place != NSWindowOut && !me.visible) {
+      g_chrome_windows_shown++;
+      if (AwayFromCraWindows(me)) {
+        g_chrome_windows_away++;
+        NSRect f = me.frame;
+        g_chrome_window_away_last = [NSString stringWithFormat:@"%@@%.0f,%.0f,%.0fx%.0f", NSStringFromClass([me class]),
+                                                               f.origin.x, f.origin.y, f.size.width, f.size.height];
+      }
+    }
+    original(me, selector, place, other);
+  });
+  // NativeWidgetMacNSWindow's own method, or NSWindow's, which only Chrome's windows get here.
+  if (!class_addMethod(cls, selector, counting, method_getTypeEncoding(method))) {
+    method_setImplementation(method, counting);
   }
 }
 
@@ -4426,8 +4469,10 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
   return ui::ScopedPasswordInputEnabler::IsPasswordInputEnabled();
 }
 + (NSString*)pageWindowsReadout {
-  return [NSString stringWithFormat:@"shown=%ld away=%ld animated=%ld", (long)g_page_windows_shown,
-                                    (long)g_page_windows_away, (long)g_page_windows_animated];
+  return [NSString stringWithFormat:@"shown=%ld away=%ld animated=%ld chrome=%ld chrome-away=%ld last-away=%@",
+                                    (long)g_page_windows_shown, (long)g_page_windows_away,
+                                    (long)g_page_windows_animated, (long)g_chrome_windows_shown,
+                                    (long)g_chrome_windows_away, g_chrome_window_away_last];
 }
 // The view Chrome's Settings find as the page's browser window (kBrowserViewElementId), in a profile's hidden Browser.
 views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
@@ -4637,6 +4682,46 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
 + (NSString*)extensionSettingsForProfile:(NSString*)profilePath {
   return cra::PreferenceJSON([self loadedProfile:profilePath], @"extensions.settings");
 }
++ (void)setManagedExtensionIDs:(NSDictionary<NSString*, NSArray<NSString*>*>*)idsByProfile {
+  std::map<std::string, std::set<std::string>> ids;
+  for (NSString* profile in idsByProfile) {
+    std::set<std::string>& list = ids[base::SysNSStringToUTF8(profile)];
+    for (NSString* extensionID in idsByProfile[profile]) {
+      list.insert(base::SysNSStringToUTF8(extensionID));
+    }
+  }
+  cra::SetManagedExtensions(std::move(ids));
+}
++ (void)installWebStoreExtension:(NSString*)extensionID
+                        manifest:(NSString*)manifestJSON
+                     profilePath:(NSString*)profilePath
+                      completion:(void (^)(NSString*))completion {
+  void (^done)(NSString*) = [completion copy];
+  Profile* profile = [self loadedProfile:profilePath];
+  if (!profile) {
+    done(@"the profile isn't loaded");
+    return;
+  }
+  std::optional<base::DictValue> manifest =
+      base::JSONReader::ReadDict(base::SysNSStringToUTF8(manifestJSON), base::JSON_PARSE_RFC);
+  if (!manifest) {
+    done(@"needs the extension's manifest");
+    return;
+  }
+  cra::InstallFromWebStore(profile, base::SysNSStringToUTF8(extensionID), *manifest,
+                           base::BindOnce(^(std::string error) {
+                             done(error.empty() ? nil : base::SysUTF8ToNSString(error));
+                           }));
+}
++ (BOOL)uninstallExtension:(NSString*)extensionID profilePath:(NSString*)profilePath {
+  Profile* profile = [self loadedProfile:profilePath];
+  if (!profile) {
+    return NO;
+  }
+  std::u16string error;
+  return extensions::ExtensionRegistrar::Get(profile)->UninstallExtension(
+      base::SysNSStringToUTF8(extensionID), extensions::UNINSTALL_REASON_USER_INITIATED, &error);
+}
 + (NSString*)preference:(NSString*)name forProfile:(NSString*)profilePath {
   return cra::PreferenceJSON([self loadedProfile:profilePath], name);
 }
@@ -4765,6 +4850,7 @@ void DropFirstResponderAfterResigningException() {
     base::CommandLine::Init(0, nullptr);
   }
   DropFirstResponderAfterResigningException();
+  CountChromeWindowsShown();
 }
 
 + (NSInteger)backgroundActivations {

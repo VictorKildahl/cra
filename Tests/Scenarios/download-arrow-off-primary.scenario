@@ -1,0 +1,24 @@
+# promise: #774
+# A download from a link shows only Cra's download flight (Arc's), and Chromium puts no window of
+# its own on screen away from Cra's windows (#774). Chromium threw its own download arrow at the
+# download button of a toolbar nobody sees, from a popup window that came up in the primary
+# display's corner before its first frame moved it. With Cra on a second display and another app
+# full screen on the primary one, that window switched the primary display to a desktop on every
+# download. `chrome` counts the windows of Chromium's views ordered onto the screen, `chrome-away`
+# the ones that came up off every Cra window, `last-away` the last of those (class@x,y,wxh). The
+# Spaces themselves take two displays: docs/release-checklist.md.
+home
+budget rss=600 stalls50=5
+cra://open?url=file://${FIXTURES}/Pages/downloads.html
+expect-log loaded file:
+wait 1
+cra://debug?pageWindows=before
+expect-log page windows before: .* chrome-away=0 last-away=none
+
+# A click on a link that downloads, as the page's user would.
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":56,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":56,"button":"left","clickCount":1}
+expect-log Download finished from a data: address
+wait 2
+cra://debug?pageWindows=download
+expect-log page windows download: .* chrome-away=0 last-away=none
