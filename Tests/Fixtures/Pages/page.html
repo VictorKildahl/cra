@@ -20,6 +20,9 @@
   const cssColor = v => v === 'transparent' ? v : /^[0-9a-f]{6}$/i.test(v || '') ? '#' + v : '';
   if (cssColor(query.get('htmlbg'))) document.documentElement.style.background = cssColor(query.get('htmlbg'));
   if (cssColor(query.get('bodybg'))) document.body.style.background = cssColor(query.get('bodybg'));
+  // ?latecss=<s>: the dark background comes from a stylesheet served that many seconds late, as a
+  // site's own CSS file does; the load event waits for it (#846).
+  if (/^[0-9]+$/.test(query.get('latecss') || '')) document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'boost-dark.css?delay=' + query.get('latecss') }));
   // ?go=<address>: answers, then sends the tab on to that address, as a link shortener (t.co) does (#597).
   if (query.get('go')) location.replace(query.get('go'));
   const rows = document.getElementById('rows');

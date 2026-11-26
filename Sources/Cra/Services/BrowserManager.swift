@@ -22,6 +22,8 @@ final class TabRuntime {
     var boostCanvasNeedsFallback: Bool?
     /// Whether the fallback stylesheet is currently on this page.
     var boostCanvasFallbackOn = false
+    /// Counts this tab's documents, so a probe answered after the next page committed is dropped.
+    var boostCanvasDocument = 0
     /// The stylesheet last adopted for this page's Boost, so live edits with unchanged CSS don't repaint.
     var boostCSS = ""
     /// Cra popped this tab's video out because the user left the tab (Arc's
@@ -1634,6 +1636,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             if let runtime = runtimes[id] {
                 runtime.hasElementHidingStyle = false
                 runtime.boostCanvasNeedsFallback = nil
+                runtime.boostCanvasDocument += 1
                 runtime.boostCanvasFallbackOn = false
                 runtime.boostCSS = ""
                 applyElementHiding(to: runtime)
@@ -1719,14 +1722,23 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             }
             return
         }
-        let js = "/*__craBoostCanvas*/(()=>{const h=getComputedStyle(document.documentElement).backgroundColor;"
+        // Read once the page has loaded: at commit a site's stylesheet (one its script adds, or a slow
+        // file) isn't applied yet, and its dark background would read as none (#846). A page that never
+        // finishes loading is read after five seconds.
+        let js = "/*__craBoostCanvas*/new Promise(done=>{const read=()=>{"
+            + "const h=getComputedStyle(document.documentElement).backgroundColor;"
             + "const b=getComputedStyle(document.body||document.documentElement).backgroundColor;"
             + "const clear=s=>!s||s==='transparent'||s==='rgba(0, 0, 0, 0)';"
-            + "return clear(h)&&clear(b)?'yes':'no';})()"
-        browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { [weak self, weak rt] result, _ in
+            + "done(clear(h)&&clear(b)?'yes':'no');};"
+            + "if(document.readyState==='complete')return read();"
+            + "const t=setTimeout(read,5000);addEventListener('load',()=>{clearTimeout(t);read();},{once:true});})"
+        let params = Self.jsonObjectString(["expression": js, "returnByValue": true, "awaitPromise": true])
+        let document = rt.boostCanvasDocument
+        browser.evaluate(inIsolatedWorld: PageScript.world, params: params) { [weak self, weak rt] result, _ in
             DispatchQueue.main.async {
-                guard let self, let rt, self.runtimes[id] === rt else { return }
-                let needs = Self.stringResult(result) == "yes"
+                guard let self, let rt, self.runtimes[id] === rt, rt.boostCanvasDocument == document,
+                      let answer = Self.stringResult(result) else { return }
+                let needs = answer == "yes"
                 rt.boostCanvasNeedsFallback = needs
                 if needs {
                     self.adopt("html { background-color: Canvas !important; }", as: "__craBoostCanvas", in: browser)

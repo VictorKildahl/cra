@@ -1,0 +1,2 @@
+/* A site whose dark background arrives in its own stylesheet, late (#846). */
+html { background: #111111; color: #eeeeee; }
