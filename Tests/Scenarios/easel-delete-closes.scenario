@@ -1,0 +1,22 @@
+# Library ▸ Easels ▸ Delete: everything showing the easel closes, its tab and the Peek Library opened it in
+# (AppDelegate.closeEasel, which a delete synced from another Mac goes through too).
+budget rss=700 stalls50=10
+cra://action/newEasel
+wait 2
+cra://debug?browserWindows=made
+expect-log Cra browser windows made: kind=normal .*tabs=\[easel://[0-9A-F-]{36}\]
+cra://action/viewEasels
+wait 1
+cra://debug?easelTile=open
+wait 1.5
+cra://debug?peeks=open
+expect-log Cra peeks open: shown easel://[0-9A-F-]{36}$
+cra://debug?easelTile=delete
+wait 0.5
+cra://debug?answerDialog=Delete
+expect-log dialog Are you sure you want to delete this Easel\? answered Delete
+wait 1.5
+cra://debug?peeks=deleted
+expect-log Cra peeks deleted: none$
+cra://debug?browserWindows=deleted
+expect-log Cra browser windows deleted: kind=normal .*tabs=\[\] open=

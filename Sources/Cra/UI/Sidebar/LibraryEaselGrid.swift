@@ -134,6 +134,12 @@ final class EaselTile: NSView {
         layer.zPosition = hovering ? 1 : 0
     }
 
+    /// cra://debug?easelTile=open|delete: a click on the tile (its Peek), or its menu's Delete.
+    func debugPress(_ what: String) {
+        guard let entry else { return }
+        if what == "delete" { delete(entry) } else { open(entry) }
+    }
+
     /// cra://debug?easelTileHover=1|0: the pointer over the tile, or gone; what it then shows.
     func debugHover(_ on: Bool, done: @escaping (String) -> Void) {
         hovering = on

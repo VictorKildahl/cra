@@ -926,8 +926,8 @@ private final class LibraryListView: NSView, NSTextFieldDelegate, NSTableViewDat
         guard let window = window ?? AppDialog.parentWindow else { return }
         let dialog = AppDialog.easelDeletion()
         dialog.present(over: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn, let self else { return }
-            EaselFiles.closeTabs(of: e.id, in: self.store, close: self.actions.closeTab)
+            guard response == .alertFirstButtonReturn, let self, let app = NSApp.delegate as? AppDelegate else { return }
+            app.closeEasel(e.id, closingTabs: self.actions.closeTab)
             EaselFiles.delete(e.id)
             CraLog.note("easel deleted")
             self.reload()
