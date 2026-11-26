@@ -195,6 +195,8 @@ public struct SyncHistory: Codable, Equatable {
 
     /// The ids a bundle written now names as its parents (`SyncManifest.parentIDs`).
     public var ids: [UUID] { entries.map(\.id) }
+    /// Whether a remembered bundle held the easel, so a Mac may merge against it.
+    public func remembers(easel id: UUID) -> Bool { entries.contains { $0.easels?.contains { $0.id == id } == true } }
     /// The bundles remembered with their easels, newest first: a manifest's `easelParentIDs`.
     public var easelIDs: [UUID] { entries.filter { $0.easels != nil }.map(\.id) }
 }

@@ -12,6 +12,10 @@ enum PageEngines {
     static var isNativePage: ((String) -> Bool)?
 }
 
+enum SettingsSync {
+    static let easelsName = "Easels"
+}
+
 enum AppPaths {
     static let supportDir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["CRA_DATA_DIR"]!)
 }

@@ -134,13 +134,13 @@ extension EaselBrowser {
 @MainActor
 enum EaselFiles {
     static var folder: URL {
-        let u = AppPaths.supportDir.appendingPathComponent("Easels", isDirectory: true)
+        let u = AppPaths.supportDir.appendingPathComponent(SettingsSync.easelsName, isDirectory: true)
         try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
         return u
     }
     static func store(_ id: UUID) -> JSONStore<Easel> {
         _ = folder
-        return JSONStore<Easel>("Easels/\(id.uuidString).json")
+        return JSONStore<Easel>("\(SettingsSync.easelsName)/\(id.uuidString).json")
     }
     static func load(_ id: UUID) -> Easel { store(id).load(or: { Easel(id: id) }) }
 

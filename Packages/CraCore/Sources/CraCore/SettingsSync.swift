@@ -79,6 +79,14 @@ public enum SettingsSync {
     /// The folder of easels, in the bundle as in the data folder: `<id>.json`, and its pictures in `<id>/`.
     public static let easelsName = "Easels"
 
+    /// What a write does with an easel file on this Mac: `readable`, this Mac read and decoded it now; `lastCopy`, a copy
+    /// it listed or sent before is at hand; `remembered`, a bundle in its history held that easel (SyncHistory.remembers).
+    public static func easelChoice(readable: Bool, lastCopy: Bool, remembered: Bool) -> SyncEaselChoice {
+        if readable { return .send }
+        if lastCopy { return .carry }
+        return remembered ? .hold : .leaveOut
+    }
+
     /// The easel a path in `SyncManifest.easels` names, and its picture when it names one:
     /// `Easels/<id>.json` or `Easels/<id>/<plain name>`. Nil for any other path, which is never read or written.
     public static func easelPath(_ path: String) -> (id: UUID, picture: String?)? {
@@ -364,4 +372,16 @@ extension SidebarDocument {
         }
         return doc
     }
+}
+
+/// SettingsSync.easelChoice. An easel file this Mac can't read is never sent as deleted: the other Mac would delete its copy.
+public enum SyncEaselChoice: Equatable, Sendable {
+    /// The file as read now.
+    case send
+    /// The copy listed or sent before, until a look reads the file.
+    case carry
+    /// No copy to send, and the other Mac may have it: this Mac writes no bundle until the file reads again.
+    case hold
+    /// No bundle held it, so no Mac merges against it and leaving it out deletes nothing.
+    case leaveOut
 }

@@ -406,4 +406,33 @@ struct SettingsSyncTests {
         if case .tab(var t) = muted.items[0].data { t.muted = true; muted.items[0].data = .tab(t) }
         #expect(muted.withoutActivity() != switched.withoutActivity())
     }
+
+    // MARK: An easel file on this Mac, as a write sends it
+
+    @Test func anEaselReadNowIsSent() {
+        #expect(SettingsSync.easelChoice(readable: true, lastCopy: true, remembered: true) == .send)
+    }
+
+    /// Read mid-save, or bytes that don't decode: never sent as deleted while a copy from before is at hand.
+    @Test func anEaselNotReadNowCarriesItsLastCopy() {
+        #expect(SettingsSync.easelChoice(readable: false, lastCopy: true, remembered: true) == .carry)
+    }
+
+    /// Left out, an easel a remembered bundle holds would be deleted on the other Mac.
+    @Test func anEaselNotReadWithNoCopyThatABundleHeldHoldsTheWrite() {
+        #expect(SettingsSync.easelChoice(readable: false, lastCopy: false, remembered: true) == .hold)
+    }
+
+    /// No bundle held it, so no Mac merges against it: leaving it out deletes nothing.
+    @Test func anEaselNotReadThatNoBundleHeldIsLeftOut() {
+        #expect(SettingsSync.easelChoice(readable: false, lastCopy: false, remembered: false) == .leaveOut)
+    }
+
+    @Test func theHistoryKnowsTheEaselsItsBundlesHeld() {
+        var history = SyncHistory()
+        let held = Easel(title: "Held"), other = UUID()
+        history.remember(UUID(), .fresh(), easels: [held])
+        history.remember(UUID(), .fresh())
+        #expect(history.remembers(easel: held.id) && !history.remembers(easel: other))
+    }
 }

@@ -117,7 +117,7 @@ final class SettingsSyncService {
     /// This Mac's easel folder: `<id>.json` and the pictures in `<id>/`.
     private let easelFolder: URL
 
-    init(store: SidebarStore, clock: Scheduler, device: String? = nil, deviceID: String? = nil, easels: URL = AppPaths.file("Easels")) {
+    init(store: SidebarStore, clock: Scheduler, device: String? = nil, deviceID: String? = nil, easels: URL = AppPaths.file(SettingsSync.easelsName)) {
         self.store = store
         easelFolder = easels
         self.clock = clock
@@ -550,18 +550,21 @@ final class SettingsSyncService {
                     fileHashes[url.path] = (found.size, found.modified, Self.hash(json))
                 }
             }
-            if listed == nil {
-                // Read mid-save, or not readable: never sent as deleted. The last listing's copy stands, or the one sent
-                // last, until a look reads the file.
-                made.folderModified = nil
-                if let hash = before?.files[path], let easel = before?.easels[id], let json = before?.json[id] {
-                    listed = (hash, easel, json)
-                } else if let sent = sentCopy(path) {
-                    listed = sent
-                } else if history.entries.contains(where: { $0.easels?.contains { $0.id == id } == true }) {
-                    made.unreadable.insert(name)
-                }
+            // For a file not read now: the copy listed before, or the one sent last, from the sync folder.
+            var last: (hash: String, easel: Easel, json: Data)?
+            if listed == nil, let hash = before?.files[path], let easel = before?.easels[id], let json = before?.json[id] {
+                last = (hash, easel, json)
+            } else if listed == nil {
+                last = sentCopy(path)
             }
+            switch SettingsSync.easelChoice(readable: listed != nil, lastCopy: last != nil, remembered: listed == nil && history.remembers(easel: id)) {
+            case .send: break
+            case .carry: listed = last
+            case .hold: made.unreadable.insert(name)
+            case .leaveOut: break
+            }
+            // Listed again at the next look, which may read it.
+            if listed == nil || last != nil { made.folderModified = nil }
             guard let (hash, easel, json) = listed else { continue }
             made.files[path] = hash
             made.easels[id] = easel
@@ -983,13 +986,7 @@ final class SettingsSyncService {
             let data = try merged == r ? bytes[id] ?? Self.encoder.encode(merged) : Self.encoder.encode(merged)
             let target = localURL("\(SettingsSync.easelsName)/\(id.uuidString).json")
             try fm.createDirectory(at: easelFolder, withIntermediateDirectories: true)
-            // The copy replaced stays as `.bak`, as at each JSONStore save.
-            let bak = target.appendingPathExtension("bak")
-            if fm.fileExists(atPath: target.path) {
-                try? fm.removeItem(at: bak)
-                try? fm.copyItem(at: target, to: bak)
-            }
-            try data.write(to: target, options: .atomic)
+            try JSONStore<Easel>.replace(target, with: data)
             know(target, hash: Self.hash(data))
         }
         return changes
