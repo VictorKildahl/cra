@@ -58,6 +58,18 @@ struct CloseSuccessorTests {
         #expect(CloseSuccessor.pinnedClose(isFavorite: false) == .unloadToPinnedPage)
     }
 
+    /// #841 asked whether ⌘W leaving a Favorite open is meant to be: it is, as in Arc. ⌘W on a silent Favorite
+    /// deselects it and leaves its page running, at its pinned page or taken back there;
+    /// one playing sound and Close Tab in its own right-click menu let the page go; a pinned tab in the list unloads.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/841"))
+    func commandWOnAFavoriteDeselectsItAsInArc() {
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true) == .deselectKeepingPage)
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, awayFromPinnedPage: true) == .deselectGoingHome)
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, audible: true) == .unloadToPinnedPage)
+        #expect(CloseSuccessor.pinnedClose(isFavorite: true, fromItsMenu: true) == .unloadToPinnedPage)
+        #expect(CloseSuccessor.pinnedClose(isFavorite: false) == .unloadToPinnedPage)
+    }
+
     /// Close Tab in a Favorite's right-click menu closes it, as in Arc 1.173.1: its page is let go, and a click on the
     /// Favorite loads it again. Only ⌘W keeps the page running (#740). Before, the menu's Close Tab did what ⌘W does,
     /// so nothing let a Favorite's page go, and on a Favorite loaded in the background it did nothing at all.

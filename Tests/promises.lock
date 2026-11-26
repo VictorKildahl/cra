@@ -1855,6 +1855,7 @@
 #829   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::thePlacesSayTheyAreOnTheIPhone  6beac92ad82c
 #829   iOS/CraUITests/BrowserTests.swift::testTheShareSheetSavesThroughTheExtension  8102a922a145
 #839   iOS/CraUITests/BrowserTests.swift::testSpacesBackgroundsReachTheWindowEdges  f2c334cb5bd7
+#841   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::commandWOnAFavoriteDeselectsItAsInArc  ba51c260542c
 #842   Packages/CraCore/Tests/CraCoreTests/SharedExtensionsTests.swift::removeOpensTheProfileThatHasIt  aa9ee3fabce9
 #842   Tests/Scenarios/extension-remove-in-its-profile.scenario  1756245b2867
 #844   Tests/Scenarios/filter-helper-hidden.scenario  535df66793d5
