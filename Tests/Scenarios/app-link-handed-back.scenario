@@ -1,0 +1,23 @@
+# promise: #821
+# A mailto: link froze Cra in an endless run of Little Windows. Cra was the Mac's mail app (a site's
+# registerProtocolHandler, or a choice in Mail), so handing the address to macOS sent it straight back as a link from
+# another app, which opened in a Little Window, which handed it over again. Chrome never launches a scheme it is the
+# app for, and Cra no longer does (AppLinks.handsBackToCra). news: stands in for mailto: (AppLinks.openedSchemes);
+# appLinkOwnedByCra makes Cra its app here and plays macOS handing it back, so the Mac's real mail app is untouched.
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=mail
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+cra://debug?appLinkOwnedByCra=news
+# A click on a mail link in a page: nothing is handed to macOS.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='news:clicked'","userGesture":true}
+expect-log page 127\.0\.0\.1 wants news:, Cra is the app for it: not handed back to itself
+# The link as macOS hands it to Cra, the mail app: its Little Window doesn't hand it back either, and closes.
+cra://debug?externalURL=news:from-another-app
+expect-log page news: wants news:, Cra is the app for it: not handed back to itself
+expect-log blank page closes: it only took news: to an app
+wait 3
+reject-log macOS hands news: back to Cra
+cra://debug?appLinkOwnedByCra=

@@ -66,8 +66,10 @@ public enum AppLinks {
     /// (window.open(), then sent to mailto:): it closes once the address is handed to macOS, as Chrome closes
     /// a tab whose first navigation went to an app (external_protocol_handler.cc). It stayed as an empty
     /// about:blank window (#684).
+    /// A Little Window or tab opened straight on another app's address (a mail link macOS handed to Cra, #821) never
+    /// showed a page either: its address is the app's own, and it closes the same way.
     public static func closesRequester(currentURL: String, canGoBack: Bool) -> Bool {
-        !canGoBack && isBlank(currentURL)
+        !canGoBack && (isBlank(currentURL) || kind(of: currentURL) != .page)
     }
 
     /// Whether `url` is no page at all: empty, or about:blank with or without a fragment or query.
@@ -107,12 +109,25 @@ extension AppLinks {
         case refuse
     }
 
-    public static func typed(_ url: String, hasApp: Bool) -> Typed {
+    /// `appIsCra`: the app macOS has for it is Cra itself (`handsBackToCra`), which is no app to open it (#821).
+    public static func typed(_ url: String, hasApp: Bool, appIsCra: Bool = false) -> Typed {
         switch kind(of: url) {
         case .page: return .load
         case .refused: return .refuse
-        case .asksFirst, .opens: return hasApp ? .openApp : .search
+        case .asksFirst, .opens: return hasApp && !appIsCra ? .openApp : .search
         }
+    }
+
+    /// Whether the app macOS would open another app's address with is Cra itself: Cra made the Mac's mail app (a
+    /// site's registerProtocolHandler for mailto:, or a choice in Mail's settings). Handing the address over sent it
+    /// straight back as a link from another app, which opened in a Little Window, which handed it over again, without
+    /// end (#821). Chrome doesn't launch a scheme it is the default app for either (external_protocol_handler.cc: it
+    /// "would lead to an infinite loop"). Another copy of Cra counts: macOS gives the link to the one running.
+    public static func handsBackToCra(handlerBundleID: String?, handlerPath: String?, ownBundleID: String?, ownPath: String) -> Bool {
+        if let handlerBundleID, let ownBundleID, handlerBundleID.caseInsensitiveCompare(ownBundleID) == .orderedSame { return true }
+        guard let handlerPath else { return false }
+        func plain(_ path: String) -> String { path.hasSuffix("/") ? String(path.dropLast()) : path }
+        return plain(handlerPath) == plain(ownPath)
     }
 
     /// "Open <app>?" as Chrome's ExternalProtocolDialog asks it (GitHub #785). The question names the origin that

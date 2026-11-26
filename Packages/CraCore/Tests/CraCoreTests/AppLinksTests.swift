@@ -119,3 +119,42 @@ struct TypedAppLinksTests {
         #expect(typed.message == "open.spotify.com wants to open this application." && typed.alwaysAllow == nil)
     }
 }
+
+/// Another app's address whose app on this Mac is Cra itself (#821).
+struct AppLinksHandedBackTests {
+    static let own = "/Applications/Cra.app"
+
+    /// A mailto: link froze Cra in an endless run of Little Windows: Cra was the Mac's mail app, so handing the
+    /// address to macOS sent it straight back as a link from another app, which opened in a Little Window, which
+    /// handed it over again. Chrome never launches a scheme it is the default app for; Cra doesn't either now.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/821"))
+    func anAddressWhoseAppIsCraIsNotHandedBack() {
+        #expect(AppLinks.handsBackToCra(handlerBundleID: "dk.kildahl.cra", handlerPath: "/Applications/Cra.app",
+                                        ownBundleID: "dk.kildahl.cra", ownPath: Self.own))
+        #expect(AppLinks.handsBackToCra(handlerBundleID: "DK.Kildahl.Cra", handlerPath: "/Users/x/Downloads/Cra.app",
+                                        ownBundleID: "dk.kildahl.cra", ownPath: Self.own), "another copy of Cra: macOS hands it to the one running")
+        #expect(AppLinks.handsBackToCra(handlerBundleID: nil, handlerPath: "/Applications/Cra.app/",
+                                        ownBundleID: "dk.kildahl.cra", ownPath: Self.own), "this very app, by its place")
+        #expect(!AppLinks.handsBackToCra(handlerBundleID: "com.apple.mail", handlerPath: "/System/Applications/Mail.app",
+                                         ownBundleID: "dk.kildahl.cra", ownPath: Self.own))
+        #expect(!AppLinks.handsBackToCra(handlerBundleID: nil, handlerPath: nil, ownBundleID: "dk.kildahl.cra", ownPath: Self.own))
+    }
+
+    /// The Little Window a mail link from macOS opened shows no page, only the address it was sent to: it closes once
+    /// that address has gone nowhere, instead of staying empty on screen.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/821"))
+    func aWindowOpenedOnlyOnTheAppsAddressCloses() {
+        #expect(AppLinks.closesRequester(currentURL: "mailto:someone@example.com", canGoBack: false))
+        #expect(AppLinks.closesRequester(currentURL: "news:from-another-app", canGoBack: false))
+        #expect(!AppLinks.closesRequester(currentURL: "mailto:someone@example.com", canGoBack: true), "back to a page it showed")
+        #expect(!AppLinks.closesRequester(currentURL: "https://example.com/contact", canGoBack: false))
+    }
+
+    /// Typed in the command bar, such an address has no other app to open it: searched, as Chrome does (#604).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/821"))
+    func aTypedAddressWhoseAppIsCraIsSearched() {
+        #expect(AppLinks.typed("mailto:someone@example.com", hasApp: true, appIsCra: true) == .search)
+        #expect(AppLinks.typed("mailto:someone@example.com", hasApp: true, appIsCra: false) == .openApp)
+        #expect(AppLinks.typed("https://example.com", hasApp: true, appIsCra: true) == .load)
+    }
+}

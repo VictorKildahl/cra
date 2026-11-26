@@ -2034,6 +2034,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // externalURL=<url>: a link as another app hands it over (Air Traffic Control, #258);
             // the installed Cra would get one sent with `open`.
             if let url = dict["externalURL"] { openExternalURL(url); return }
+            // appLinkOwnedByCra=<scheme>: Cra stands as the Mac's app for it (#821; AppLinkPrompt).
+            if let scheme = dict["appLinkOwnedByCra"] {
+                AppLinkPrompt.debugSchemesOwnedByCra = scheme.isEmpty ? [] : [scheme.lowercased()]
+                return
+            }
             // airTrafficControl=<png path>: the Air Traffic Control sheet with the current routes,
             // drawn off screen (#258), so its popups can be checked without taking the screen.
             if let out = dict["airTrafficControl"] {
