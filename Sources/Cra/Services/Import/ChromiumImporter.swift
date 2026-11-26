@@ -32,9 +32,9 @@ enum ChromiumImporter {
         return out
     }
 
-    /// Chrome's "Default" and "Profile <n>" (Ardia's "Profile <id>"), and Yab's "space-<id>".
+    /// Chrome's "Default" and "Profile <n>" (Ardia's "Profile <id>"), Yab's "space-<id>" and Crest's "Crest-<id>".
     static func isProfileFolder(_ name: String) -> Bool {
-        name == "Default" || name.hasPrefix("Profile ") || name.hasPrefix("space-")
+        name == "Default" || name.hasPrefix("Profile ") || name.hasPrefix("space-") || name.hasPrefix("Crest-")
     }
 
     /// Local State's profile.info_cache: the name the browser shows for each profile folder.

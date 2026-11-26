@@ -33,12 +33,12 @@ public struct BlockListCount: Equatable, Sendable {
         return text
     }
 
-    /// The rules in use across every list that is on, each counted once: Cra's built-in lists (domains),
+    /// The rules in use across every list that is on, each counted once: Cra's built-in domains and hiding rules,
     /// the fetched lists and the person's own filters. Two lists naming one domain block it once.
-    public static func total(builtIn: [[String]], lists: [CachedBlocklist], networkRules: Bool) -> Int {
+    public static func total(builtIn: [[String]], builtInHiding: [String] = [], lists: [CachedBlocklist], networkRules: Bool) -> Int {
         var domains = Set<String>()
         var network = Set<String>()
-        var hiding = Set<String>()
+        var hiding = Set(builtInHiding)
         for list in builtIn { domains.formUnion(list) }
         for list in lists {
             if networkRules && list.hasNetworkSource {

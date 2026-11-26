@@ -3,6 +3,7 @@
 # GitLab, Jira and Azure DevOps providers, driven through LiveFolderPluginProcess with made-up session responses.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+node Tests/github-checks.test.cjs
 TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cra-live-folder-plugins.XXXXXX")"
 trap 'rm -rf "$TEST_DIR"' EXIT
 xcrun swiftc -swift-version 5 Sources/CraPluginHost/main.swift -framework JavaScriptCore -o "$TEST_DIR/CraPluginHost"

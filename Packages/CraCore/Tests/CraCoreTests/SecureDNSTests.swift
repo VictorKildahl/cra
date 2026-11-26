@@ -52,7 +52,7 @@ struct SecureDNSTests {
         guard case .provider(let quad9) = SecureDNSPrefs(mode: "secure", templates: "https://dns.quad9.net/dns-query\n").choice else {
             Issue.record("Quad9 not recognised"); return
         }
-        #expect(quad9.name == "Quad9 (9.9.9.9)")
+        #expect(quad9.name == "Quad9 (Threat Blocking)")
         #expect(SecureDNSPrefs(mode: "secure", templates: "https://dns.nextdns.io/a1b2c3").choice == .custom)
         #expect(SecureDNSPrefs(mode: "secure", templates: "").choice == .custom)
     }

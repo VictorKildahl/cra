@@ -285,18 +285,10 @@ private struct SecureDNSRows: View {
     @State private var customText = ""
 
     var body: some View {
-        SettingsPlainRow("Secure DNS",
-                           detail: "Before a page loads, the site’s address is looked up over an encrypted connection, so the network you’re on can’t see or change it." + (footnote.map { " " + $0 } ?? ""),
-                           trailing: { EmptyView() }) {
-            Picker("Secure DNS", selection: choice) {
-                Text("Automatic").tag(SecureDNSChoice.automatic)
-                Text("Off").tag(SecureDNSChoice.off)
-                Divider()
-                ForEach(SecureDNSProvider.all) { Text($0.name).tag(SecureDNSChoice.provider($0)) }
-                Divider()
-                Text("Custom…").tag(SecureDNSChoice.custom)
-            }
-            .labelsHidden()
+        SettingsPlainRow("DNS over HTTPS",
+                         detail: "Before a page loads, the site’s address is looked up over an encrypted connection, so the network you’re on can’t see or change it." + (footnote.map { " " + $0 } ?? ""),
+                         trailing: { EmptyView() }) {
+            DNSProviderMenu(choice: choice)
             .fixedSize()
             .disabled(dns.prefs == nil || dns.isManaged)
             .onAppear { dns.refresh() }

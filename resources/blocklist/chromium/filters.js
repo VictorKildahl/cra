@@ -3,6 +3,38 @@
 let port;
 let updates = Promise.resolve();
 
+function replacement(old, next) {
+    return { removeRuleIds: old.map(rule => rule.id), addRules: next };
+}
+
+async function applySnapshot(snapshot) {
+    const { revision, rules, siteExceptions = [] } = snapshot;
+    const storage = chrome.storage.session;
+    if ((await storage.get('appliedFilterRevision')).appliedFilterRevision === revision) return;
+    const dnr = chrome.declarativeNetRequest;
+    const [dynamic, session] = await Promise.all([
+        dnr.getDynamicRules(), dnr.getSessionRules(),
+    ]);
+    // Invalidate before changing anything. After an interrupted service worker
+    // the next connection reconciles both rule sets against Chromium itself.
+    await storage.remove('appliedFilterRevision');
+    let changedSession = false;
+    try {
+        if (session.length || siteExceptions.length) {
+            await dnr.updateSessionRules(replacement(session, siteExceptions));
+            changedSession = true;
+        }
+        // Chromium applies each DNR update atomically. Commit persistent rules last.
+        await dnr.updateDynamicRules(replacement(dynamic, rules));
+    } catch (error) {
+        if (changedSession) await dnr.updateSessionRules(replacement(siteExceptions, session));
+        throw error;
+    }
+    // A cache write failure only means the next connection will reconcile again.
+    try { await storage.set({ appliedFilterRevision: revision }); }
+    catch (error) { console.warn('Cra filter revision cache:', error.message); }
+}
+
 function connect() {
     if (port) return;
     const connection = chrome.runtime.connectNative('dk.kildahl.cra.filters');
@@ -37,26 +69,8 @@ function connect() {
                 parts = undefined;
                 enqueue(id, async current => {
                     const snapshot = JSON.parse(json);
-                    if (snapshot.revision !== id) return;
-                    const stored = await chrome.storage.local.get('revision');
-                    // Session rules have a separate quota and are restored after each browser restart.
-                    const dnr = chrome.declarativeNetRequest;
-                    const session = await chrome.storage.session.get('siteRevision');
-                    if (session.siteRevision !== id) {
-                        const old = await dnr.getSessionRules();
-                        if (!current()) return;
-                        const next = snapshot.siteExceptions || [];
-                        if (old.length || next.length) {
-                            await dnr.updateSessionRules({ removeRuleIds: old.map(rule => rule.id), addRules: next });
-                        }
-                        await chrome.storage.session.set({ siteRevision: id });
-                    }
-                    if (stored.revision !== id) {
-                        const old = await dnr.getDynamicRules();
-                        if (!current()) return;
-                        await dnr.updateDynamicRules({ removeRuleIds: old.map(rule => rule.id), addRules: snapshot.rules });
-                        await chrome.storage.local.set({ revision: id });
-                    }
+                    if (snapshot.revision !== id) throw new Error('Unexpected filter revision');
+                    await applySnapshot(snapshot);
                     if (current()) connection.postMessage({ applied: id });
                 });
             } else if (message.error) {

@@ -1,0 +1,45 @@
+# promise: #853
+# Clear Site Data clears everything the page's site keeps in Cra (local storage, IndexedDB, cookies), then reloads
+# the page: from the site menu's "…" (the address bar's site button) and from View ▸ Clear Site Data and Refresh.
+# Arc's Clear Cookies keeps doing only what it did: the cookies go, the page's storage stays (#853).
+budget rss=900 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+
+cra://open?url=${PAGE}?n=site
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+
+# What a site keeps, and a value only this load of the page has.
+cra://debug?cdp=Runtime.evaluate&params={"awaitPromise":true,"expression":"new Promise(done=>{window.loadMark=1;localStorage.setItem('k','v');document.cookie='c=1; max-age=3600';const q=indexedDB.open('db853');q.onupgradeneeded=()=>q.result.createObjectStore('s');q.onsuccess=()=>{q.result.close();done('stored '+localStorage.length+' '+document.cookie)}})"}
+expect-log Cra cdp Runtime.evaluate .*"value":"stored 1 c=1"
+
+# The site menu's "…": its rows, then Clear Site Data. The site button shows on hover.
+cra://debug?urlFieldHover=1
+cra://debug?urlFieldPress=siteControls
+expect-log url field press siteControls: pressed true, site control center shown
+cra://debug?siteControlsPress=More:
+expect-log site controls more menu: Clear Cache\|Clear Cookies\|Clear Site Data\|-\|Manage Boosts…
+cra://debug?siteControlsPress=More:Clear Site Data
+expect-log site controls more menu picked Clear Site Data
+expect-log clearing siteData for 127\.0\.0\.1: Storage\.clearDataForOrigin all
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"awaitPromise":true,"expression":"indexedDB.databases().then(d=>['reloaded '+(window.loadMark===undefined),localStorage.length,'['+document.cookie+']',d.length].join(' '))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"reloaded true 0 \[\] 0"
+
+# Arc's Clear Cookies and Refresh: the cookie goes, the page's storage stays.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(localStorage.setItem('k','v'),document.cookie='c=2; max-age=3600','again '+localStorage.length+' '+document.cookie)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"again 1 c=2"
+cra://action/clearCookies
+expect-log clearing cookies for 127\.0\.0\.1: Storage\.clearDataForOrigin cookies
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after cookies '+localStorage.length+' ['+document.cookie+']'"}
+expect-log Cra cdp Runtime.evaluate .*"value":"after cookies 1 \[\]"
+
+# View ▸ Clear Site Data and Refresh (also the command bar's and Settings ▸ Shortcuts' action).
+cra://debug?menuRows=View&label=view
+expect-log menu rows view: .*Clear Cookies and Refresh\|Clear Cache and Refresh\|Clear Site Data and Refresh\|
+cra://action/clearSiteData
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after site data '+localStorage.length+' ['+document.cookie+']'"}
+expect-log Cra cdp Runtime.evaluate .*"value":"after site data 0 \[\]"

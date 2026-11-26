@@ -755,6 +755,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Arc: a tab switch puts a playing video in Picture in Picture, a space switch doesn't (#703).
             let autoPiP = AutoPictureInPictureMoment.opensOnLeaving(from: pagesShownForSpace, to: focusedSpaceID)
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen, autoPictureInPicture: autoPiP)
+        } else if pagesShownForSpace != focusedSpaceID {
+            browsers.spaceChanged(to: focusedSpaceID)
         }
         pagesShownForSpace = focusedSpaceID
         if overlay.findVisible { syncAskOnPage() } else { askOnPage.service.refresh() }
@@ -3464,28 +3466,31 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .save?:
             if let png { saveCapture(png, over: peek?.window) }
         case .message?:
-            if let png { sendCaptureViaMessages(png) }
+            if let png { sendCaptureViaMessages(png, in: peek) }
         case .newEasel?:
             guard let png, let easel = EaselFiles.create(withPicture: png, source: source) else { return }
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID)
+            revealForLittleWindowEasel(from: peek)
         case .sendToEasel(let id)?:
             guard let png else { return }
             sendCapture(png, toEasel: id, source: source)
+            revealForLittleWindowEasel(from: peek)
         case .retake?:
             capturePage(in: peek)
-        case nil:
+        case .edit?, nil:
+            // Edit stays in the capture (its editor); it never ends the mode.
             break
         }
     }
 
     /// Arc's "Send via iMessage…": Messages' compose sheet with the capture attached.
-    private func sendCaptureViaMessages(_ png: Data) {
+    private func sendCaptureViaMessages(_ png: Data, in peek: LittleWindowController? = nil) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Cra Captures", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent(PageCommands.captureFileName())
         guard (try? png.write(to: url)) != nil, let service = NSSharingService(named: .composeMessage),
               service.canPerform(withItems: [url]) else {
-            showToast("Messages Isn't Available")
+            showCaptureToast("Messages Isn't Available", in: peek)
             return
         }
         service.perform(withItems: [url])
@@ -4890,8 +4895,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         actions.addExtension = { [weak self] in self?.openTab("https://chromewebstore.google.com/category/extensions") }
         actions.manageExtensions = { [weak self] in self?.openTab("chrome://extensions") }
-        actions.clearCache = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: false) }
-        actions.clearCookies = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: true) }
+        actions.clearCache = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(.cache) }
+        actions.clearCookies = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(.cookies) }
+        actions.clearSiteData = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(.siteData) }
         let ssl = currentBrowser?.sslStatus()
         let secure = ConnectionSecurity.isSecure(url: url, status: ssl.map {
             ConnectionSecurity.Status(secureConnection: $0.secureConnection, certStatus: $0.certStatus, contentStatus: $0.contentStatus)
@@ -5612,20 +5618,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             case .search: url = commandBar.engine.searchURL(typed); entered = false
             }
             store.recordQuerySelection(query: query, url: url)
-            if entered { store.recordTyped(url: url, profile: store.profileID(space: focusedSpaceID)) }
             let fillsEmptyPane = selectedTab?.isEmptyTab == true
             // A pinned tab keeps to its host: another host's address opens a Today tab (Arc).
             let leavesPinned = !fillsEmptyPane && selectedTabID.map(store.isPinned) == true
                 && PinnedNavigation.typedURLOpensNewTab(url, from: selectedTab?.tab?.url ?? "")
-            if mode == .editURL || fillsEmptyPane, selectedTabID != nil, !leavesPinned {
-                loadInSelectedTab(url)
-            } else if !isStandalone, let space = store.settings.space(forTypedURL: url), space != focusedSpaceID,
-                      store.orderedSpaces.contains(where: { $0.id == space }) {
-                // Air Traffic Control routes a typed URL too (#421): the tab opens in the route's
-                // space and the window goes there, as in Arc.
-                store.createTab(url: url, in: space, window: windowID)
-            } else {
-                store.createTab(url: url, window: windowID)
+            // Air Traffic Control routes a typed URL too (#421): the tab opens in the route's space and the window
+            // goes there, as in Arc.
+            let route = isStandalone ? nil : store.settings.space(forTypedURL: url).flatMap { id in
+                store.orderedSpaces.contains(where: { $0.id == id }) ? id : nil
+            }
+            let destination = TypedDestination.of(loadsInSelectedTab: (mode == .editURL || fillsEmptyPane) && selectedTabID != nil && !leavesPinned,
+                                                  route: route, focused: focusedSpaceID)
+            // Counted in the profile it opens in, not the one it was typed in (#864).
+            if entered { store.recordTyped(url: url, profile: store.profileID(space: destination.space(focused: focusedSpaceID))) }
+            switch destination {
+            case .selectedTab: loadInSelectedTab(url)
+            case .routed(let space): store.createTab(url: url, in: space, window: windowID)
+            case .newTab: store.createTab(url: url, window: windowID)
             }
         }
         guard let s else {
@@ -5824,15 +5833,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// An MCP agent's pill at the bottom of the page (AgentPill): its face, what it does, Take Over (⌘.).
     private lazy var agentPill = AgentPill()
 
-    /// ⌘. (Stop Loading) while an agent's pill is up here stops the agent instead of the page.
-    func takeOverFromAgent() -> Bool { agentPill.takeOverIfUp() }
+    /// ⌘. (Stop Loading) while an agent's pill is up here, or while an agent whose pill was closed
+    /// with its × still acts here, stops the agent instead of the page.
+    func takeOverFromAgent() -> Bool { agentPill.takeOverIfUp() || MCPServer.shared.takeOverClosedPill(in: windowID) }
 
-    func showAgentPill(_ text: String, takeOver: @escaping () -> Void) {
+    /// `tabWatched`: the agent acts in a tab the user is looking at (the whole pill), else only its face.
+    func showAgentPill(_ text: String, tabWatched: Bool, lingers: TimeInterval, takeOver: @escaping () -> Void, close: @escaping () -> Void) {
         guard let window else { return }
-        agentPill.show(text, page: { [weak self] in
+        agentPill.show(text, tabWatched: tabWatched, lingers: lingers, page: { [weak self] in
             guard let self else { return nil }
             return self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil)
-        }, in: window, takeOver: takeOver)
+        }, in: window, takeOver: takeOver, close: close)
+    }
+
+    /// Tests (cra://debug?mcpPill=open|close|takeover): a click on the pill's face, on its ×, or ⌘.
+    func pressAgentPill(_ part: String) {
+        switch part {
+        case "close": agentPill.pressClose()
+        case "takeover": CraLog.note("mcp pill: ⌘. \(takeOverFromAgent() ? "took over" : "found no agent")")
+        default: agentPill.open()
+        }
     }
 
     // MARK: An agent's cursor
@@ -6372,7 +6392,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// What the window server has in front of `window`, its own parts (its child windows, Chrome's page
     /// host windows) told apart. Asked only after macOS said the window isn't visible, and by
     /// `cra://debug?windowCoverage=1`.
-    private static func coverage(of window: NSWindow) -> WindowCoverage.Reading {
+    static func coverage(of window: NSWindow) -> WindowCoverage.Reading {
         let number = CGWindowID(window.windowNumber)
         let own = number > 0 ? (CGWindowListCopyWindowInfo(.optionIncludingWindow, number) as? [[String: Any]])?.first : nil
         let inFront = number > 0 ? CGWindowListCopyWindowInfo(.optionOnScreenAboveWindow, number) as? [[String: Any]] ?? [] : []

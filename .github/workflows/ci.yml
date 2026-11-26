@@ -16,7 +16,7 @@ jobs:
   test:
     name: Tests
     # No Chromium download: Packages/CraCore and the harnesses compile only the files they test.
-    runs-on: macos-26
+    runs-on: xcode-27
     permissions:
       contents: read
       pull-requests: write
@@ -57,7 +57,7 @@ jobs:
     name: Build the iPhone app
     # No Chromium and no signing: the app, its widgets and share extension for the simulator.
     # Its UI tests (docs/ios.md) take over ten minutes and run on a Mac, not here.
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
 
@@ -71,7 +71,7 @@ jobs:
   build:
     name: Build Cra.app
     # Same runner as release.yml, so CI builds what ships.
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
 
@@ -114,7 +114,7 @@ jobs:
   build-intel:
     name: Build Cra.app (Intel)
     # Every release ships an Intel copy too (scripts/release.sh), cross-compiled on this runner.
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
 

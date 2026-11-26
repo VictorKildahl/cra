@@ -1,0 +1,7 @@
+{
+  "payload": {
+    "pullRequestsChecksRoute.Main": {
+      "value": "<div class=\"checks-list-item\"><svg aria-label=\"This job failed\"></svg><a class=\"SideNav-subItem\" href=\"/example/widget/actions/runs/9/job/1\"><span>Recovered</span></a></div><div class=\"checks-list-item\"><svg aria-label=\"This job failed\"></svg><a class=\"SideNav-subItem\" href=\"/example/widget/actions/runs/10/job/1\"><span>Regressed</span></a></div><div class=\"checks-list-item\"><svg aria-label=\"This job succeeded\"></svg><a class=\"SideNav-subItem\" href=\"/example/widget/actions/runs/10/job/1\"><span>Recovered</span></a></div><div class=\"checks-list-item\"><svg aria-label=\"This job succeeded\"></svg><a class=\"SideNav-subItem\" href=\"/example/widget/actions/runs/9/job/1\"><span>Regressed</span></a></div><div class=\"checks-list-item\"><svg aria-label=\"This check passed\"></svg><a class=\"SideNav-subItem\" href=\"/example/widget/checks/1\"><span>External</span></a></div>"
+    }
+  }
+}

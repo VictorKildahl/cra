@@ -1,0 +1,53 @@
+{
+  "defaultSpaceID": {"rawValue": "5A000000-0000-4000-8000-000000000001"},
+  "spaces": [
+    {
+      "id": {"rawValue": "5A000000-0000-4000-8000-000000000001"},
+      "profile": {"id": "A0000000-0000-4000-8000-00000000000A"},
+      "name": "Work", "symbol": "hammer.fill", "accent": "indigo",
+      "branding": {"colors": [{"red": 0.235, "green": 0.055, "blue": 0.102, "alpha": 1}, {"red": 0.447, "green": 0.125, "blue": 0.188, "alpha": 1}, {"red": 0.788, "green": 0.635, "blue": 0.329, "alpha": 1}], "bannerPattern": "diagonal", "showsTexture": false},
+      "folders": [
+        {"id": {"rawValue": "F0000000-0000-4000-8000-000000000001"}, "location": "saved", "title": "Projects", "symbol": "folder.fill", "isCollapsed": false},
+        {"id": {"rawValue": "F0000000-0000-4000-8000-000000000002"}, "location": "saved", "title": "Reading", "symbol": "crest.emoji:📚", "isCollapsed": true, "parentID": {"rawValue": "F0000000-0000-4000-8000-000000000001"}},
+        {"id": {"rawValue": "F0000000-0000-4000-8000-000000000003"}, "location": "current", "title": "Split work", "symbol": "folder", "isCollapsed": false}
+      ],
+      "tabs": [
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000001"}, "title": "Inbox", "url": "https://mail.example.com/inbox?view=all", "savedURL": "https://mail.example.com/", "symbol": "crest.emoji:📬", "storedIconMode": "emoji", "placement": "pinned", "lastActivatedAt": 811903655.4, "keepsPageLoaded": false},
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000002"}, "title": "Cra Settings", "url": "cra://settings", "savedURL": "cra://settings", "symbol": "globe", "placement": "pinned", "lastActivatedAt": 811903655.5, "keepsPageLoaded": false},
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000003"}, "title": "GitHub", "customTitle": "Code", "url": "https://github.com/pulls", "savedURL": "https://github.com/", "symbol": "globe", "placement": "saved", "folderID": {"rawValue": "F0000000-0000-4000-8000-000000000001"}, "lastActivatedAt": 811903655.6, "keepsPageLoaded": false},
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000004"}, "title": "Swift docs", "url": "https://docs.example.com/swift", "savedURL": "https://docs.example.com/", "symbol": "globe", "placement": "saved", "folderID": {"rawValue": "F0000000-0000-4000-8000-000000000002"}, "lastActivatedAt": 811903655.7, "keepsPageLoaded": false},
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000005"}, "title": "Settings", "symbol": "gearshape", "placement": "saved", "nativeContent": {"kind": "settings", "resourceID": "36D804C1-3F34-4E98-BC70-04CED016E1DE"}, "storedIconMode": "automatic", "lastActivatedAt": 811903655.8, "keepsPageLoaded": false},
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000006"}, "title": "Status", "url": "https://status.example.com/now", "symbol": "globe", "placement": "saved", "lastActivatedAt": 811903655.9, "keepsPageLoaded": false},
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000007"}, "title": "News", "url": "https://news.example.com/", "symbol": "globe", "placement": "current", "lastActivatedAt": 811903656.0, "keepsPageLoaded": false},
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000008"}, "title": "Left", "url": "https://left.example.com/", "symbol": "globe", "placement": "current", "folderID": {"rawValue": "F0000000-0000-4000-8000-000000000003"}, "splitGroupID": {"rawValue": "5B000000-0000-4000-8000-000000000001"}, "lastActivatedAt": 811903656.1, "keepsPageLoaded": false},
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000009"}, "title": "New Tab", "url": "about:blank", "symbol": "globe", "placement": "current", "lastActivatedAt": 811903656.2, "keepsPageLoaded": false},
+        {"id": {"rawValue": "7A000000-0000-4000-8000-00000000000A"}, "title": "Start Page", "symbol": "flag.fill", "placement": "current", "lastActivatedAt": 811903656.3, "keepsPageLoaded": false}
+      ],
+      "splitGroups": [{"id": {"rawValue": "5B000000-0000-4000-8000-000000000001"}, "customTitle": "Research"}],
+      "archivedTabs": [
+        {"tab": {"id": {"rawValue": "7A000000-0000-4000-8000-000000000101"}, "title": "Old plan", "url": "https://plan.example.com/", "symbol": "globe", "placement": "current", "lastActivatedAt": 811000000, "keepsPageLoaded": false}, "archivedAt": 811000000, "reason": "autoCleanup"},
+        {"tab": {"id": {"rawValue": "7A000000-0000-4000-8000-000000000102"}, "title": "Closed doc", "customTitle": "Spec", "url": "https://spec.example.com/", "symbol": "globe", "placement": "current", "lastActivatedAt": 812000000, "keepsPageLoaded": false}, "archivedAt": 812000000, "reason": "closed"},
+        {"tab": {"id": {"rawValue": "7A000000-0000-4000-8000-000000000103"}, "title": "A download", "url": "blob:https://files.example.com/5c1e", "symbol": "globe", "placement": "current", "lastActivatedAt": 811500000, "keepsPageLoaded": false}, "archivedAt": 811500000, "reason": "closed"}
+      ],
+      "history": [], "accessPolicy": "open", "isSavedTabsExpanded": true
+    },
+    {
+      "id": {"rawValue": "5A000000-0000-4000-8000-000000000002"},
+      "profile": {"id": "B0000000-0000-4000-8000-00000000000B"},
+      "name": "Personal", "symbol": "crest.emoji:🏡", "accent": "teal",
+      "branding": {"colors": []},
+      "folders": [],
+      "tabs": [
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000201"}, "title": "Calendar", "url": "https://calendar.example.com/week", "savedURL": "https://calendar.example.com/", "symbol": "globe", "placement": "pinned", "lastActivatedAt": 811903657, "keepsPageLoaded": false},
+        {"id": {"rawValue": "7A000000-0000-4000-8000-000000000202"}, "title": "Notes", "url": "file:///Users/me/notes.html", "savedURL": "file:///Users/me/notes.html", "symbol": "globe", "placement": "saved", "lastActivatedAt": 811903658, "keepsPageLoaded": false}
+      ],
+      "splitGroups": [], "archivedTabs": [], "history": [], "accessPolicy": "open", "isSavedTabsExpanded": true
+    },
+    {
+      "id": {"rawValue": "5A000000-0000-4000-8000-000000000003"},
+      "profile": {"id": "B0000000-0000-4000-8000-00000000000B"},
+      "name": "Side", "symbol": "leaf", "accent": "rose",
+      "folders": [], "tabs": [], "splitGroups": [], "archivedTabs": [], "history": [], "accessPolicy": "open", "isSavedTabsExpanded": true
+    }
+  ]
+}

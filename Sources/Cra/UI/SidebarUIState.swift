@@ -31,7 +31,7 @@ final class SidebarUIState {
     /// The tabs calls share (Arc's yellow ring, TabSharing), and the ones a call can switch to instead.
     var sharedTabIDs: Set<UUID> = []
     var shareInsteadTabIDs: Set<UUID> = []
-    /// Tabs an MCP agent works in (MCPServer, MCPAgentPresence.lingers after its last call): a face on the row.
+    /// Tabs an MCP agent works in (MCPServer, MCPServer.linger after its last call): a face on the row.
     var agentTabIDs: Set<UUID> = []
     /// Recently audible tabs, held for 2 s after sound stops so the speaker stays steady.
     var audibleTabIDs: Set<UUID> = []

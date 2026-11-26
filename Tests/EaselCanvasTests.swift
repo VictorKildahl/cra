@@ -107,6 +107,7 @@ enum EaselCanvasTests {
         severalItems()
         resizeLikeArc()
         endlessCanvas()
+        captureEditor()
         window.close()
         print("Easel canvas: selection, movement, editing and deletion passed")
     }
@@ -404,6 +405,53 @@ enum EaselCanvasTests {
         sheet.cut(nil)
         precondition(sheet.document.items.count == 3 && sheet.picked.isEmpty, "Cut removes every picked item")
         print("Easel canvas: several items picked, moved, layered, copied and deleted together (#580)")
+    }
+
+    /// Arc's image editor for a capture (Capture ▸ Edit, #851): the capture in a card in the middle at a point per
+    /// pixel, Easel's seven tools without Duplicate, and what is drawn on it goes into the capture, at its pixels, when
+    /// a click lands on the dark page around the card. Closing with nothing drawn hands back the capture as it was.
+    // promise: #851
+    @MainActor
+    static func captureEditor() {
+        let ctx = CGContext(data: nil, width: 400, height: 300, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: 400, height: 300))
+        let capture = ctx.makeImage()!
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 1000, height: 800), styleMask: [.titled], backing: .buffered, defer: false)
+        func open() -> CaptureEditorView {
+            let editor = CaptureEditorView(frame: NSRect(x: 0, y: 0, width: 1000, height: 800), image: capture)
+            window.contentView = NSView(frame: editor.frame)
+            window.contentView!.addSubview(editor)
+            editor.layoutSubtreeIfNeeded()
+            return editor
+        }
+        let editor = open()
+        precondition(editor.cardFrame == NSRect(x: 300, y: 250, width: 400, height: 300), "the capture is in the middle, a point per pixel")
+        precondition(!editor.toolbar.showsDuplicate && editor.toolbar.frame == NSRect(x: 12, y: 300 - 12 - 44, width: 272, height: 44),
+                     "Easel's seven tools at the card's bottom left")
+        precondition(editor.sheet.editsImage, "the sheet has no title over a capture")
+        editor.sheet.insert(Easel.Item(kind: .rectangle, frame: .init(x: 20, y: 20, width: 100, height: 80)))
+        var out: CGImage?
+        editor.onDone = { out = $0 }
+        // A click on the dark page around the card closes the editor.
+        let click = NSEvent.mouseEvent(with: .leftMouseDown, location: editor.convert(NSPoint(x: 10, y: 10), to: nil), modifierFlags: [],
+                                       timestamp: 1, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!
+        editor.mouseDown(with: click)
+        guard let out else { preconditionFailure("a click beside the card closes the editor with the capture") }
+        precondition(out.width == 400 && out.height == 300 && editor.superview == nil, "the edited capture keeps its pixels and the editor goes")
+        let rep = NSBitmapImageRep(cgImage: out)
+        let inside = rep.colorAt(x: 70, y: 60)!.usingColorSpace(.deviceRGB)!, outside = rep.colorAt(x: 300, y: 250)!.usingColorSpace(.deviceRGB)!
+        precondition(abs(inside.redComponent - 1) + abs(inside.greenComponent - 1) + abs(inside.blueComponent - 1) > 0.2,
+                     "the rectangle is drawn into the capture")
+        precondition(outside.redComponent > 0.98 && outside.greenComponent > 0.98 && outside.blueComponent > 0.98, "the rest of the capture is as taken")
+        let untouched = open()
+        var back: CGImage?
+        untouched.onDone = { back = $0 }
+        untouched.finish()
+        precondition(back === capture, "with nothing drawn the capture comes back as it was")
+        window.close()
+        print("Easel canvas: Capture ▸ Edit draws on the capture as Arc's editor does (#851)")
     }
 
     /// Every kind of item drawn as Arc draws it (pixels checked), the picker's colours, the canvas menu,

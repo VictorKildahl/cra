@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "name": "Hide Ads",
+  "host": "developer.mozilla.org",
+  "about": "Hides the ad banner above each page, the ad under the table of contents and the one at the bottom.",
+  "by": "aashishvinu",
+  "preview": "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/display",
+  "zapped": [
+    "mdn-placement-top",
+    "mdn-placement-sidebar",
+    "mdn-placement-bottom"
+  ]
+}

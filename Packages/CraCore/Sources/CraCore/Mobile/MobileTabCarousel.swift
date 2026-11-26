@@ -5,6 +5,9 @@ import Foundation
 /// card in focus sits left of centre, the next one overlaps its right edge, and older ones tuck
 /// behind its left edge, a little smaller and dimmed. Measured from Arc Search on an iPhone 15 Pro
 /// (393 × 852 pt): cards 273 × 555 pt centred 438.5 pt down, left edges at 10, 83 and 304 pt.
+/// The first and the last card have no neighbour on one side and rest in the middle of the
+/// screen instead (`endCentring`; Arc Search 1.50 on a 390 pt iPhone, 25 and 26 Nov 2026: 58 pt
+/// in, where a card between them rests 83 pt in).
 public enum MobileTabCarousel {
     /// A card is the page at this scale.
     public static let cardScale: CGFloat = 0.694
@@ -30,18 +33,32 @@ public enum MobileTabCarousel {
 
     /// Where a card sits when it is `relative` cards right of the one in focus (negative: left of
     /// it; fractions while the row is being dragged). `alone`: the only tab, which Arc Search puts in the
-    /// middle of the screen (#816); a card with neighbours sits left of centre.
+    /// middle of the screen (#816); a card with neighbours sits left of centre. `centring` is the
+    /// row's `endCentring`.
     public static func placement(relative: CGFloat, in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0),
-                                 alone: Bool = false) -> Placement {
+                                 alone: Bool = false, centring: CGFloat = 0) -> Placement {
         let width = screen.width - sideInsets.left - sideInsets.right
         let size = cardSize(in: CGSize(width: width, height: screen.height))
-        let focusLeft = sideInsets.left + (alone ? (width - size.width) / 2 : width * 0.2112)
+        let middle = (width - size.width) / 2, leftOfCentre = width * 0.2112
+        let focusLeft = sideInsets.left + (alone ? middle : leftOfCentre)
         let step = relative >= 0 ? pitch(in: screen, sideInsets: sideInsets) : width * 0.1858
-        let left = focusLeft + relative * step
+        // At an end of the row the card in focus moves to the middle and the cards right of it
+        // come along; the one behind it keeps its place at the left edge.
+        let toMiddle = alone ? 0 : (middle - leftOfCentre) * centring * min(1, max(0, 1 + relative))
+        let left = focusLeft + relative * step + toMiddle
         let top = screen.height * 0.5147 - size.height / 2
         let scale = relative >= 0 ? min(1.02, 1 + 0.0096 * relative) : max(0.9, 1 + 0.023 * relative)
         let dim = relative >= 0 ? 0 : min(maximumDim, -relative * maximumDim)
         return Placement(frame: CGRect(x: left, y: top, width: size.width, height: size.height), scale: scale, dim: dim)
+    }
+
+    /// How far the row at `position` is towards an end, where the card in focus rests in the
+    /// middle of the screen: 1 on the first and the last card (and past them), 0 on every card
+    /// between, and part of the way while the row moves from one to the other. With two cards
+    /// both are ends, so it is 1 throughout. A lone card is `alone` instead.
+    public static func endCentring(position: CGFloat, count: Int) -> CGFloat {
+        guard count > 2 else { return count == 2 ? 1 : 0 }
+        return min(1, max(0, 1 - position, position - CGFloat(count - 2)))
     }
 
     /// How far a drag moves the row by one card: the distance to the next card's place.

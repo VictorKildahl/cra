@@ -123,6 +123,7 @@ public enum SidebarTabPreview: Equatable, Sendable {
     case outlookMail
     case outlookCalendar
     case notionCalendar
+    case pullRequest
 
     public static func kind(for url: String, settings: AppSettings) -> SidebarTabPreview? {
         if GmailPreview.feedURL(for: url) != nil { return settings.favoritePreviews ? .gmail : nil }
@@ -134,6 +135,7 @@ public enum SidebarTabPreview: Equatable, Sendable {
         case nil: break
         }
         if NotionCalendarPreview.isNotionCalendar(url) { return settings.notionCalendarPreviews ? .notionCalendar : nil }
+        if PullRequestPreview.identity(for: url) != nil { return settings.pullRequestPreviews ? .pullRequest : nil }
         return nil
     }
 
@@ -160,6 +162,7 @@ public enum SidebarTabPreview: Equatable, Sendable {
         case .outlookMail: settings.outlookMailPreviews = false
         case .outlookCalendar: settings.outlookCalendarPreviews = false
         case .notionCalendar: settings.notionCalendarPreviews = false
+        case .pullRequest: settings.pullRequestPreviews = false
         }
     }
 }

@@ -1,0 +1,28 @@
+# Snapshot card on a live PR (even its /files tab), with no network grant so the hover
+# checks request fails soft through the real sandbox. Background: no folder refresh.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt":true,"toolbarDefaultMigrated":true,"pullRequestPreviews":true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"\ud83c\udfe0","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":["F0000000-0000-0000-0000-000000000001"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"F0000000-0000-0000-0000-000000000001","parentID":"C0000000-0000-0000-0000-000000000012","title":"Pull Requests","children":["F0000000-0000-0000-0000-000000000101"],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"folder":{}},"liveFolder":{"source":"github","lastFetch":"2026-11-18T06:00:00Z","plugin":{"id":"cra.github","settings":{},"filters":["authored","review","teamReview"],"state":{},"sessionOrigins":[],"snapshot":{"items":[{"id":"https://github.com/example/app/pull/1","url":"https://github.com/example/app/pull/1","title":"Improve previews","updatedAt":"2026-11-24T09:00:00Z","revision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","details":{"draft":true,"commentCount":2,"labels":[{"name":"ui"}],"tasks":{"done":2,"total":4}}}],"actions":[],"preservedGroups":[]},"snapshotFilters":["authored","review","teamReview"]}}},{"id":"F0000000-0000-0000-0000-000000000101","parentID":"F0000000-0000-0000-0000-000000000001","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"tab":{"_0":{"url":"https://github.com/example/app/pull/1/files","savedURL":"https://github.com/example/app/pull/1","savedTitle":"Fix the thing","faviconKey":"github.com","liveItemURL":"https://github.com/example/app/pull/1","liveSubtitle":"someone"}}}}]}
+seed windows.json {"expandedFolders":["F0000000-0000-0000-0000-000000000001"]}
+cra://open?url=${PAGE}
+wait 3
+cra://debug?hover=TabRowView,0
+wait 2
+expect-log preview card shown: [0-9]+x[0-9]+ pinned$
+expect-log pull request checks: empty
+cra://debug?previewShown=offline
+expect-log preview card offline: shown
+reject-log fault:
+cra://debug?previewDismiss=1
+cra://debug?previewShown=dismissed
+expect-log preview card dismissed: none
+# Persist the disabled checkbox, then reload settings from disk.
+cra://debug?pullRequestPreviews=0
+wait 1
+relaunch
+cra://open?url=${PAGE}
+wait 3
+cra://debug?hover=TabRowView,0
+wait 1
+cra://debug?previewShown=disabled
+expect-log preview card disabled: none

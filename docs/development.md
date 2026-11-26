@@ -149,6 +149,9 @@ to Markdown or `docs/` alone runs nothing.
   Mac's own model (needs Apple Intelligence) for 18 sample titles and prints the names a 230 pt row
   would pick.
 - `scripts/test-filter-group-card.sh`: opens and closes a filter group using its accessibility button and checks the visible rows and selected count. The harness accepts the standard coverage flags.
+- `scripts/test-dns-provider-menu.sh`: hosts the DNS over HTTPS popup in AppKit and checks
+  the selection binding, provider endpoint tooltips and managed (disabled) state. Runs from
+  `scripts/test.sh` and accepts `CRA_TEST_SWIFTC_FLAGS` and `CRA_TEST_KEEP` for coverage.
 - `scripts/test-policies.sh`: the decisions pulled out of the window controllers
   (`ExtensionLaunch`, `DevToolsToggle`, `FeatureFlags`).
 - `scripts/test-skipped-list.sh`: the import window's skipped list (`SkippedList`) off screen: 8,500
