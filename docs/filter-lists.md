@@ -7,7 +7,11 @@
 
 Turning the switch off turns all of these off; turning it back on gives Standard. Strict is simply EasyList and EasyPrivacy both switched on, so it shows the same way under **Advanced…**.
 
+The **Block lists** row says how many rules are in use and from how many lists, each rule counted once however many lists name it.
+
 **Block lists → Advanced…** is for people who know filter lists: each source has its own switch there. AdAway and Anudeep's Blacklist are available offline. The optional subscriptions start off. Each switch controls one subscription, including custom URLs and files. Switching one off removes its downloaded copy. Switch it on again to fetch a fresh copy. **Remove** forgets a custom address. **Add List…** accepts it again.
+
+Under each list that is on, and under Cra's built-in lists, is how many of its rules Cra uses: blocked domains, network rules (paths, exceptions, rules for some sites) and element-hiding rules. Rules Cra reads but can't apply, such as scriptlets and redirects, are counted after it ("48,210 rules · 3,102 Cra can’t use"). On the legacy CEF engine a list's network rules don't count, only its domains and element hiding. **My filters** shows the same count for your own rules.
 
 **AdGuard Popups** hides supported promotional popups. **AdGuard Widgets** hides supported third-party widgets, including some support chats. You can enable either or both.
 

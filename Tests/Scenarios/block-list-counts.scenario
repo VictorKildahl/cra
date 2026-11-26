@@ -1,0 +1,34 @@
+# Settings ▸ Privacy shows how many rules each block list has and how many are in use (WhatsApp
+# report, 26 Nov 2026: "add block lists with more details, like how many rules"). The counts are
+# what Cra parsed and handed its blocker: the fixture list (Tests/Fixtures/Pages/blocklist-abp.txt)
+# has three network rules and two hiding rules, so 5 rules; Cra's built-in lists count their
+# domains; My filters counts its own lines. cra://debug?blockListCounts reads what the pane reads.
+# No & in a script: it ends the cra:// query.
+budget rss=800 stalls50=30
+port 47133
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "customBlocklists": ["http://127.0.0.1:47133/blocklist-abp.txt"]}
+pace 0.5
+
+expect-log GET /blocklist-abp\.txt
+expect-log block lists: [0-9]+ domains, 1 added list, [0-9]+ rules in use from 3
+cra://debug?blockListCounts=standard
+expect-log block list counts standard: inUse=In use: [0-9]{2},[0-9]{3} rules from 3 lists\. \| adaway=[0-9],[0-9]{3} rules \| anudeep=[0-9]{2},[0-9]{3} rules \| blocklist-abp\.txt=5 rules \| mine=$
+
+# My filters: a domain rule, a hiding rule and one Cra can't use (a scriptlet).
+cra://debug?personalFilters=%7C%7Cmine.example%5E%5Cn%23%23.mine-ad%5Cn%23%23%2Bjs(set-constant)
+expect-log block lists: [0-9]+ domains, 1 added list, [0-9]+ rules in use from 4
+cra://debug?blockListCounts=mine
+expect-log block list counts mine: inUse=In use: [0-9,]+ rules from 4 lists\. .* \| mine=2 rules · 1 Cra can’t use$
+
+# Ads and trackers off: the built-in lists leave the total, their own counts stay on their rows.
+cra://debug?blockAds=off
+expect-log block lists: [0-9]+ domains, 1 added list, 7 rules in use from 2
+cra://debug?blockListCounts=off
+expect-log block list counts off: inUse=In use: 7 rules from 2 lists\. \| adaway=[0-9],[0-9]{3} rules \| anudeep=[0-9]{2},[0-9]{3} rules \|
+
+# Nothing on: no list is in use.
+cra://debug?blockLists=none
+cra://debug?personalFilters=none
+expect-log block lists: 0 domains, 0 added lists, 0 rules in use from 0
+cra://debug?blockListCounts=none
+expect-log block list counts none: inUse=No block list is in use\. \| adaway=[0-9],[0-9]{3} rules \| anudeep=[0-9]{2},[0-9]{3} rules \| mine=$

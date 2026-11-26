@@ -3108,6 +3108,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("block ads and trackers: \(v == "on" ? "on" : "off")")
                 return
             }
+            // personalFilters=<text, \n between lines>|none: Settings ▸ Privacy ▸ Advanced… ▸ My filters, saved and in use.
+            if let v = dict["personalFilters"] {
+                store.settings.personalBlockFilters = v == "none" ? nil : v.replacingOccurrences(of: "\\n", with: "\n")
+                store.settings.personalFiltersEnabled = v != "none"
+                return
+            }
+            // blockListCounts=<label>: the rule counts the Privacy pane and its Advanced… sheet show, as they read them.
+            if let label = dict["blockListCounts"] {
+                let lists = BlockLists.shared
+                var parts = ["inUse=" + (lists.inUse.map { BlockListCount.inUse(rules: $0.rules, lists: $0.lists) } ?? "-")]
+                for source in BlockLists.builtInSources { parts.append("\(source)=\(lists.builtInCounts[source]?.summary ?? "-")") }
+                for address in store.settings.customBlocklists {
+                    parts.append("\(URL(string: address)?.lastPathComponent ?? "?")=\(lists.count(address)?.summary ?? "-")")
+                }
+                parts.append("mine=\(lists.personalCount(store.settings.personalBlockFilters).summary)")
+                CraLog.note("block list counts \(label): " + parts.joined(separator: " | "))
+                return
+            }
             if let v = dict["banner"] { SoftwareUpdater.shared.debugUpdated(v == "none" ? nil : v); return }
             if let v = dict["bannerReady"] { SoftwareUpdater.shared.debugReady(v == "none" ? nil : v); return }
             // updateNotice=<label>: what the update banner says ("update notice <label>: …"); =click clicks it, as
