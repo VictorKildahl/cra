@@ -114,11 +114,12 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
     /// bring it in as itself rather than as its picture: a page in memory shows at once (its
     /// picture covers WebKit's first frames back in the window); one that isn't starts loading
     /// under its picture, which leaves as it lands. False for a page Browse for Me's loading
-    /// covers (`browseLoadingCovers`): that one comes in as its picture.
+    /// covers or would cover (`browseLoadingCovers`, `browseWouldStart`): that one comes in as its
+    /// picture.
     func attachSwipeNeighbourPage(_ tab: MobileTab, step: Int) -> Bool {
         let existing = store.existingPage(tab.id)
         let growth = MobileTabCarousel.growth(pageInMemory: existing != nil, hasAddress: existing?.webView.url != nil,
-                                              covered: browseLoadingCovers(tab.id))
+                                              covered: browseLoadingCovers(tab.id) || browseWouldStart(for: tab))
         guard growth != .picture else { return false }
         let page = self.page(for: tab)
         page.delegate = self

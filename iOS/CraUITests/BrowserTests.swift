@@ -1499,6 +1499,45 @@ final class BrowseForMeTests: BrowserTestCase {
     }
 }
 
+final class BrowseSwipeTests: BrowserTestCase {
+    /// A swipe along the bar towards a Browse for Me tab whose answer was never saved, let go
+    /// short, leaves the page on screen clear: the answer's loading screen belongs to its own tab
+    /// and does not stay over this one.
+    func testACancelledSwipeTowardsAnUnsavedAnswerLeavesThePageClear() {
+        let data = FileManager.default.temporaryDirectory.appendingPathComponent("Cra-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: data) }
+        app.launchArguments = ["-CraDataDir", data.path, "-CraFakeModel", "YES", "-CraOpenURL", Self.page("First"), "-CraSearch", "NO"]
+        app.launch()
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("pizza ovens")
+        let chip = app.buttons["browse-for-me"].firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        chip.tap()
+        XCTAssertTrue(app.staticTexts["browse-query"].waitForExistence(timeout: 5))
+        // Back to First while the answer is still being made, and away before it is saved.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.95))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.95)),
+                   withVelocity: .fast, thenHoldForDuration: 0)
+        waitForPage("First")
+        XCUIDevice.shared.press(.home)
+        app.terminate()
+
+        app.launchArguments = ["-CraDataDir", data.path, "-CraFakeModel", "YES", "-CraSearch", "NO"]
+        app.launch()
+        waitForPage("First")
+        // Towards the answer's tab, let go short of switching.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.95))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.95)),
+                   withVelocity: .slow, thenHoldForDuration: 0.2)
+        sleep(1)
+        XCTAssertTrue(app.webViews.staticTexts["First"].exists, "still on First")
+        XCTAssertFalse(app.staticTexts["browse-query"].exists, "the answer's loading screen stays with its own tab")
+    }
+}
+
 final class AppleIntelligenceSwitchTests: BrowserTestCase {
     // promise: #792
     /// App Settings ▸ Apple Intelligence off (#792, not in Arc Search): the search sheet no longer offers

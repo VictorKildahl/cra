@@ -49,7 +49,8 @@ public enum MobileTabCarousel {
 
     /// What a card picked from the row grows into the screen with.
     public enum Growth: Equatable, Sendable {
-        /// Its picture alone: Browse for Me's loading covers the page, and it is not in the card.
+        /// Its picture alone: Browse for Me's loading covers the page, or would once it starts,
+        /// and it is not in the card.
         case picture
         /// The live page, under its picture only for WebKit's first frames back in the window
         /// (`pictureFade`): a page in memory, already showing.
