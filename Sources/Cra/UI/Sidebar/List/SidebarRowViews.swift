@@ -1738,6 +1738,8 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
         guard let m = model, let list, list.ui.renamingID == m.id, let f = renameField else { return }
         list.store.rename(m.id, to: f.stringValue.isEmpty ? "Folder" : f.stringValue)
         list.ui.renamingID = nil
+        // A count, not the name: cra.log keeps no names.
+        CraLog.note(f.stringValue == m.renameText ? "folder rename: name unchanged" : "folder rename: new name, \(f.stringValue.count) characters")
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
@@ -1750,13 +1752,36 @@ final class FolderRowView: SidebarRowView, NSTextFieldDelegate {
 
     override func dragItemID(at point: NSPoint) -> UUID? { model?.editing == true ? nil : model?.id }
 
-    // Every click toggles, however fast they come: double-click-to-rename made quick
-    // open/close clicks start a rename that then swallowed the clicks. Rename is in the menu.
+    // A click opens or closes the folder at once. A double-click on the name renames it and puts the
+    // folder back as the first click found it (ToggleRowClick); on the glyph every click toggles,
+    // however fast they come (0.1.18 dropped a whole-row double-click rename: fast open/close clicks
+    // started renames).
     override func click(_ event: NSEvent, at point: NSPoint) {
         guard let m = model, let list else { return }
-        if m.editing { commitRename() }
-        list.store.setExpanded(m.id, FolderPeek.clickOpens(expanded: m.expanded))
+        if m.editing {
+            commitRename()
+            list.store.setExpanded(m.id, FolderPeek.clickOpens(expanded: m.expanded))
+            return
+        }
+        // The pair's first click toggled this folder only if it came within the double-click interval.
+        let firstToggled = toggledAt.map { event.timestamp - $0 <= NSEvent.doubleClickInterval } ?? false
+        switch ToggleRowClick.action(clickCount: event.clickCount, onName: point.x >= glyph.frame.maxX, firstClickToggled: firstToggled) {
+        case .toggle:
+            // The store's state, not the row's: two quick clicks can both come before the row redraws.
+            list.store.setExpanded(m.id, FolderPeek.clickOpens(expanded: list.store.isExpanded(m.id)))
+            toggledAt = event.timestamp
+        case .rename(let undoToggle):
+            toggledAt = nil
+            let open = list.store.isExpanded(m.id)
+            if undoToggle { list.store.setExpanded(m.id, !open) }
+            CraLog.note("folder double-click: rename\(undoToggle ? ", put back \(open ? "closed" : "open")" : "")")
+            list.ui.renamingID = m.id
+        }
     }
+
+    /// When this row's last click opened or closed the folder, for a double-click's second click to
+    /// put it back.
+    private var toggledAt: TimeInterval?
 
     override func contextMenu(at point: NSPoint) -> NSMenu? {
         guard let m = model, let list, let item = list.store.item(m.id) else { return nil }

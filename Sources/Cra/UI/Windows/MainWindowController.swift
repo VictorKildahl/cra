@@ -1548,10 +1548,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Downloads logged as stuck, once each.
     private var stuckDownloads: Set<UInt32> = []
 
-    /// Chromium stops reporting a download once the tab that started it is gone (the
-    /// download carries on, or ends, silently), which left its row "in progress" for
-    /// good. A row that hasn't heard from Chromium for a while reads the file instead:
-    /// gone means it ended, the full size with no .crdownload beside it means it's done.
+    /// CEF stops reporting a download once the tab that started it is gone (the download
+    /// carries on, or ends, silently), which left its row "in progress" for good. A row that
+    /// hasn't heard from Chromium for a while reads the file instead (DownloadList.quietEnding):
+    /// the full size with no .crdownload beside it means it's done; gone means it ended on CEF
+    /// only, since the engine writes a running download to "Unconfirmed <n>.crdownload" (#895).
     private func checkStalledDownloads() {
         // A paused download hears nothing from Chromium until it resumes, and isn't stalled.
         let inProgress = DownloadHistory.shared.live.filter { $0.running && windowDownloads.contains($0.id) }
@@ -1568,12 +1569,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         let fm = FileManager.default
         for t in inProgress where !t.paused && !t.path.isEmpty && Date().timeIntervalSince(t.updated) > 5 {
-            guard !fm.fileExists(atPath: t.path + ".crdownload") else { continue }
             let size = (try? fm.attributesOfItem(atPath: t.path))?[.size] as? Int64
-            let state: CraDownloadState
-            if size == nil { state = .cancelled }
-            else if let size, t.total > 0, size >= t.total { state = .complete }
-            else { continue }
+            guard let ending = DownloadList.quietEnding(total: t.total, partialBesideIt: fm.fileExists(atPath: t.path + ".crdownload"),
+                                                        size: size, chromiumEngine: EngineFramework.isChromiumEngine) else { continue }
+            let state: CraDownloadState = ending == .complete ? .complete : .cancelled
             let info = CraDownloadInfo()
             info.identifier = t.id
             info.fullPath = t.path
