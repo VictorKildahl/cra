@@ -776,7 +776,7 @@ struct MobileArchiveTests {
 struct MobileTabCarouselTests {
     static let phone = CGSize(width: 393, height: 852)
 
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/TBD")) func picturesKeepTheTopLeftWhenTheScreenShapeChanges() {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/878")) func picturesKeepTheTopLeftWhenTheScreenShapeChanges() {
         let narrow = CGRect(x: 0, y: 10, width: 300, height: 450)
         let widePicture = MobileTabCarousel.pictureFrame(image: CGSize(width: 951, height: 669), in: narrow)
         #expect(abs(widePicture.minX) < 0.01 && abs(widePicture.minY - 10) < 0.01)
