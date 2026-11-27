@@ -586,15 +586,15 @@ private struct ColorWheel: View {
             let accent = color(BoostWheel.accent(hue: hue, strength: strength))
             ZStack {
                 if strength > 0 {
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
                         .fill(AngularGradient(stops: BoostWheel.ringStops.map { .init(color: color(BoostWheel.ring($0.hue)), location: $0.hue) }, center: .center))
                 } else {
                     // Arc's frame: brushed metal, dark at the top left and right, light at the bottom.
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
                         .fill(AngularGradient(colors: [Color(white: 0.55), Color(white: 0.25), Color(white: 0.45), Color(white: 0.85),
                                                        Color(white: 0.95), Color(white: 0.7), Color(white: 0.55)], center: .center, angle: .degrees(180)))
                 }
-                RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white).padding(7)
+                RoundedRectangle(cornerRadius: 15, style: .continuous).fill(Color.white).padding(7)
                 Canvas { ctx, s in
                     for x in stride(from: 12.0, to: s.width - 12, by: 6) {
                         for y in stride(from: 12.0, to: s.height - 12, by: 6) {
