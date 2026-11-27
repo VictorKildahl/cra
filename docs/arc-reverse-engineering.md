@@ -4664,6 +4664,12 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   on average, 8 at most, away from the middle; every saturated colour of one lightness becomes one colour.
   A handle dropped exactly in the middle still halves saturation and picks a hue in Arc; Cra's middle is no tint.
   `Boost.tint` (CraCore) holds it, `cc::ColorFilter::MakeCraColorize` (cra-boost-tint.patch) draws it.
+- [O live] The small Boost handle (#478): in Arc either dot can be dragged
+  on its own and both change the page; Cra's small dot only followed the big one. Arc's model names the
+  small handle's place `secondaryHueOffset`, so Cra stores `Boost.darkHue` (turns clockwise from the big handle,
+  an eighth turn by default) and dark pixels take `hue + darkHue`; moving the big handle carries the offset with
+  it. Arc's model has no secondary saturation, so the small handle stays on the big one's circle. The exact
+  radius behaviour while dragging it was not measured.
 - [O live] Incognito (#620): an offline Arc on a fake home, every space on "Profile 2", each profile's Chromium
   `download.default_directory` its own folder. File ▸ New Incognito Window from that space, then a file:// zip:
   it landed in Profile 2's folder. Arc's incognito window is the incognito side of the opening space's profile.

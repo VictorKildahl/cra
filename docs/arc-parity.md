@@ -447,9 +447,11 @@ the app's `SpaceCreationView`. Positions are from the sidebar card's top-left, i
   CraCore BoostWheel): the big handle goes where it is dragged, up to 56 pt from the middle of the 133 pt
   dotted square. Its direction is the hue, clockwise from 3 o'clock (red; yellow at 6, cyan at 9, purple
   at 12), its distance the strength (236/248/236 a few points out, 193/163/81 at 56 pt toward half past 4).
-  The small handle trails it by an eighth of a turn at the same distance in a dark shade of that hue
-  (71/88/46 against the colour above), a 2 pt line joins them, and a faint circle through both shows
-  the orbit. Untinted, both are grey (130 and 68) and rest 40 pt out at 3 o'clock, in the brushed grey
+  The small handle sits an eighth of a turn clockwise at the same distance in a dark shade of that hue
+  (71/88/46 against the colour above) until dragged: either handle can be moved on its own and both
+  change the page, the small one setting the dark pixels' hue (Arc's `secondaryHueOffset`). A 2 pt line
+  joins them, and a faint circle through both shows the orbit.
+  Untinted, both are grey (130 and 68) and rest 40 pt out at 3 o'clock, in the brushed grey
   frame; once tinted, the frame is a ring of every hue in the same order, not one saturation all round
   (226/104/81 red, 168/244/243 cyan, 141/90/239 purple, read every 15°).
 - Advanced color controls: a light popover under its button, arrow up, about 224 pt wide.

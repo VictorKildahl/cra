@@ -7,8 +7,9 @@ import Foundation
 /// - The big handle goes where it is dragged, up to 56 pt from the middle of the 133 pt dotted square.
 ///   Its direction is the hue, clockwise from 3 o'clock (red, yellow at 6, cyan at 9, purple at 12),
 ///   and its distance the strength: pale near the middle, full 56 pt out.
-/// - The small handle trails it by an eighth of a turn, clockwise, at the same distance, in a dark
-///   shade of that hue. A faint circle through both shows the orbit, and a line joins them.
+/// - The small handle sits `darkHue` turns clockwise from it (an eighth of a turn until dragged), at
+///   the same distance, in a dark shade of that hue. Dragging it moves only that handle, changing the
+///   hue dark pixels take. A faint circle through both shows the orbit, and a line joins them.
 /// - Untinted, both handles are grey and rest 40 pt out at 3 o'clock (the small one at half past
 ///   4) inside a brushed grey frame; once tinted, the frame is a ring of every hue in the same order.
 ///
@@ -16,13 +17,18 @@ import Foundation
 public enum BoostWheel {
     public static let maxRadius: Double = 56
     public static let restRadius: Double = 40
-    /// How far the small handle trails, in turns.
+    /// Where the small handle starts, in turns clockwise from the big one.
     public static let accentOffset: Double = 0.125
+    /// The handles as drawn, 32 and 22 pt across; a press on one takes it.
+    public static let bigHandleRadius: CGFloat = 16
+    public static let smallHandleRadius: CGFloat = 11
 
     public struct Handles: Equatable, Sendable {
         public var big: CGPoint
         public var small: CGPoint
     }
+
+    public enum Handle: Equatable, Sendable { case big, small }
 
     /// Hue, saturation and brightness, 0–1.
     public struct HSB: Equatable, Sendable {
@@ -32,19 +38,43 @@ public enum BoostWheel {
         }
     }
 
-    public static func handles(hue: Double, strength: Double) -> Handles {
+    public static func handles(hue: Double, strength: Double, darkHue: Double = accentOffset) -> Handles {
         let tinted = strength > 0
         let r = tinted ? min(1, strength) * maxRadius : restRadius
         let a = tinted ? hue : 0
-        return Handles(big: point(turns: a, radius: r), small: point(turns: a + accentOffset, radius: r))
+        return Handles(big: point(turns: a, radius: r), small: point(turns: a + darkHue, radius: r))
     }
 
-    /// What a drag to `offset` picks.
+    /// What a drag of the big handle to `offset` picks.
     public static func pick(_ offset: CGPoint) -> (hue: Double, strength: Double) {
         let r = hypot(offset.x, offset.y)
+        return (r == 0 ? 0 : turns(at: offset), min(1, r / maxRadius))
+    }
+
+    /// A point's angle clockwise from 3 o'clock, in turns.
+    public static func turns(at offset: CGPoint) -> Double {
         var turns = atan2(offset.y, offset.x) / (2 * .pi)
         if turns < 0 { turns += 1 }
-        return (r == 0 ? 0 : turns, min(1, r / maxRadius))
+        return turns
+    }
+
+    /// The offset to keep when the small handle is dragged to `offset` while the big one is at `hue`.
+    public static func darkHue(pickedAt offset: CGPoint, hue: Double) -> Double { wrap(turns(at: offset) - hue) }
+
+    /// The handle a press takes: the small one when the press is on it, else the big one. The big
+    /// handle is drawn last and wins where they overlap.
+    public static func grabbedHandle(at point: CGPoint, big: CGPoint, small: CGPoint) -> Handle {
+        if hypot(point.x - big.x, point.y - big.y) <= bigHandleRadius { return .big }
+        if hypot(point.x - small.x, point.y - small.y) <= smallHandleRadius { return .small }
+        return .big
+    }
+
+    /// The clockwise sweep from the big handle to the small one, in radians. The connector always
+    /// runs this way: past half a turn it keeps going instead of switching to the shorter arc.
+    public static func connectorSweep(big: CGPoint, small: CGPoint) -> Double {
+        var sweep = atan2(small.y, small.x) - atan2(big.y, big.x)
+        while sweep < 0 { sweep += 2 * Double.pi }
+        return sweep
     }
 
     /// The big handle's colour (Arc: 193/163/81 at full strength toward 6 minutes past, 236/248/236
@@ -55,12 +85,12 @@ public enum BoostWheel {
         return HSB(wrap(hue), 0.6 * pow(t, 1.3), 1 - 0.24 * t)
     }
 
-    /// The small handle's colour: the hue an eighth of a turn on, dark (Arc: 71/88/46 against the
-    /// tint above). Grey 68 untinted.
-    public static func accent(hue: Double, strength: Double) -> HSB {
+    /// The small handle's colour: a dark shade of the hue `darkHue` turns on (Arc: 71/88/46 against
+    /// the tint above at the default offset). Grey 68 untinted.
+    public static func accent(hue: Double, strength: Double, darkHue: Double = accentOffset) -> HSB {
         guard strength > 0 else { return HSB(0, 0, 0.27) }
         let t = min(1, strength)
-        return HSB(wrap(hue + accentOffset), 0.48 * pow(t, 1.2), 0.27 + 0.08 * pow(t, 4))
+        return HSB(wrap(hue + darkHue), 0.48 * pow(t, 1.2), 0.27 + 0.08 * pow(t, 4))
     }
 
     /// The tinted frame's colour at a hue. Arc's ring isn't one saturation all round: read off it

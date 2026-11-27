@@ -53,6 +53,36 @@ struct BoostWheelTests {
         #expect(near(top.big, 0, -40) && near(top.small, 28.5, -28.5))
     }
 
+    /// Both handles can be taken by a press. Moving the small one keeps the big one and the strength
+    /// where they are, and sets the dark half's hue by where it landed; a later big drag carries it on.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/478"))
+    func theSmallHandleMovesOnItsOwn() {
+        let h = BoostWheel.handles(hue: 0.25, strength: 0.5)
+        #expect(BoostWheel.grabbedHandle(at: h.small, big: h.big, small: h.small) == .small)
+        #expect(BoostWheel.grabbedHandle(at: h.big, big: h.big, small: h.small) == .big)
+        #expect(BoostWheel.grabbedHandle(at: CGPoint(x: -40, y: -40), big: h.big, small: h.small) == .big)
+        let pointer = CGPoint(x: -40, y: 0)
+        #expect(abs(BoostWheel.turns(at: pointer) - 0.5) < 0.001)
+        let d = BoostWheel.darkHue(pickedAt: pointer, hue: 0.25)
+        #expect(abs(d - 0.25) < 0.001)
+        let moved = BoostWheel.handles(hue: 0.25, strength: 0.5, darkHue: d)
+        #expect(near(moved.big, h.big.x, h.big.y) && near(moved.small, -28, 0))
+        #expect(abs(BoostWheel.accent(hue: 0.25, strength: 0.5, darkHue: d).hue - 0.5) < 0.001)
+        #expect(abs(BoostWheel.darkHue(pickedAt: CGPoint(x: -5, y: -5), hue: 0.75) - 0.875) < 0.001, "it wraps around")
+    }
+
+    /// The connector always runs from the big handle clockwise to the small one: past half a turn it
+    /// keeps going the same way instead of switching to the shorter arc.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/478"))
+    func connectorNeverSwitchesPastHalfATurn() {
+        let near = BoostWheel.handles(hue: 0.25, strength: 0.5, darkHue: 0.125)
+        #expect(abs(BoostWheel.connectorSweep(big: near.big, small: near.small) - 0.125 * 2 * .pi) < 0.001)
+        let far = BoostWheel.handles(hue: 0.25, strength: 0.5, darkHue: 0.75)
+        #expect(abs(BoostWheel.connectorSweep(big: far.big, small: far.small) - 0.75 * 2 * .pi) < 0.001)
+        let none = BoostWheel.handles(hue: 0.25, strength: 0.5, darkHue: 0)
+        #expect(BoostWheel.connectorSweep(big: none.big, small: none.small) == 0)
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/478"))
     func colorsMatchArcs() {
         #expect(close(BoostWheel.tint(hue: 0.125, strength: 1), 193, 163, 81))

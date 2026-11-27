@@ -86,6 +86,15 @@ built release app with a test profile. Note anything that fails in the release's
   with no strip of page colour above it. macOS 26 places the panels right without the fix, so
   FloatingSidebarTests (AppKit's own constraint) and `floating-sidebar-shadow` stand in; ask the reporter.
 
+### Boosts
+
+- **#478:** open a Boost on a page of dark and light text, tint it, then drag the small wheel handle
+  away from the big one: only the small handle moves, dark pixels change hue and light ones keep the
+  big handle's hue. Drag the big handle afterwards: the offset between them stays. The connector
+  follows the orbit and keeps its direction past half a turn. Either dot has three sizes: at rest,
+  larger under the pointer, and largest while held and hovered, with no pointer change. CraCore pins
+  the geometry and the colourize; only the gesture and the hover animation need a person to watch them.
+
 ### Sidebar, tabs and the command bar
 
 - **#794:** with Japanese (Romaji) input on, the Kana key (or Karabiner's ⌘ tap that sends it) switches to Japanese and Eisu back,
