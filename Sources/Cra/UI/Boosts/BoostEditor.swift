@@ -578,12 +578,18 @@ private struct ColorWheel: View {
 
     private func color(_ c: BoostWheel.HSB) -> Color { Color(hue: c.hue, saturation: c.saturation, brightness: c.brightness) }
 
+    /// Arc's hairline around each handle: the handle's own hue, washed almost to white.
+    private func rim(_ c: BoostWheel.HSB) -> Color {
+        color(BoostWheel.HSB(c.hue, c.saturation * 0.2, min(1, c.brightness + 0.65 * (1 - c.brightness))))
+    }
+
     var body: some View {
         GeometryReader { geo in
             let c = geo.size.width / 2
             let h = BoostWheel.handles(hue: hue, strength: strength)
             let big = CGPoint(x: c + h.big.x, y: c + h.big.y), small = CGPoint(x: c + h.small.x, y: c + h.small.y)
-            let accent = color(BoostWheel.accent(hue: hue, strength: strength))
+            let accentHSB = BoostWheel.accent(hue: hue, strength: strength)
+            let accent = color(accentHSB)
             ZStack {
                 ZStack {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -616,10 +622,14 @@ private struct ColorWheel: View {
                         .stroke(AngularGradient(colors: [Color(white: 0.55), Color(white: 0.25), Color(white: 0.45), Color(white: 0.85),
                                                          Color(white: 0.95), Color(white: 0.7), Color(white: 0.55)], center: .center, angle: .degrees(180)), lineWidth: 7)
                 }
-                Circle().fill(accent).frame(width: 22, height: 22).overlay(Circle().stroke(.white, lineWidth: 3)).shadow(radius: 1.5)
+                Circle().fill(accent).frame(width: 22, height: 22)
+                    .overlay(Circle().stroke(.white, lineWidth: 3))
+                    .overlay(Circle().inset(by: -2).stroke(rim(accentHSB), lineWidth: 0.75))
                     .position(small)
                 Circle().fill(color(BoostWheel.tint(hue: hue, strength: strength)))
-                    .frame(width: 32, height: 32).overlay(Circle().stroke(.white, lineWidth: 3)).shadow(radius: 2)
+                    .frame(width: 32, height: 32)
+                    .overlay(Circle().stroke(.white, lineWidth: 3))
+                    .overlay(Circle().inset(by: -2).stroke(rim(BoostWheel.tint(hue: hue, strength: strength)), lineWidth: 0.75))
                     .position(big)
             }
             .contentShape(Rectangle())
