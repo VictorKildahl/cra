@@ -2,7 +2,9 @@
 # Yab's). A track whose media session names a title, an artist and artwork on the page's server gets a 30 pt
 # island once its tab is off screen: the title and artist on one line, the artwork fetched through the page's own
 # network, Arc's card colour, and 15-second skips (the page has no tracks). Skipping and seeking move the
-# page's media; switching back to Arc's player makes Arc's 33 pt card again, and the island comes back.
+# page's media; switching back to Arc's player makes Arc's 33 pt card again, and the island comes back. A second
+# track on a page like Bandcamp's (no media session) stacks a second island over it, its line the tab's title without
+# the "▶︎" the page puts in front and its artwork the page's og:image; opening the stack opens both.
 budget rss=800 stalls50=30
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "nowPlayingStyle": "island"}
 pace 0.5
@@ -40,3 +42,21 @@ cra://debug?nowPlayingStyle=island
 wait 1
 cra://debug?nowPlaying=state&label=again
 expect-log Cra nowPlaying\[again\] card island h=30 open=0 line="Slow Tides.{2}Harbour Lights" art=32x32
+
+cra://open?url=${ORIGIN}/now-playing.html?n=plain
+expect-log GET /now-playing\.html\?n=plain
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"playPlain()"}
+expect-log "value":"plain:playing"
+cra://open?url=${PAGE}?n=third
+expect-log GET /page\.html\?n=third
+wait 3
+cra://debug?nowPlaying=state&label=two
+expect-log Cra nowPlaying\[two\] media 127\.0\.0\.1 title="" artist="" pos=[0-9] dur=120 art=32x32
+expect-log Cra nowPlaying\[two\] card island h=30 open=0 line="Plain Song" art=32x32
+expect-log Cra nowPlaying\[two\] card island h=30 open=0 line="Slow Tides.{2}Harbour Lights"
+cra://debug?nowPlaying=open&label=open
+wait 1
+cra://debug?nowPlaying=state&label=opentwo
+expect-log Cra nowPlaying\[opentwo\] card island h=144 open=1 line="Plain Song"
+expect-log Cra nowPlaying\[opentwo\] card island h=144 open=1 line="Slow Tides

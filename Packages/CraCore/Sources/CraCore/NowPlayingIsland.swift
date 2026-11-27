@@ -53,7 +53,8 @@ public struct NowPlayingMedia: Equatable, Sendable {
     }
 
     /// Run in the page's isolated world: the media session's metadata (DOM objects are shared between worlds)
-    /// and the element that plays, else the one that played, else the first. A JSON string, or "" when there is
+    /// and the element that plays, else the one that played, else the first. A page whose media session names no
+    /// artwork (Bandcamp sets none) offers its og:image, an album's cover there. A JSON string, or "" when there is
     /// neither metadata nor an element. `duration` is -1 for a live stream (Infinity has no JSON).
     public static let script = """
     (() => {
@@ -61,7 +62,9 @@ public struct NowPlayingMedia: Equatable, Sendable {
       const media = [...document.querySelectorAll('video,audio')];
       const m = media.find(x => !x.paused && !x.ended) ?? media.find(x => x.currentTime > 0) ?? media[0];
       if (!md && !m) return '';
-      const art = md && md.artwork ? [...md.artwork].map(a => ({ src: String(a.src || ''), sizes: String(a.sizes || '') })) : [];
+      let art = md && md.artwork ? [...md.artwork].map(a => ({ src: String(a.src || ''), sizes: String(a.sizes || '') })) : [];
+      const og = document.querySelector('meta[property="og:image"]');
+      if (!art.length && og && og.content) art = [{ src: new URL(og.content, location.href).href, sizes: '' }];
       const d = m ? m.duration : NaN;
       return JSON.stringify({
         title: md ? String(md.title || '') : '', artist: md ? String(md.artist || '') : '', album: md ? String(md.album || '') : '',
@@ -219,9 +222,17 @@ public enum NowPlayingIsland {
         return min(max(0, fraction), 1) * duration
     }
 
-    /// What the title line says: the media session's title, else the tab's own title.
+    /// What the title line says: the media session's title, else the tab's own title without the mark some sites
+    /// put in front of it while they play (Bandcamp's "▶︎ Minecraft - Volume Alpha | C418"): the island says that.
     public static func title(_ media: NowPlayingMedia?, tabTitle: String) -> String {
         let t = media?.title ?? ""
-        return t.isEmpty ? tabTitle : t
+        return t.isEmpty ? withoutPlayingMark(tabTitle) : t
+    }
+
+    /// ▶ ► ▸ ⏵ 🔊 🔉 ♪ ♫ (with or without a variation selector) and the spaces after them, at the start only.
+    static func withoutPlayingMark(_ title: String) -> String {
+        let marks: Set<UInt32> = [0x25B6, 0x25BA, 0x25B8, 0x23F5, 0x1F50A, 0x1F509, 0x266A, 0x266B, 0xFE0E, 0xFE0F, 0x20, 0xA0]
+        let rest = title.unicodeScalars.drop { marks.contains($0.value) }
+        return rest.isEmpty ? title : String(String.UnicodeScalarView(rest))
     }
 }

@@ -156,4 +156,16 @@ import Testing
         #expect(NowPlayingIsland.title(NowPlayingMedia(), tabTitle: "Music") == "Music")
         #expect(NowPlayingIsland.title(nil, tabTitle: "Music") == "Music")
     }
+
+    /// Bandcamp's tab says "▶︎ Minecraft - Volume Alpha | C418" while it plays and sets no media session: the
+    /// island's line leaves the mark out. Only at the start; a title that is nothing but the mark keeps it.
+    @Test func titleLeavesOutASitesPlayingMark() {
+        #expect(NowPlayingIsland.title(nil, tabTitle: "▶\u{FE0E} Minecraft - Volume Alpha | C418") == "Minecraft - Volume Alpha | C418")
+        #expect(NowPlayingIsland.title(nil, tabTitle: "▶️ Song") == "Song")
+        #expect(NowPlayingIsland.title(nil, tabTitle: "🔊 Radio") == "Radio")
+        #expect(NowPlayingIsland.title(nil, tabTitle: "♫\u{A0}Mix") == "Mix")
+        #expect(NowPlayingIsland.title(nil, tabTitle: "Side A ▶ Side B") == "Side A ▶ Side B")
+        #expect(NowPlayingIsland.title(nil, tabTitle: "▶") == "▶")
+        #expect(NowPlayingIsland.title(NowPlayingMedia(title: "▶ Intro"), tabTitle: "x") == "▶ Intro")
+    }
 }
