@@ -2461,6 +2461,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // drag can move it (#308), where the page card sits in it (#315) and the loading bar over it (#548), whether
             // it floats (Stay On Top) and has a sheet open (#333), and which side its sidebar is on (#464). Lights are "hidden", or
             // their alpha; "-" when a window has none.
+            // titleRow=<label>: how far each shown sidebar glyph in the traffic lights' row sits above (+) or below (−) the
+            // lights' centre, in points, left to right (#876; Arc's toggle, ← → ↻ share the lights' centre).
+            if let label = dict["titleRow"] {
+                for (i, m) in mainWindows.enumerated() {
+                    guard let w = m.window, let close = w.standardWindowButton(.closeButton), let content = w.contentView else { continue }
+                    let lights = close.convert(close.bounds, to: nil).midY
+                    func glyphs(_ v: NSView) -> [NSView] {
+                        (v is SidebarGlyphButton && !v.isHiddenOrHasHiddenAncestor ? [v] : []) + v.subviews.flatMap(glyphs)
+                    }
+                    let row = glyphs(content).map { $0.convert($0.bounds, to: nil) }.filter { abs($0.midY - lights) < 12 }
+                        .sorted { $0.minX < $1.minX }.map { String(format: "%+.1f", $0.midY - lights) }
+                    CraLog.note("title row \(label): main\(i) glyphs=\(row.joined(separator: ","))")
+                }
+            }
             if let label = dict["windowState"] {
                 func lights(_ w: NSWindow) -> String {
                     [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { type in
