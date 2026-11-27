@@ -1,3 +1,4 @@
+import CraCore
 import XCTest
 import UIKit
 
@@ -568,12 +569,12 @@ final class SettingsTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["setting-global-site-settings"].waitForExistence(timeout: 5))
         sleep(1)
         keep("app-settings-open")
-        if UIDevice.current.userInterfaceIdiom == .pad {
+        if MobileScreenClass.of(size: app.frame.size, isPad: UIDevice.current.userInterfaceIdiom == .pad).opensSheetsFull {
             XCTAssertLessThan(app.buttons["Done"].frame.minY, app.frame.height / 3,
-                              "App Settings opened as a short card on iPad")
+                              "App Settings opened as a short card on a pad or wide screen")
         } else {
             XCTAssertGreaterThan(app.buttons["Done"].frame.minY, app.frame.height * 0.4,
-                                 "App Settings did not open at medium height on iPhone")
+                                 "App Settings did not open at medium height on a phone screen")
         }
     }
 
@@ -2605,12 +2606,12 @@ final class AppIconDockTests: BrowserTestCase {
         }
         sleep(1)
         keep("app-icon-picker-open")
-        if UIDevice.current.userInterfaceIdiom == .pad {
+        if MobileScreenClass.of(size: app.frame.size, isPad: UIDevice.current.userInterfaceIdiom == .pad).opensSheetsFull {
             XCTAssertLessThan(navigationBar.frame.minY, app.frame.height / 3,
-                              "the App Icon picker opened as a short card on iPad")
+                              "the App Icon picker opened as a short card on a pad or wide screen")
         } else {
             XCTAssertGreaterThan(navigationBar.frame.minY, app.frame.height * 0.4,
-                                 "the App Icon picker did not open at medium height on iPhone")
+                                 "the App Icon picker did not open at medium height on a phone screen")
         }
     }
 

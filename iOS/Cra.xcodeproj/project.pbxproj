@@ -14,6 +14,7 @@
 		C0A0000000000000000000B1 /* CraShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0A0000000000000000000B0 /* CraShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C0A0000000000000000000B9 /* CraCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0A0000000000000000000B8 /* CraCore */; };
 		C0A0000000000000000000A1 /* CraWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0A0000000000000000000A0 /* CraWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C0A0000000000000000000C0 /* CraCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0A0000000000000000000C1 /* CraCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -102,6 +103,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0A0000000000000000000C0 /* CraCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -203,6 +205,9 @@
 				C0A000000000000000000004 /* CraUITests */,
 			);
 			name = CraUITests;
+			packageProductDependencies = (
+				C0A0000000000000000000C1 /* CraCore */,
+			);
 			productName = CraUITests;
 			productReference = C0A000000000000000000021 /* CraUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -675,6 +680,11 @@
 		};
 		C0A0000000000000000000B8 /* CraCore */ = {
 			isa = XCSwiftPackageProductDependency;
+			productName = CraCore;
+		};
+		C0A0000000000000000000C1 /* CraCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0A000000000000000000032 /* XCLocalSwiftPackageReference "../Packages/CraCore" */;
 			productName = CraCore;
 		};
 /* End XCSwiftPackageProductDependency section */
