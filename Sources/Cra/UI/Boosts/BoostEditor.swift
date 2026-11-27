@@ -592,7 +592,7 @@ private struct ColorWheel: View {
             let accent = color(accentHSB)
             ZStack {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
                         .fill(Color.white)
                         .overlay(AngularGradient(stops: BoostWheel.ringGradient.map { .init(color: Color(red: $0.1, green: $0.2, blue: $0.3), location: $0.0) }, center: .center).opacity(0.06))
                     Canvas { ctx, s in
@@ -610,14 +610,14 @@ private struct ColorWheel: View {
                         ctx.stroke(line, with: .color(accent), lineWidth: 2)
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 if strength > 0 {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .inset(by: 3.5)
                         .stroke(AngularGradient(stops: BoostWheel.ringGradient.map { .init(color: Color(red: $0.1, green: $0.2, blue: $0.3), location: $0.0) }, center: .center), lineWidth: 7)
                 } else {
                     // Arc's frame: brushed metal, dark at the top left and right, light at the bottom.
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .inset(by: 3.5)
                         .stroke(AngularGradient(colors: [Color(white: 0.55), Color(white: 0.25), Color(white: 0.45), Color(white: 0.85),
                                                          Color(white: 0.95), Color(white: 0.7), Color(white: 0.55)], center: .center, angle: .degrees(180)), lineWidth: 7)
