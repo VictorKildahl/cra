@@ -47,6 +47,17 @@ struct AppIconBundleTests {
         #expect(AppIconBundle.dockImage(picked: "custom", defaultID: "segments", bundleIconStale: false) == "custom")
     }
 
+    /// GitHub #884: the icon switches with macOS's light and dark (Icon & widget style Auto, or Dark) only when it is
+    /// the bundle's own, Segments, which macOS draws from its Icon Composer icon with a light and a dark look
+    /// (AppIconCatalogTests). The other picks, Original among them, are pictures the Dock draws as given, as Arc's
+    /// are: Arc 1.174.3's AppIcon has no dark appearance in its Assets.car.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/884")) func onlyTheBundlesOwnIconSwitchesWithLightAndDark() {
+        for picked in ["segments", "original", "midnight", "custom"] {
+            let switches = AppIconBundle.dockImage(picked: picked, defaultID: "segments", bundleIconStale: false) == nil
+            #expect(switches == (picked == "segments"), "\(picked)")
+        }
+    }
+
     /// The one case the Dock is given Segments' picture: this launch found a Finder icon an earlier Cra put on
     /// Cra.app (0.1.54, 0.1.55; #724). The Dock's cache of the bundle's icon can then still be the icon picked
     /// before, so Segments picked after Original kept Original (Victor, 23 Nov 2026), until the next launch.

@@ -1916,6 +1916,7 @@
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::nowhereIsSilentAndComingBackTicks  b0622ee05ea5
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::theSamePlaceTicksOnce  20e7ead609e3
 #883   Tests/Scenarios/sidebar-reorder-haptics.scenario  a67cbf7b9082
+#884   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::onlyTheBundlesOwnIconSwitchesWithLightAndDark  b32d18164fe2
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85
