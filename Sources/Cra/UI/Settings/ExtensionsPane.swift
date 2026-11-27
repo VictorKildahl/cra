@@ -97,8 +97,9 @@ struct ExtensionsPane: View {
             switch section {
             case .shared:
                 if ExtensionStore.canShareData {
-                    Toggle("", isOn: Binding(get: { extensions.shares.isOn(e.extensionID) }, set: { extensions.setSharedOn(e, $0) }))
-                        .toggleStyle(.switch).labelsHidden().controlSize(.small)
+                    Toggle("Turn \(e.name) on or off in every profile it is shared with",
+                           isOn: Binding(get: { extensions.shares.isOn(e.extensionID) }, set: { extensions.setSharedOn(e, $0) }))
+                        .labelsHidden().toggleStyle(.arcSwitch)
                         .help("On or off in every profile it is shared with")
                 }
                 profilesMenu(e)
