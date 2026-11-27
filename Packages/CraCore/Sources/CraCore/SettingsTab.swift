@@ -11,6 +11,10 @@ public enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
+    /// The switch on the first tab that turns Sync on. The iPhone's "Turn on Sync on your Mac" names it
+    /// by this name, so the two can't drift apart (GitHub #897).
+    public static let syncSwitch = "Sync with iCloud"
+
     /// The tab Settings opens on, as Arc's always opens on its first.
     public static var first: SettingsTab { allCases[0] }
 

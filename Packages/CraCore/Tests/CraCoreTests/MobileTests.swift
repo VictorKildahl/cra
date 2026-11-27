@@ -2574,6 +2574,19 @@ struct MobileSyncIntroTests {
         #expect(MobileSyncIntro.haveMacBody(iCloud: false).hasSuffix("Sign in to iCloud on this iPhone too."))
     }
 
+    /// The steps lead where the Mac's switch is: Settings' first tab, the one named after the user,
+    /// and the switch by the name the Mac gives it. General has had no Sync since the redesign (#377).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/897"))
+    func theWayToSyncNamesTheMacsSwitchWhereItIs() {
+        #expect(SettingsTab.first == .sync)
+        for iCloud in [true, false] {
+            let body = MobileSyncIntro.haveMacBody(iCloud: iCloud)
+            #expect(body.contains("first tab"))
+            #expect(body.contains(SettingsTab.syncSwitch))
+            #expect(!body.contains(SettingsTab.general.title))
+        }
+    }
+
     @Test func closingTheCardIsKeptAndOlderFilesHaveNotClosedIt() throws {
         let old = try JSONDecoder().decode(MobileSettings.self, from: Data("{}".utf8))
         #expect(!old.hasDismissedSyncCard)

@@ -516,6 +516,7 @@ struct SyncIntroView: View {
             Text(title).font(.system(size: 30, weight: .heavy)).foregroundStyle(blue).multilineTextAlignment(.center)
                 .accessibilityIdentifier("sync-detail-title")
             Text(body).font(.system(size: 16)).foregroundStyle(Color(white: 0.3)).multilineTextAlignment(.center)
+                .accessibilityIdentifier("sync-detail-body")
             Spacer()
             Spacer()
             Button { page = .intro } label: {

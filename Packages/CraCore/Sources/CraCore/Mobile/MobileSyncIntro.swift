@@ -16,7 +16,8 @@ public enum MobileSyncIntro {
     public static let haveMacTitle = "Turn on Sync on your Mac"
     /// iCloud signed in on the phone or not.
     public static func haveMacBody(iCloud: Bool) -> String {
-        let mac = "In Cra on your Mac, open Settings \u{25B8} General and turn on Sync. Your Spaces come over through iCloud."
+        // Sync is on Settings' first tab, the one named after the user (General before #377; #897).
+        let mac = "In Cra on your Mac, open Settings and, on its first tab (the one with your name), turn on \(SettingsTab.syncSwitch). Your Spaces come over through iCloud."
         return iCloud ? mac : mac + " Sign in to iCloud on this iPhone too."
     }
 

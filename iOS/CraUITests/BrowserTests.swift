@@ -1809,7 +1809,8 @@ final class SpacesTests: BrowserTestCase {
     }
     """#
 
-    /// Without iCloud the Spaces view says where Spaces come from.
+    /// Without iCloud the Spaces view says where Spaces come from, and where the Mac's switch is.
+    // promise: #897
     func testWithoutSyncTheSpacesViewExplains() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
         waitForPage("First")
@@ -1827,6 +1828,10 @@ final class SpacesTests: BrowserTestCase {
         app.buttons["sync-have-mac"].tap()
         XCTAssertTrue(app.staticTexts["sync-detail-title"].waitForExistence(timeout: 3))
         XCTAssertEqual(app.staticTexts["sync-detail-title"].label, "Turn on Sync on your Mac")
+        // Sync is on the Mac's first Settings tab, not General (#897).
+        let steps = app.staticTexts["sync-detail-body"].label
+        XCTAssertTrue(steps.contains("on its first tab (the one with your name), turn on Sync with iCloud"), steps)
+        XCTAssertFalse(steps.contains("General"), steps)
         app.buttons["sync-go-back"].tap()
         app.buttons["sync-no-mac"].tap()
         XCTAssertTrue(app.staticTexts["Get Cra on your computer first"].waitForExistence(timeout: 3))
