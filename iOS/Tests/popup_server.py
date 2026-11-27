@@ -147,10 +147,11 @@ function createPasskey() {
                       '<p style="height:3000px">Long</p>')
         elif url.path == '/two-tones':
             # A black top band over a white page bottom: the bar follows the bottom behind it,
-            # the status band the top (PageUnderBarTests).
+            # the status band the top (PageUnderBarTests). The black stops well above the bar: a
+            # full-screen block ran on under it, and the bar's ultra-thin material let it through.
             self.page('<meta name="theme-color" content="#000000"><title>Two Tones</title>'
                       '<style>html,body{margin:0;padding:0}</style>'
-                      '<div style="height:100vh;background:black">'
+                      '<div style="height:240px;background:black">'
                       '<h1 style="color:white;padding:24px">Two Tones</h1></div>'
                       '<div style="height:100vh;background:white"></div>')
         elif url.path == '/dark-page':

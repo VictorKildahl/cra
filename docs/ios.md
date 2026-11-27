@@ -60,6 +60,7 @@ Launch arguments put the app in a state for a screenshot or a test:
 | `-CraShowVoice YES` | Holds the voice overlay up, for a screenshot |
 | `-CraOnboarding YES` | Shows onboarding on a test's data folder |
 | `-CraCountHaptics YES` | Counts each haptic tick in its control's accessibility value and a hidden `haptic-count` element, for UI tests; pull to refresh has no control, so it only adds to the total |
+| `-CraTraceNewTabDrawer YES` | Keeps the new tab drawer's rise, field morph, material and side-button state in hidden `new-tab-drawer-trace` and `new-tab-drawer-drag-trace` elements, for UI tests |
 
 Writing a UI test (`iOS/CraUITests`): pages are `data:` addresses passed with `-CraOpenURL`, so
 no test needs the network. The exceptions are the tests that need a real http(s) page (`PopupTests`' form POSTs, `PlainHTTPTests`, `CertificateTests`, `ExternalLinkTests`, `TabSwitcherIconTests`):

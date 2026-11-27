@@ -29,6 +29,12 @@ public enum MobileSearchSheet {
     public static let bottomInset: CGFloat = 8
     /// The sheet's top corners.
     public static let cornerRadius: CGFloat = 38
+    /// The incognito toggle's glyph ends this far inside the field's right end (#654).
+    public static let incognitoTrailingInset: CGFloat = 13.5
+    /// The toggle's width with its word beside it: room for "Incognito" and the mask.
+    public static let incognitoLabelledWidth: CGFloat = 130
+    /// The gap between the incognito word and the mask.
+    public static let incognitoLabelGap: CGFloat = 6.7
 
     public static func openFieldFrame(width: CGFloat, sideInsets: (left: CGFloat, right: CGFloat)) -> CGRect {
         CGRect(x: sideInsets.left + fieldSideInset, y: topInset,
@@ -71,20 +77,125 @@ public enum MobileSearchSheet {
         heldAt ?? top(screenHeight: screenHeight, keyboardHeight: keyboardHeight, safeTop: safeTop)
     }
 
-    /// The field's button at its right end (clear, incognito): 44 pt square, its centre 29.5 pt
-    /// from the field's right end.
-    public static func accessoryFrame(field: CGRect) -> CGRect {
-        CGRect(x: field.maxX - 29.5 - 22, y: field.midY - 22, width: 44, height: 44)
+    /// Where a drawer pulled up out of the pill heads the moment it is let go, before the keyboard
+    /// has said where it will be: its open place over `expectedKeyboard`, the keyboard last seen,
+    /// so it carries on from the finger instead of waiting still for the keyboard. With no keyboard
+    /// seen yet that place is only a guess, so it never sends the drawer down from where it was
+    /// let go.
+    public static func releasedTop(screenHeight: CGFloat, expectedKeyboard: CGFloat, keyboardSeen: Bool,
+                                   safeTop: CGFloat, releasedAt: CGFloat) -> CGFloat {
+        let open = top(screenHeight: screenHeight, keyboardHeight: expectedKeyboard, safeTop: safeTop)
+        return keyboardSeen ? open : min(open, releasedAt)
     }
 
-    /// The incognito toggle, whose glyph sits at its right edge: 18.5 pt from the field's right
+    /// The field's button at its right end (clear, incognito): 44 pt square, its centre 26.5 pt
+    /// from the field's right end.
+    public static func accessoryFrame(field: CGRect) -> CGRect {
+        CGRect(x: field.maxX - 26.5 - 22, y: field.midY - 22, width: 44, height: 44)
+    }
+
+    /// The incognito toggle, whose glyph sits at its right edge: 13.5 pt from the field's right
     /// end whether it is off (the glyph alone) or on (the glyph with "Incognito" to its left,
     /// `labelledWidth` wide). Off, it used to end at the accessory's edge, 7.5 pt from the end,
     /// so the glyph sat hard against the field's rim (#654).
     public static func incognitoToggleFrame(field: CGRect, labelledWidth: CGFloat? = nil) -> CGRect {
         let accessory = accessoryFrame(field: field)
         let width = labelledWidth ?? accessory.width
-        return CGRect(x: field.maxX - 18.5 - width, y: accessory.minY, width: width, height: accessory.height)
+        return CGRect(x: field.maxX - incognitoTrailingInset - width, y: accessory.minY, width: width, height: accessory.height)
+    }
+
+    /// A row's "Browse for Me" chip: a capsule 29.5 pt tall, as wide as its title with
+    /// `browseChipPadding` either side (Arc Search's fixed 100.5 pt left about 6).
+    public static let browseChipHeight: CGFloat = 29.5
+    public static let browseChipPadding: CGFloat = 12
+    public static func browseChipSize(titleWidth: CGFloat) -> CGSize {
+        CGSize(width: (titleWidth + 2 * browseChipPadding).rounded(.up), height: browseChipHeight)
+    }
+
+    /// The buttons at the field's right end.
+    public struct Accessories: OptionSet, Hashable, Sendable {
+        public let rawValue: Int
+        public init(rawValue: Int) { self.rawValue = rawValue }
+        public static let mic = Accessories(rawValue: 1 << 0)
+        public static let incognito = Accessories(rawValue: 1 << 1)
+        public static let clear = Accessories(rawValue: 1 << 2)
+        public static let all: [Accessories] = [.mic, .incognito, .clear]
+        /// Each one in the set, on its own.
+        public var elements: [Accessories] { Self.all.filter(contains) }
+    }
+
+    /// Which of them the field shows: the mic and the incognito toggle while it is empty, the
+    /// clear button once something is typed; incognito has no mic.
+    public static func accessories(hasText: Bool, incognito: Bool) -> Accessories {
+        if hasText { return .clear }
+        return incognito ? .incognito : [.mic, .incognito]
+    }
+
+    /// How the field's end goes from one set of buttons to the next.
+    public enum AccessoryChange: Equatable, Sendable {
+        /// The same buttons: whatever is moving carries on. Every keystroke after the first.
+        case keep
+        /// Straight to the new set, nothing moving: a first look, or a sheet out of sight.
+        case snap
+        /// Typed into or cleared: the old ones leave, then the new ones come in.
+        case swap
+        /// Incognito switched with the field empty: only the mic comes or goes.
+        case mic
+    }
+
+    public static func accessoryChange(from previous: Accessories?, to shown: Accessories,
+                                       canAnimate: Bool) -> AccessoryChange {
+        guard let previous, canAnimate else { return .snap }
+        if previous == shown { return .keep }
+        return previous.contains(.clear) == shown.contains(.clear) ? .mic : .swap
+    }
+
+    /// How much of the field's right end the typed text keeps clear of: the accessory's, or in
+    /// incognito the "Incognito" word's too (`wordWidth` wide, left of the `maskWidth` mask), as
+    /// the word stays beside the clear button while there is text.
+    public static func textTrailingReserve(incognitoWordWidth wordWidth: CGFloat?, maskWidth: CGFloat) -> CGFloat {
+        guard let wordWidth else { return 49 }
+        return max(49, incognitoTrailingInset + maskWidth + incognitoLabelGap + wordWidth + 6)
+    }
+
+    /// The microphone, 40 pt left of the accessory: left of the incognito mask while the field is
+    /// empty.
+    public static func micFrame(field: CGRect) -> CGRect {
+        accessoryFrame(field: field).offsetBy(dx: -40, dy: 0)
+    }
+
+    /// How the open address field sits on what is behind it.
+    public enum FieldStyle: Equatable, Sendable {
+        /// The page menu's address editor: the sheet's own grey field.
+        case standard
+        /// The new tab drawer over a light page.
+        case lightPage
+        /// The new tab drawer over a dark page.
+        case darkPage
+
+        /// The new tab drawer's field follows the page under the bar; a sheet in place of the page
+        /// menu keeps its own.
+        public init(growsFromBar: Bool, pageIsLight: Bool) {
+            self = !growsFromBar ? .standard : pageIsLight ? .lightPage : .darkPage
+        }
+
+        /// Whether the field is frosted with the drawer's material: the drawer's is, the page
+        /// menu's sheet keeps its own grey field.
+        public var isFrosted: Bool { self != .standard }
+
+        /// How much white the field lays over its material, so it reads a shade lighter than the
+        /// drawer behind it, still see-through: over a light page or a dark one, and over the tab
+        /// switcher one value whatever the app's appearance. Incognito's dark field is the
+        /// material alone. Nil keeps the sheet's own field colour.
+        public func whiteLift(incognito: Bool, overTabRow: Bool = false) -> CGFloat? {
+            switch self {
+            case .standard: nil
+            case _ where incognito: 0
+            case _ where overTabRow: 0.06
+            case .lightPage: 0.22
+            case .darkPage: 0.05
+            }
+        }
     }
 
     /// The chrome's moves under way (the sheet, the bar, the page behind). The sheet is put away into the pill only
@@ -118,6 +229,41 @@ public enum MobileBottomBar {
     public static let sideButtonDiameter: CGFloat = 35
     /// A side button's centre from its edge of the screen.
     public static let sideButtonCenterInset: CGFloat = 41
+    /// The bar's material, one of UIKit's: the colour comes from the material itself rather than
+    /// from tints laid over one. Incognito has none dark enough, so it lays near-black over it.
+    public enum Material: Equatable, Sendable {
+        /// Over a dark page: the thinnest, so the page's colour shows through.
+        case page
+        /// Over a light page: a thick light one, so a white page gives a nearly white bar.
+        case lightPage
+        /// The new tab drawer: thin, so the backdrop shows blurred through it.
+        case drawer
+    }
+
+    public static func material(drawerShowing: Bool, pageIsLight: Bool, incognito: Bool) -> Material {
+        if drawerShowing { return .drawer }
+        return pageIsLight && !incognito ? .lightPage : .page
+    }
+
+    /// The crossfade as a tab's light or dark page changes the bar's material.
+    public static let materialFade: TimeInterval = 0.2
+
+    /// Whether the page under the bar is light, from the status bar's ink: dark text means a light
+    /// page. With no band showing, the app's own appearance decides, as `.default` text does.
+    public static func pageIsLight(statusBarFill: String?, darkMode: Bool) -> Bool {
+        statusBarFill.map { !MobileStatusBand.lightContent(fill: $0) } ?? !darkMode
+    }
+
+    /// Whether the bar's plus and menu button take the light bar's dark grey ink, rim and glass.
+    /// A light app or a light page gives a light bar; incognito's black bar and the floating
+    /// buttons over the home or the tab row never do. `overDrawer`: the control sits on the new
+    /// tab drawer's colour, which is the dark one in a dark app even over a light page.
+    public static func lightChrome(darkMode: Bool, pageIsLight: Bool, incognito: Bool,
+                                   floats: Bool, overDrawer: Bool) -> Bool {
+        if incognito || floats { return false }
+        if overDrawer, darkMode { return false }
+        return !darkMode || pageIsLight
+    }
 
     public struct Frames: Equatable {
         public var bar: CGRect

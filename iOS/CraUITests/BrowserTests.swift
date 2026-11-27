@@ -104,6 +104,14 @@ class BrowserTestCase: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts[title].waitForExistence(timeout: 20), "page \(title) never showed", file: file, line: line)
     }
 
+    /// Waits until `element` reports `value`: a switch may move its look over a moment.
+    func waitForValue(_ value: String, of element: XCUIElement, timeout: TimeInterval = 5,
+                      file: StaticString = #filePath, line: UInt = #line) {
+        let met = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [met], timeout: timeout), .completed,
+                       "\(element) still says \(element.value ?? "nothing")", file: file, line: line)
+    }
+
     func closeShareSheet(openedFrom button: XCUIElement) {
         let activity = app.otherElements["ActivityListView"]
         let navigation = app.navigationBars["UIActivityContentView"]
@@ -1495,7 +1503,7 @@ final class IncognitoTests: BrowserTestCase {
         app.buttons["search-incognito"].tap()
         XCTAssertTrue(app.staticTexts["incognito-note"].waitForExistence(timeout: 3))
         XCTAssertEqual(app.staticTexts["incognito-note"].label, "You're browsing Incognito")
-        XCTAssertEqual(app.buttons["search-incognito"].value as? String, "On")
+        waitForValue("On", of: app.buttons["search-incognito"])
         sleep(1)
         keep("incognito")
         field.typeText(Self.page("Secret") + "\n")

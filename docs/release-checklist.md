@@ -515,8 +515,15 @@ built release app with a test profile. Note anything that fails in the release's
 
 - **Opening the search sheet (`MobileSearchMotion`):** on a real iPhone in dark mode beside Arc Search, over a
   page: tap the pill. The sheet moves on the frame after the finger lifts, solid from the start, the plus at the
-  field's left with "Search..." to its right, and the mic and eyes come in over the second half. Needs a human eye:
+  field's left with "Search..." to its right, and the mic and eyes fade in with the field as it opens (the new tab drawer's `drawerAccessorySpan`; the page menu's address editor keeps Arc Search's second half). Needs a human eye:
   the simulator's frame timing is not the phone's.
+
+- **The new tab drawer's field growing out of the pill:** on a real iPhone over a light page and a dark
+  one, tap the pill, and pull it up and let go. The field's white lift grows with the field, its ends
+  rounded all the way: no square corners inside the rounded edge. The lift was a bare layer on Core
+  Animation's own timing and lagged behind the field; a UI test cannot catch a frame mid-move. After a search, open it
+  again: the mic and the mask only fade in with the field, without springing up from small, which
+  they did when the sheet still remembered the clear button.
 
 - **#675:** on a TestFlight build on a real iPhone with System Haptics on, press the New Tab pill, the
   tab stack and the up arrow: one very subtle tick as the finger comes down and nothing as it lets go. In

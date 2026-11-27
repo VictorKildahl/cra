@@ -667,6 +667,11 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         let up = max(0, -pan.translation(in: view).y)
         switch pan.state {
         case .began:
+            // The drawer belongs to the bar: its material takes the drawer's colour at once, and
+            // the plus waits in the bar's top edge until the finger lets go.
+            drawer.growsFromBar = true
+            drawer.fieldHold = .closed
+            setDrawerMaterial(true)
             prepareSearchSheet(incognito: store.selected?.isIncognito ?? false)
             searchPull = 0
             UIView.performWithoutAnimation {
@@ -678,14 +683,19 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         case .changed:
             searchPull = up
             layoutChrome()
+            bar.layoutIfNeeded()
             sheet.layoutIfNeeded()
+            // The drag's last frame, for `-CraTraceNewTabDrawer`.
+            traceNewTabDrawerDrag()
         case .ended, .cancelled:
             barSwipePullsSearch = false
             if pan.state == .ended, MobileSwipe.searchPullOpens(dragUp: up, velocityUp: -pan.velocity(in: view).y) {
                 setSearching(true)
             } else {
+                drawer.fieldHold = .none
+                setDrawerMaterial(false)
                 searchPull = nil
-                animateChrome(duration: 0.3, options: .curveEaseOut)
+                animateChrome(duration: MobileSearchMotion.settleDuration, options: .curveEaseInOut)
             }
         default: break
         }
@@ -782,22 +792,37 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             sheetDragTrace = (0, 0)
             let start = max(0, bar.frame.minY - sheet.frame.minY)
             sheetDragStartPull = start
-            setSearching(false, keepingPull: MobileSwipe.sheetDragDownPull(startPull: start, dragDown: down))
+            // The field stays open, full size, while the drawer is dragged down; it only shrinks
+            // into the pill once the finger lets go and the close starts.
+            drawer.fieldHold = .open
+            setSearching(false, keepingPull: MobileSwipe.sheetDragDownPull(startPull: start, dragDown: down),
+                          deferDrawerMaterial: true)
         case .changed:
             guard let start = sheetDragStartPull else { return }
             searchPull = MobileSwipe.sheetDragDownPull(startPull: start, dragDown: down)
             layoutChrome()
+            bar.layoutIfNeeded()
             sheet.layoutIfNeeded()
+            traceNewTabDrawerDrag()
             traceSheetDrag()
         case .ended, .cancelled:
             sheetDragTraceView.accessibilityValue = "under the keyboard \(sheetDragTrace.hidden) of \(sheetDragTrace.frames)"
             guard sheetDragStartPull != nil else { return }
             sheetDragStartPull = nil
+            drawer.fieldHold = .none
             if pan.state == .ended, !MobileSwipe.sheetDragDownCloses(dragDown: down, velocityDown: pan.velocity(in: view).y) {
                 setSearching(true)
             } else {
+                // Let go: the word and the drawer's incognito fade together.
+                sheet.hideIncognitoLabel()
+                restoreBarIncognito()
+                // The colour only goes back to the bar's material once the finger is off and the
+                // drawer is closing.
+                if drawer.growsFromBar { setDrawerMaterial(false) }
                 searchPull = nil
-                animateChrome(duration: 0.3, options: .curveEaseOut)
+                // Let go of a drag down, the drawer falls the rest of the way on a short spring
+                // with a small overshoot as it settles into the bar.
+                animateChrome(spring: MobileNewTabDrawer.bounce)
             }
         default: break
         }
