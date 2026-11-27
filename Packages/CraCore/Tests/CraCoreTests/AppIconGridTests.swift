@@ -3,16 +3,26 @@ import Foundation
 import ImageIO
 import Testing
 
-/// The .icns Cra.app is bundled with (resources/AppIcon.icns, its icon on macOS 14 and 15) sits on Apple's icon grid:
-/// the tile 824 of 1024 px, centred, with a transparent margin, like the Dock's other icons (EzraNz on #739, 0.1.57).
-/// On macOS 26 the Dock draws the Icon Composer icon instead (AppIconCatalogTests): the grid alone didn't bring the
-/// Dark style. scripts/make-app-icons.swift --icns renders it.
+/// The .icns Cra.app is bundled with (its icon on macOS 14 and 15, the Alerts helper's and the DMG's) sits on Apple's icon
+/// grid: the tile 824 of 1024 px, centred, with a transparent margin, like the Dock's other icons (EzraNz on #739,
+/// 0.1.57). Since Gilad's Icon Composer icon became Cra's (27 Nov), actool renders it from resources/AppIcon.icon
+/// (scripts/compile-app-icon.sh, as scripts/build.sh does); macOS 26 and later draw the catalog (AppIconCatalogTests).
 struct AppIconGridTests {
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/739")) func theBundledIconSitsOnApplesGrid() throws {
-        let icns = URL(fileURLWithPath: #filePath)
+        let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("resources/AppIcon.icns")
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("cra-app-icon-grid-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: out) }
+        let process = Process()
+        process.executableURL = root.appendingPathComponent("scripts/compile-app-icon.sh")
+        process.arguments = [out.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        #expect(process.terminationStatus == 0)
+        let icns = out.appendingPathComponent("AppIcon.icns")
         let source = try #require(CGImageSourceCreateWithURL(icns as CFURL, nil))
         let largest = (0..<CGImageSourceGetCount(source)).compactMap { CGImageSourceCreateImageAtIndex(source, $0, nil) }
             .max { $0.width < $1.width }

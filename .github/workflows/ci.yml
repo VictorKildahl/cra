@@ -89,6 +89,14 @@ jobs:
           codesign --verify --deep --strict --verbose=2 build/Cra.app
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/Cra.app/Contents/Info.plist
 
+      # Cra's icon as this runner's Xcode 27 builds it from resources/AppIcon.icon (catalog, .icns, Settings tile), so
+      # its Dock looks can be checked on a Mac with an older Xcode or macOS (GitHub #739).
+      - name: Keep the app icon
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-icon
+          path: build/app-icon
+
       # Launches the app three times and quits it; fails on a crash, hang or crash report.
       # Not blocking until it has proved steady on the hosted runners.
       - name: Smoke test

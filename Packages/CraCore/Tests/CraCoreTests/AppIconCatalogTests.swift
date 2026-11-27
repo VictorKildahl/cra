@@ -5,7 +5,7 @@ import Testing
 /// widget style) only from the bundle's own Icon Composer icon: an asset catalog (Assets.car) that names it in
 /// CFBundleIconName. A legacy .icns stays as drawn in Dark, on Apple's grid or not: 0.1.58's sand Segments tile did
 /// (GitHub #739). resources/AppIcon.icon (Gilad's, PR #690) is that icon, and scripts/compile-app-icon.sh compiles it
-/// as scripts/build.sh does for Cra.app.
+/// as scripts/build.sh does for Cra.app, with the .icns actool makes from it for macOS 14 and 15.
 struct AppIconCatalogTests {
     private static let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -27,15 +27,17 @@ struct AppIconCatalogTests {
         #expect(looks.isSuperset(of: ["NSAppearanceNameAqua", "NSAppearanceNameDarkAqua", "ISAppearanceTintable"]), "\(looks)")
     }
 
-    /// Icon Composer writes keys that Xcode 26.6's actool can't read (a "features" list, "specular": "inside"):
-    /// it stops with "Exception while running actool", and the build with it.
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/739")) func theIconUsesOnlyWhatXcodesActoolReads() throws {
+    /// The icon is Gilad's as he made it in Icon Composer (PR #690), with the macOS 27 features Xcode 27's actool renders
+    /// (refraction, the specular highlight inside each segment). 3225cbae took them out so Xcode 26.6 could compile it,
+    /// which made it flatter than designed; Victor, 27 Nov: "we need to use his proper versions". On an older Xcode,
+    /// scripts/compile-app-icon.sh compiles a copy without them, and refuses to for a release.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/739")) func theIconKeepsGiladsMacOS27Features() throws {
         let json = try Data(contentsOf: Self.root.appendingPathComponent("resources/AppIcon.icon/icon.json"))
         let icon = try #require(try JSONSerialization.jsonObject(with: json) as? [String: Any])
-        #expect(icon["features"] == nil)
-        for group in icon["groups"] as? [[String: Any]] ?? [] {
-            #expect(group["specular"] == nil || group["specular"] is Bool, "specular: \(group["specular"] ?? "")")
-        }
+        #expect(Set(icon["features"] as? [String] ?? []) == ["refractivity", "specular-location"])
+        let groups = icon["groups"] as? [[String: Any]] ?? []
+        #expect(groups.count == 4)
+        for group in groups { #expect(group["specular"] as? String == "inside") }
     }
 
     private static func run(_ tool: String, _ arguments: String...) throws -> (status: Int32, output: String) {

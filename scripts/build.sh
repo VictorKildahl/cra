@@ -99,13 +99,13 @@ if [ "$EXE" = CraEngine ]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier dk.kildahl.cra.engine" -c "Set :CFBundleExecutable $EXE" "$APP/Contents/Info.plist"
 fi
 echo -n "APPL????" > "$APP/Contents/PkgInfo"
-[ -f resources/AppIcon.icns ] && cp resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-# macOS 26 draws the icon in the Dark, Clear and Tinted icon styles only from the bundle's Icon Composer icon
-# (Assets.car, named by CFBundleIconName); the .icns above stays the icon on macOS 14 and 15 (GitHub #739).
-ICON_OUT="$(mktemp -d "${TMPDIR:-/tmp}/cra-app-icon.XXXXXX")"
-scripts/compile-app-icon.sh "$ICON_OUT" > /dev/null
-cp "$ICON_OUT/Assets.car" "$APP/Contents/Resources/Assets.car"
+# Cra's icon is Gilad's Icon Composer icon (resources/AppIcon.icon, PR #690). macOS 26 and later draw it in the Dark,
+# Clear and Tinted icon styles only from the bundle's catalog (Assets.car, named by CFBundleIconName, GitHub #739); the
+# .icns actool renders from it is the icon on macOS 14 and 15, the Alerts helper's and the DMG's.
+ICON_OUT="build/app-icon"
 rm -rf "$ICON_OUT"
+scripts/compile-app-icon.sh "$ICON_OUT" > /dev/null
+cp "$ICON_OUT/Assets.car" "$ICON_OUT/AppIcon.icns" "$APP/Contents/Resources/"
 /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$APP/Contents/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP/Contents/Info.plist"
 # The AppleScript dictionary (Arc's, same terms and codes: Info.plist OSAScriptingDefinition).
@@ -115,6 +115,8 @@ cp resources/Cra.sdef "$APP/Contents/Resources/Cra.sdef"
 [ -d resources/blocklist ] && cp -R resources/blocklist "$APP/Contents/Resources/blocklist"
 [ -d resources/browsers ] && cp -R resources/browsers "$APP/Contents/Resources/browsers"
 [ -d resources/app-icons ] && cp -R resources/app-icons "$APP/Contents/Resources/app-icons"
+# Settings ▸ Icon's Segments tile on macOS 26 is the icon this build carries (#865), rendered with it above.
+cp "$ICON_OUT/segments-glass.png" "$APP/Contents/Resources/app-icons/segments-glass.png"
 [ -d resources/licenses ] && cp -R resources/licenses "$APP/Contents/Resources/licenses"
 [ -d resources/fonts ] && cp -R resources/fonts "$APP/Contents/Resources/fonts"
 cp -R resources/live-folder-plugins "$APP/Contents/Resources/live-folder-plugins"
@@ -153,7 +155,7 @@ rm -rf "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" "$APP
   # it under System Settings ▸ Notifications: Cra's name and icon there, like Arc's helper.
   if [ "$NAME_SUFFIX" = " (Alerts)" ]; then
     mkdir -p "$HELPER/Contents/Resources"
-    cp resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.icns"
+    cp "$ICON_OUT/AppIcon.icns" "$HELPER/Contents/Resources/AppIcon.icns"
     /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Cra" -c "Add :CFBundleIconFile string AppIcon" \
       -c "Add :NSUserNotificationAlertStyle string alert" "$HELPER/Contents/Info.plist"
   fi
