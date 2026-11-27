@@ -28,6 +28,11 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     private var dragStart: CGFloat = 0
     private var draggedCard: TabCardView?
     private var draggedOffset: CGFloat = 0
+    /// The row coming to rest after a drag, one `position` a frame, so every frame is the
+    /// row's own layout and a finger can catch it on the way.
+    private var settle: MobileTabCarousel.Settle?
+    private var settleStart: CFTimeInterval = 0
+    private var settleLink: CADisplayLink?
 
     private var sideInsets: (left: CGFloat, right: CGFloat) {
         MobileSideInsets.applied(size: bounds.size, safeLeft: safeAreaInsets.left, safeRight: safeAreaInsets.right)
@@ -82,6 +87,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     /// Shows `tabs`, oldest first, focused on `focus`.
     func setTabs(_ tabs: [MobileTab], focus: UUID?, snapshot: (UUID) -> UIImage?, favicon: (MobileTab) -> UIImage?,
                  band: (MobileTab) -> UIColor?) {
+        stopSettling()
         views.values.forEach { $0.removeFromSuperview() }
         views = [:]
         for (index, tab) in tabs.enumerated() {
@@ -206,17 +212,55 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         }
         switch pan.state {
         case .began:
+            // A row still settling is caught where it is.
+            stopSettling()
             dragStart = position
         case .changed:
             position = MobileTabCarousel.position(start: dragStart, translation: translation.x, count: cards.count, in: bounds.size, sideInsets: sideInsets)
             layoutCards()
         case .ended, .cancelled:
-            let target = MobileTabCarousel.restingIndex(position: position, velocity: velocity.x, count: cards.count, in: bounds.size, sideInsets: sideInsets)
-            UIView.animate(spring: MobileMotion.tabRowSettle) {
-                self.position = CGFloat(target)
-                self.layoutCards()
-            }
+            let target = MobileTabCarousel.restingIndex(position: position, velocity: velocity.x, start: dragStart, count: cards.count, in: bounds.size, sideInsets: sideInsets)
+            let speed = MobileTabCarousel.velocity(velocity.x, at: position, count: cards.count, in: bounds.size, sideInsets: sideInsets)
+            startSettling(to: target, velocity: speed)
         default: break
+        }
+    }
+
+    /// Lets the row come to rest on card `target`, moving `velocity` cards a second as it starts.
+    private func startSettling(to target: Int, velocity: CGFloat) {
+        settle = MobileTabCarousel.Settle(from: position, velocity: velocity, target: CGFloat(target))
+        settleStart = CACurrentMediaTime()
+        guard settleLink == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(settleStep(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        link.add(to: .main, forMode: .common)
+        settleLink = link
+    }
+
+    @objc private func settleStep(_ link: CADisplayLink) {
+        guard let settle else { return stopSettling() }
+        let time = link.targetTimestamp - settleStart
+        if settle.isDone(after: time) {
+            position = settle.target
+            stopSettling()
+        } else {
+            position = settle.position(after: time)
+        }
+        layoutCards()
+    }
+
+    private func stopSettling() {
+        settleLink?.invalidate()
+        settleLink = nil
+        settle = nil
+    }
+
+    override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        // The link holds the view; off screen there is nothing to settle.
+        if newWindow == nil, let settle {
+            position = settle.target
+            stopSettling()
         }
     }
 
@@ -240,6 +284,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
             card.removeFromSuperview()
             if self.views[id] === card { self.views[id] = nil }
             guard let gap = self.row.finishThrow(id, position: self.position) else { return }
+            self.stopSettling()
             self.position = gap.position
             UIView.animate(withDuration: 0.45, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0,
                            options: [.allowUserInteraction]) {

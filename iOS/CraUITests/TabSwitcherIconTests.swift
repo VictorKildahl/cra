@@ -98,6 +98,32 @@ final class TabSwitcherIconTests: BrowserTestCase {
         XCTAssertEqual(newest.frame.midX, screen.midX, accuracy: 2, "the newest card is centred: \(newest.frame) in \(screen)")
     }
 
+    /// A flick along the row moves one card, as every flick in Pri's Arc Search recording did
+    /// (25 Nov 2026). Cra projected the flick 0.18 s ahead and rounded up, so one let go three
+    /// quarters of the way to the next card went on to the card after it. The card in focus is
+    /// the titled one.
+    func testAFlickMovesOneCard() {
+        launch(["-CraOpenURL", Self.page("One"), "-CraSearch", "NO", "-CraReadCardTitles", "YES"])
+        waitForPage("One")
+        for title in ["Two", "Three", "Four", "Five"] { openTab(title) }
+        app.buttons["bar-tabs"].tap()
+        let cards = (0..<5).map { app.buttons["tab-card-\($0)"] }
+        XCTAssertTrue(cards[4].waitForExistence(timeout: 10))
+        sleep(1)
+        func focused() -> Int? { cards.firstIndex { ($0.value as? String ?? "").hasPrefix("title to") } }
+        // The row opens on the card left of the page: the fourth. Each flick drags three quarters
+        // of a card: one back, one more, then one forward.
+        XCTAssertEqual(focused(), 3)
+        for (from, to, card) in [(0.29, 0.71, 2), (0.29, 0.71, 1), (0.71, 0.29, 2)] {
+            let before = focused()
+            dragTheRow(from: from, to: to)
+            // A drag sent to a row that has just opened sometimes doesn't reach it (Cra before
+            // this change too); it goes again.
+            if focused() == before { dragTheRow(from: from, to: to) }
+            XCTAssertEqual(focused(), card, "one card from \(before ?? -1)")
+        }
+    }
+
     /// A flick along the row, which goes on to the next card (and stops at an end).
     private func dragTheRow(from: CGFloat, to: CGFloat) {
         app.coordinate(withNormalizedOffset: CGVector(dx: from, dy: 0.5))

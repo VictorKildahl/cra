@@ -83,14 +83,28 @@ public enum MobileTabCarousel {
         return raw
     }
 
+    /// How fast the row moves, in cards a second (positive: towards newer tabs), at `position`
+    /// under a finger moving `velocity` points a second: a third as fast past either end.
+    public static func velocity(_ velocity: CGFloat, at position: CGFloat, count: Int, in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0)) -> CGFloat {
+        let speed = -velocity / pitch(in: screen, sideInsets: sideInsets)
+        return position < 0 || position > CGFloat(max(0, count - 1)) ? speed / 3 : speed
+    }
+
+    /// How far ahead a let-go is projected: where the row would coast to, slowing at
+    /// UIScrollView's fast rate (10 a second).
+    public static let flickProjection: CGFloat = 0.1
+
     /// The card the row settles on when let go at `position` moving `velocity` points a second
-    /// (negative: towards newer tabs). A flick goes one card further than where it was let go.
-    public static func restingIndex(position: CGFloat, velocity: CGFloat, count: Int, in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0)) -> Int {
+    /// (negative: towards newer tabs), from a drag that began at `start`: the card nearest where
+    /// it would coast to, and after a flick at least the next card from where the drag began.
+    /// In Pri's Arc Search recording (25 Nov 2026) every flick moved one card, the hardest let go
+    /// 61 % of the way there at 1,970 pt a second; rounding a 0.18 s projection up sent it three.
+    public static func restingIndex(position: CGFloat, velocity: CGFloat, start: CGFloat? = nil, count: Int, in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0)) -> Int {
         guard count > 0 else { return 0 }
-        var target = position.rounded()
+        var target = (position - velocity * flickProjection / pitch(in: screen, sideInsets: sideInsets)).rounded()
         if abs(velocity) > 300 {
-            let projected = position - velocity * 0.18 / pitch(in: screen, sideInsets: sideInsets)
-            target = velocity < 0 ? max(target, projected.rounded(.up)) : min(target, projected.rounded(.down))
+            let from = (start ?? position).rounded()
+            target = velocity < 0 ? max(target, from + 1) : min(target, from - 1)
         }
         return Int(min(CGFloat(count - 1), max(0, target)))
     }
@@ -112,6 +126,38 @@ public enum MobileTabCarousel {
 
     /// The room left after a title.
     public static let titleEndGap: CGFloat = 16
+
+    /// The row coming to rest on a card once let go, as Arc Search's does (Pri's recording, 25 Nov
+    /// 2026, 60 fps): it carries on at the finger's speed and slows into the card's place without
+    /// passing it, the way a scroll view decelerates onto a snap point. The distance left shrinks
+    /// by the same share every frame, at a rate of the speed it was let go at over the distance
+    /// it had left: 0.70 a frame after a hard flick, and never slower than 0.85 a frame
+    /// (10 a second), Arc's rate for a gentle let-go. Positions are in cards, as `placement`'s.
+    public struct Settle: Equatable, Sendable {
+        public static let slowestRate: CGFloat = 10
+
+        public var from: CGFloat
+        public var target: CGFloat
+        /// How fast the distance left shrinks, per second.
+        public var rate: CGFloat
+
+        /// Let go at `from` moving `velocity` cards a second (positive: towards newer tabs).
+        public init(from: CGFloat, velocity: CGFloat, target: CGFloat) {
+            self.from = from
+            self.target = target
+            let distance = target - from
+            rate = max(Self.slowestRate, distance == 0 ? 0 : velocity / distance)
+        }
+
+        public func position(after time: Double) -> CGFloat {
+            target - (target - from) * CGFloat(exp(-Double(rate) * time))
+        }
+
+        /// Within a two-thousandth of a card: under a fifth of a point.
+        public func isDone(after time: Double) -> Bool {
+            abs(position(after: time) - target) < 0.0005
+        }
+    }
 
     /// Whether a card dragged up by `translation` (negative: up) at `velocity` is thrown away.
     public static func closes(translation: CGFloat, velocity: CGFloat) -> Bool {

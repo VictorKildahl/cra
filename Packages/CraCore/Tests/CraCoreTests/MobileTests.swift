@@ -859,6 +859,10 @@ struct MobileTabCarouselTests {
         #expect(MobileTabCarousel.position(start: 1, translation: -pitch, count: 3, in: Self.phone) == 2)
         #expect(MobileTabCarousel.position(start: 0, translation: pitch * 3, count: 3, in: Self.phone) == -1)
         #expect(MobileTabCarousel.position(start: 2, translation: -pitch * 3, count: 3, in: Self.phone) == 3)
+        // Let go, the row moves on at the speed it was following the finger.
+        #expect(MobileTabCarousel.velocity(-pitch, at: 1, count: 3, in: Self.phone) == 1)
+        #expect(MobileTabCarousel.velocity(pitch * 3, at: -0.5, count: 3, in: Self.phone) == -1)
+        #expect(MobileTabCarousel.velocity(-pitch * 3, at: 2.2, count: 3, in: Self.phone) == 1)
     }
 
     @Test func aFlickGoesToTheNextCardAndStopsAtTheEnds() {
@@ -894,6 +898,43 @@ struct MobileTabCarouselTests {
         let alone = MobileTabCarousel.titleWidth(titleLeft: titleLeft, cardRight: focus.maxX, nextCardLeft: nil)
         #expect(titleLeft + alone == focus.maxX - 16, "the newest card's title runs to its own edge")
         #expect(MobileTabCarousel.titleWidth(titleLeft: 300, cardRight: 310, nextCardLeft: 200) == 0)
+    }
+
+    /// Every flick in Pri's Arc Search recording (25 Nov 2026, 430 pt screen) moved one card. The
+    /// hardest was let go 61 % of the way to the next card at 1,970 pt a second; one back was let
+    /// go 31 % of the way at 1,260 pt a second. Cra sent them three cards and two.
+    @Test func aFlickMovesOneCardAsInArcSearch() {
+        let screen = CGSize(width: 430, height: 932)
+        #expect(MobileTabCarousel.restingIndex(position: 0.611, velocity: -1970, start: 0, count: 5, in: screen) == 1)
+        #expect(MobileTabCarousel.restingIndex(position: 1.69, velocity: 1260, start: 2, count: 5, in: screen) == 1)
+        // A short flick from a card still reaches the next one.
+        #expect(MobileTabCarousel.restingIndex(position: 2.05, velocity: -400, start: 2, count: 5, in: screen) == 3)
+    }
+
+    /// Let go, Arc Search's row keeps the finger's speed and slows into the card's place by the
+    /// same share every frame, never passing it (Pri's recording, 25 Nov 2026, 60 fps). Cra's
+    /// stopped dead and started again on a spring from standstill.
+    @Test func theRowSettlesAsArcSearchsDoes() {
+        let frame = 1.0 / 60
+        func ratios(_ settle: MobileTabCarousel.Settle) -> [CGFloat] {
+            (1...10).map { n in
+                (settle.target - settle.position(after: Double(n) * frame))
+                    / (settle.target - settle.position(after: Double(n - 1) * frame))
+            }
+        }
+        // The hardest flick: 0.389 cards short of its card at 8.27 cards a second. Arc's
+        // distance left shrank to 0.70–0.73 of itself every frame.
+        let hard = MobileTabCarousel.Settle(from: 0.611, velocity: 8.27, target: 1)
+        #expect(ratios(hard).allSatisfy { abs($0 - 0.71) < 0.02 })
+        let dt = 0.0001
+        #expect(abs((hard.position(after: dt) - 0.611) / dt - 8.27) < 0.01, "it starts at the finger's speed")
+        // Gentle let-goes, and ones with no speed or moving away, settle at 0.84–0.86 a frame.
+        for velocity: CGFloat in [2.07, 0, -1] {
+            let gentle = MobileTabCarousel.Settle(from: -0.211, velocity: velocity, target: 0)
+            #expect(ratios(gentle).allSatisfy { abs($0 - 0.85) < 0.01 })
+            #expect(stride(from: 0.0, to: 2, by: frame).allSatisfy { gentle.position(after: $0) <= 0 })
+            #expect(gentle.isDone(after: 0.7))
+        }
     }
 
     @Test func aCardIsThrownAwayByDistanceOrByAFlick() {
