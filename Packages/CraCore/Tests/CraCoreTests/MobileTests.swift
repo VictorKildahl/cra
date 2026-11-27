@@ -859,6 +859,27 @@ struct MobileTabCarouselTests {
         #expect(MobileTabCarousel.position(start: 1, translation: -pitch, count: 3, in: Self.phone) == 2)
         #expect(MobileTabCarousel.position(start: 0, translation: pitch * 3, count: 3, in: Self.phone) == -1)
         #expect(MobileTabCarousel.position(start: 2, translation: -pitch * 3, count: 3, in: Self.phone) == 3)
+        // Let go, the row moves on at the speed it was following the finger.
+        #expect(MobileTabCarousel.velocity(-pitch, at: 1, count: 3, in: Self.phone) == 1)
+        #expect(MobileTabCarousel.velocity(pitch * 3, at: -0.5, count: 3, in: Self.phone) == -1)
+        #expect(MobileTabCarousel.velocity(-pitch * 3, at: 2.2, count: 3, in: Self.phone) == 1)
+    }
+
+    /// A finger that catches the row while it settles back from past an end holds it where it
+    /// is. The catch started from the position on screen, which the drag resisted again: caught
+    /// at -0.3 and moved a hundredth of a card outwards, the row jumped to -0.1 (Greptile on
+    /// PR #882).
+    @Test func catchingTheRowPastAnEndHoldsItWhereItIs() {
+        let pitch = MobileTabCarousel.pitch(in: Self.phone)
+        for caught: CGFloat in [-0.3, 2.3] {
+            let start = MobileTabCarousel.dragStart(caughtAt: caught, count: 3)
+            let held = MobileTabCarousel.position(start: start, translation: 0, count: 3, in: Self.phone)
+            #expect(abs(held - caught) < 0.0001)
+            let outwards: CGFloat = caught < 0 ? 1 : -1
+            let moved = MobileTabCarousel.position(start: start, translation: outwards * pitch * 0.01, count: 3, in: Self.phone)
+            #expect(abs(abs(moved - caught) - 0.01 / 3) < 0.0001, "it follows a third of the finger, from where it was")
+        }
+        #expect(MobileTabCarousel.dragStart(caughtAt: 1.4, count: 3) == 1.4)
     }
 
     @Test func aFlickGoesToTheNextCardAndStopsAtTheEnds() {
@@ -894,6 +915,43 @@ struct MobileTabCarouselTests {
         let alone = MobileTabCarousel.titleWidth(titleLeft: titleLeft, cardRight: focus.maxX, nextCardLeft: nil)
         #expect(titleLeft + alone == focus.maxX - 16, "the newest card's title runs to its own edge")
         #expect(MobileTabCarousel.titleWidth(titleLeft: 300, cardRight: 310, nextCardLeft: 200) == 0)
+    }
+
+    /// Every flick in Pri's Arc Search recording (25 Nov 2026, 430 pt screen) moved one card. The
+    /// hardest was let go 61 % of the way to the next card at 1,970 pt a second; one back was let
+    /// go 31 % of the way at 1,260 pt a second. Cra sent them three cards and two.
+    @Test func aFlickMovesOneCardAsInArcSearch() {
+        let screen = CGSize(width: 430, height: 932)
+        #expect(MobileTabCarousel.restingIndex(position: 0.611, velocity: -1970, start: 0, count: 5, in: screen) == 1)
+        #expect(MobileTabCarousel.restingIndex(position: 1.69, velocity: 1260, start: 2, count: 5, in: screen) == 1)
+        // A short flick from a card still reaches the next one.
+        #expect(MobileTabCarousel.restingIndex(position: 2.05, velocity: -400, start: 2, count: 5, in: screen) == 3)
+    }
+
+    /// Let go, Arc Search's row keeps the finger's speed and slows into the card's place by the
+    /// same share every frame, never passing it (Pri's recording, 25 Nov 2026, 60 fps). Cra's
+    /// stopped dead and started again on a spring from standstill.
+    @Test func theRowSettlesAsArcSearchsDoes() {
+        let frame = 1.0 / 60
+        func ratios(_ settle: MobileTabCarousel.Settle) -> [CGFloat] {
+            (1...10).map { n in
+                (settle.target - settle.position(after: Double(n) * frame))
+                    / (settle.target - settle.position(after: Double(n - 1) * frame))
+            }
+        }
+        // The hardest flick: 0.389 cards short of its card at 8.27 cards a second. Arc's
+        // distance left shrank to 0.70–0.73 of itself every frame.
+        let hard = MobileTabCarousel.Settle(from: 0.611, velocity: 8.27, target: 1)
+        #expect(ratios(hard).allSatisfy { abs($0 - 0.71) < 0.02 })
+        let dt = 0.0001
+        #expect(abs((hard.position(after: dt) - 0.611) / dt - 8.27) < 0.01, "it starts at the finger's speed")
+        // Gentle let-goes, and ones with no speed or moving away, settle at 0.84–0.86 a frame.
+        for velocity: CGFloat in [2.07, 0, -1] {
+            let gentle = MobileTabCarousel.Settle(from: -0.211, velocity: velocity, target: 0)
+            #expect(ratios(gentle).allSatisfy { abs($0 - 0.85) < 0.01 })
+            #expect(stride(from: 0.0, to: 2, by: frame).allSatisfy { gentle.position(after: $0) <= 0 })
+            #expect(gentle.isDone(after: 0.7))
+        }
     }
 
     @Test func aCardIsThrownAwayByDistanceOrByAFlick() {
@@ -970,6 +1028,44 @@ struct MobileTabRowTests {
         #expect(close(3, at: 3) == .init(position: 3, settle: 2))
         #expect(close(3, at: 1) == .init(position: 1, settle: 1))
         #expect(!MobileTabRow(cards: []).canTake(ids[0]))
+    }
+
+    /// A card taken up while the row settles holds the row, which settles on where it was going
+    /// once the card is let go. It kept that card's place, so a card thrown earlier that left
+    /// meanwhile sent it to the next card, or past the end (Greptile on PR #882). It follows the
+    /// card instead.
+    @Test func aHeldRowResumesOnItsCardAfterAnEarlierThrowLands() {
+        let ids = Self.ids
+        var row = MobileTabRow(cards: ids)
+        // Throw the first card, flick the row towards the third, then take the second up.
+        row.startThrow(ids[0])
+        _ = row.finishThrow(ids[0], position: 1.6)
+        #expect(row.resumeIndex(heading: ids[2], position: 0.6) == 1, "the third card is second now")
+        #expect(row.resumeIndex(heading: ids[3], position: 1.6) == 2, "the newest stays in the row")
+        // A row heading for a card that has gone itself settles on the nearest.
+        #expect(row.resumeIndex(heading: ids[0], position: 2.7) == 2)
+        #expect(row.resumeIndex(heading: ids[0], position: -0.4) == 0)
+    }
+
+    /// A card thrown, then a flick before it has flown off: the row is between cards when the
+    /// card leaves. The gap took the card nearest where the row was, so a flick heading for the
+    /// third card, still at 1.1, landed on the second (Greptile on PR #882). It goes on to the
+    /// card it was heading for, at its new place, and the row keeps its speed.
+    @Test func aFlickStillLandsOnItsCardWhenAnEarlierThrowLeaves() {
+        let ids = Self.ids
+        var row = MobileTabRow(cards: ids)
+        row.startThrow(ids[0])
+        let flicked = row.finishThrow(ids[0], position: 1.1, heading: ids[2])
+        #expect(flicked?.settle == 1 && abs((flicked?.position ?? 0) - 0.1) < 0.0001)
+        // Without a flick under way the row closes the gap around the card in focus, as before.
+        var still = MobileTabRow(cards: ids)
+        still.startThrow(ids[0])
+        let held = still.finishThrow(ids[0], position: 1.1)
+        #expect(held?.settle == 0 && abs((held?.position ?? 0) - 0.1) < 0.0001)
+        // A settle reports its speed, so the row can carry on from it.
+        let settle = MobileTabCarousel.Settle(from: 1, velocity: 15, target: 2)
+        #expect(abs(settle.velocity(after: 0) - 15) < 0.0001)
+        #expect(settle.velocity(after: 0.05) < 15 && settle.velocity(after: 0.05) > 0)
     }
 }
 

@@ -68,8 +68,10 @@ public enum MobileMotion {
         }
     }
 
-    /// The tab row settling when it is let go. In Arc Search the card's distance to its place
-    /// shrinks to 0.54 of itself every frame: a critically damped spring with a 0.34 s response.
+    /// The tab row settling as it opens out of the page. Fitted to Arc Search's row settling
+    /// (2024 footage, 30 fps): the card's distance to its place shrinks to 0.54 of itself every
+    /// frame, a critically damped spring with a 0.34 s response. Let go after a drag, the row
+    /// keeps the finger's speed instead (`MobileTabCarousel.Settle`).
     public static let tabRowSettle = Spring(response: 0.34, dampingRatio: 1)
     /// A card growing into its page: there within five frames.
     public static let tabOpen = Spring(response: 0.26, dampingRatio: 1)

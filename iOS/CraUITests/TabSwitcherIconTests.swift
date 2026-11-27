@@ -98,6 +98,40 @@ final class TabSwitcherIconTests: BrowserTestCase {
         XCTAssertEqual(newest.frame.midX, screen.midX, accuracy: 2, "the newest card is centred: \(newest.frame) in \(screen)")
     }
 
+    /// A flick along the row moves one card, as every flick in Pri's Arc Search recording did
+    /// (25 Nov 2026). Cra projected the flick 0.18 s ahead and rounded up, so one let go three
+    /// quarters of the way to the next card went on to the card after it. The card in focus is
+    /// the titled one.
+    func testAFlickMovesOneCard() {
+        launch(["-CraOpenURL", Self.page("One"), "-CraSearch", "NO", "-CraReadCardTitles", "YES"])
+        waitForPage("One")
+        for title in ["Two", "Three", "Four", "Five"] { openTab(title) }
+        app.buttons["bar-tabs"].tap()
+        let cards = (0..<5).map { app.buttons["tab-card-\($0)"] }
+        XCTAssertTrue(cards[4].waitForExistence(timeout: 10))
+        // The row opens on the card left of the page: the fourth. Each flick drags three quarters
+        // of a card: one back, one more, then one forward.
+        waitForTheRow(toRestOn: 3, of: cards)
+        for (from, to, card) in [(0.29, 0.71, 2), (0.29, 0.71, 1), (0.71, 0.29, 2)] {
+            app.coordinate(withNormalizedOffset: CGVector(dx: from, dy: 0.5))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: to, dy: 0.5)),
+                       withVelocity: .fast, thenHoldForDuration: 0)
+            waitForTheRow(toRestOn: card, of: cards)
+        }
+    }
+
+    /// Waits for the row to stop moving with `index` the only titled card.
+    private func waitForTheRow(toRestOn index: Int, of cards: [XCUIElement], file: StaticString = #filePath, line: UInt = #line) {
+        let rests = NSPredicate { _, _ in
+            cards.indices.allSatisfy { i in
+                let value = cards[i].value as? String ?? ""
+                return i == index ? value.hasPrefix("title to") && !value.hasSuffix("moving") : value == "favicon alone"
+            }
+        }
+        let waited = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: rests, object: nil)], timeout: 10)
+        XCTAssertEqual(waited, .completed, "rests on card \(index): \(cards.map { $0.value as? String ?? "" })", file: file, line: line)
+    }
+
     /// A flick along the row, which goes on to the next card (and stops at an end).
     private func dragTheRow(from: CGFloat, to: CGFloat) {
         app.coordinate(withNormalizedOffset: CGVector(dx: from, dy: 0.5))
