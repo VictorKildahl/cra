@@ -31,6 +31,13 @@ public enum MobileTabCarousel {
         CGSize(width: (screen.width * cardScale).rounded(), height: (screen.height * 0.6517).rounded())
     }
 
+    /// Top-left like Arc Search and Safari, so a picture of another shape keeps the page's heading.
+    public static func pictureFrame(image: CGSize, in area: CGRect) -> CGRect {
+        guard image.width > 0, image.height > 0 else { return area }
+        let scale = max(area.width / image.width, area.height / image.height)
+        return CGRect(origin: area.origin, size: CGSize(width: image.width * scale, height: image.height * scale))
+    }
+
     /// Where a card sits when it is `relative` cards right of the one in focus (negative: left of
     /// it; fractions while the row is being dragged). `alone`: the only tab, which Arc Search puts in the
     /// middle of the screen (#816); a card with neighbours sits left of centre. `centring` is the

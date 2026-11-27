@@ -1919,6 +1919,7 @@
 #870   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::theWalkSkipsWhatIsNotOpen  ef546e417a9e
 #870   Tests/Scenarios/favorite-close-walks-back.scenario  645dbb578cab
 #876   Tests/Scenarios/sidebar-title-row.scenario  78019136ff4e
+#878   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::picturesKeepTheTopLeftWhenTheScreenShapeChanges  a802009cbca7
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::eachNewPlaceTicks  d514287a15c2
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::nowhereIsSilentAndComingBackTicks  b0622ee05ea5
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::theSamePlaceTicksOnce  20e7ead609e3
