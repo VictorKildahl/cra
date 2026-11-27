@@ -204,6 +204,63 @@ struct MobilePageSwipeTests {
         #expect(abs(page - 170) < 1, "settled 30 pt behind the finger")
     }
 
+    /// Arc Search's quick swipes on a tab's first page weren't held: the page was 17.5 pt along four frames in, where
+    /// held it would have been at most 0.124 of the finger's way. The cards come out at once (`holds` is false), but
+    /// letting go still only goes once the finger is past where a slow swipe lets go, with one tick there.
+    @Test func aQuickFingerClosingATabIsNotHeld() {
+        var magnet = MobilePageSwipe.magnet(for: .closingTab)
+        #expect(magnet.quickSpeed == MobilePageSwipe.quickSpeed)
+        // Within the dead zone, speed alone takes nothing off.
+        _ = magnet.step(distance: 10, dt: 1 / 60, speed: 2000)
+        #expect(magnet.holds)
+        var finger: CGFloat = 10
+        var page: CGFloat = 0
+        var ticks = 0
+        // A finger at 1200 pt a second, 20 pt a frame, out to 100 pt, then still.
+        for frame in 1...40 {
+            if finger < 100 { finger += 20 }
+            let step = magnet.step(distance: finger, dt: 1 / 60, speed: frame < 5 ? 1200 : 0)
+            page = step.page
+            if step.letGoNow { ticks += 1 }
+            if frame == 4 { #expect(page > magnet.held(finger) + 5, "not held: \(page)") }
+        }
+        #expect(!magnet.holds)
+        #expect(magnet.quick)
+        #expect(!magnet.letGo, "short of where letting go goes")
+        #expect(abs(page - (finger - 30)) < 1, "following the finger, 30 pt behind")
+        #expect(ticks == 0)
+        #expect(!MobilePageSwipe.commits(letGo: magnet.letGo, velocity: 0, distance: finger))
+        // On past where the magnet lets go: the tick, and letting go goes.
+        #expect(magnet.step(distance: 200, dt: 1 / 60).letGoNow)
+        #expect(magnet.letGo)
+        // Taken back, the page still follows the finger: only a slow swipe is held again.
+        for _ in 0..<40 { page = magnet.step(distance: 90, dt: 1 / 60).page }
+        #expect(!magnet.letGo)
+        #expect(abs(page - 60) < 1)
+
+        // A slow finger, as the swipes with the finger shown, stays held; Back is held whatever the speed.
+        var slow = MobilePageSwipe.magnet(for: .closingTab)
+        #expect(abs(slow.step(distance: 100, dt: 1, speed: 90).page - slow.held(100)) < 0.01)
+        #expect(slow.holds)
+        var back = MobilePageSwipe.magnet(for: .back)
+        _ = back.step(distance: 40, dt: 1 / 60, speed: 3000)
+        #expect(back.holds)
+    }
+
+    /// Let go short of closing, the cards go back the way they came out, on the same spring: Arc Search's page card came
+    /// back .20, .47, .69, .83 and .93 of the way at frames 2, 4, 6, 8 and 10 after letting go.
+    @Test func theCardsGoBackTheWayTheyCameOut() {
+        let measured: [(frame: Double, share: CGFloat)] = [(2, 0.20), (4, 0.47), (6, 0.69), (8, 0.83), (10, 0.93)]
+        for (frame, share) in measured {
+            #expect(abs(MobilePageSwipe.cardsReturn(after: frame / 60).share - share) < 0.04, "frame \(frame)")
+        }
+        #expect(MobilePageSwipe.cardsReturn(after: 0).share == 0)
+        #expect(MobilePageSwipe.cardsReturn(after: -1).share == 0)
+        #expect(!MobilePageSwipe.cardsReturn(after: 0.2).home)
+        #expect(MobilePageSwipe.cardsReturn(after: 0.4).home)
+        #expect(MobilePageSwipe.cardsReturn(after: 0.4).share > 0.997)
+    }
+
     /// Taken back under 60 % of the way, the magnet holds the page again; past the let-go distance again, it lets go
     /// again. A finger dragged back past where it started holds the page at its place.
     @Test func theMagnetHoldsAgainWhenTakenBack() {
@@ -228,5 +285,16 @@ struct MobilePageSwipeTests {
         #expect(!MobilePageSwipe.commits(letGo: false, velocity: 0, distance: 50))
         #expect(MobilePageSwipe.commits(letGo: false, velocity: 900, distance: 40))
         #expect(!MobilePageSwipe.commits(letGo: false, velocity: 900, distance: 20))
+    }
+
+    /// A finger held still before it lifts isn't flicking, whatever speed its last move had: dragged quickly 100 pt into
+    /// closing a tab and held, letting go puts the tab back. A finger still moving as it lifts keeps its speed.
+    @Test func aFingerHeldStillBeforeLiftingIsNotAFlick() {
+        let held = MobilePageSwipe.liftVelocity(900, stillFor: 0.5)
+        #expect(held == 0)
+        #expect(!MobilePageSwipe.commits(letGo: false, velocity: held, distance: 100))
+        #expect(MobilePageSwipe.liftVelocity(900, stillFor: 0.02) == 900)
+        #expect(MobilePageSwipe.liftVelocity(-700, stillFor: 0.05) == -700)
+        #expect(MobilePageSwipe.liftVelocity(-700, stillFor: MobilePageSwipe.stillBeforeLifting) == 0)
     }
 }
