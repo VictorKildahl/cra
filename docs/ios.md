@@ -112,6 +112,13 @@ Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <t
 
 On the Duo, the Spaces sheet's backgrounds (sync intro, Connecting, share prompt, icon bar) run under the status column, while its content stays in the safe area.
 
+The open Duo is treated like a small iPad (#866, Victor's call on 0xJeu's proposal, 27 Nov 2026), decided by
+`MobileScreenClass` (an iPhone whose screen's short side is at least 600 pt is `wide`): App Settings and the App Icon
+picker open at full height, the bottom bar's tab and menu buttons keep within 540 pt in the middle, the onboarding
+Next button and the Spaces buttons are no wider than 540 pt (SheetHost's cap), and the tab switcher stays a carousel
+laid out as on the widest iPhone (440 pt) in the middle of the screen. The closed Duo keeps its status icons following
+the page, and neither screen has a status band. iPads and iPhones keep their layouts.
+
 On the closed screen, the search field and the tab switcher’s cards stay left of the status column; the rule applies only to a portrait-shaped window with a side inset, so iPhones keep their layout.
 
 The icon grid's width cap (54074522) already fixed the open-screen icon-step overflow; the onboarding fit rule fixes the demo steps.

@@ -1915,6 +1915,10 @@
 #864   Tests/Scenarios/command-bar-typed-routed-profile.scenario  1bd12d58f336
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::theSegmentsTileIsTheIconTheDockShows  fa64d566596d
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconGridTests.swift::theGlassSegmentsTileSitsOnTheGrid  69a07833b8a8
+#866   Packages/CraCore/Tests/CraCoreTests/MobileScreenClassTests.swift::onlyTheOpenDuoIsWide  02fbfb8ca6f2
+#866   Packages/CraCore/Tests/CraCoreTests/MobileScreenClassTests.swift::sheetsOpenFullAsOnIPad  d81a7cf71e1e
+#866   Packages/CraCore/Tests/CraCoreTests/MobileScreenClassTests.swift::theBarsButtonsKeepToTheMiddle  d25b5e10d3a9
+#866   Packages/CraCore/Tests/CraCoreTests/MobileScreenClassTests.swift::theTabRowIsPhoneSizedInTheMiddle  4129865f8124
 #868   Tests/BrowserManagerLifecycleTests.swift::linkRouteCase  6a57e785d51f
 #868   Tests/Scenarios/link-route.scenario  0c95be0b1574
 #869   Tests/BrowserManagerLifecycleTests.swift::boostAfterLateAddressCase  5bebee9b1ade

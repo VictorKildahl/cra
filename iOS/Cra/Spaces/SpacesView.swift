@@ -534,6 +534,8 @@ struct SyncIntroView: View {
                 .background(blue, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
+        // No wider than SheetHost's content on a wide screen (the open iPhone Duo, #866); a phone is narrower anyway.
+        .frame(maxWidth: MobileScreenClass.contentCap)
         .accessibilityIdentifier(id)
     }
 }

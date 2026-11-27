@@ -357,7 +357,9 @@ final class BottomBar: UIView {
         // drawer's colour.
         hairline.frame = CGRect(x: 0, y: rise, width: bounds.width, height: 1 / UIScreen.main.scale)
         // The bar's frames are worked out for a view that ends at the screen's bottom edge.
-        let frames = MobileBottomBar.frames(in: bounds.size, safeBottom: bounds.height - MobileBottomBar.height)
+        // On the open iPhone Duo the side buttons keep within 540 pt in the middle, not at its far edges (#866).
+        let screen = MobileScreenClass.of(size: window?.bounds.size ?? bounds.size, isPad: traitCollection.userInterfaceIdiom == .pad)
+        let frames = MobileBottomBar.frames(in: bounds.size, safeBottom: bounds.height - MobileBottomBar.height, band: screen.barBand)
         let transforms = [tabsButton, menuButton, spacesButton, settingsButton].map(\.transform)
         [tabsButton, menuButton, spacesButton, settingsButton].forEach { $0.transform = .identity }
         tabsButton.frame = frames.tabs.insetBy(dx: -6, dy: -6)
