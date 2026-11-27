@@ -4,6 +4,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/functional/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -89,6 +90,15 @@ const SharedStorage* SharedStorageOf(content::BrowserContext* context, const std
   return it->second.profiles.count(*folder) ? &it->second : nullptr;
 }
 
+// Loads the profile in `folder` in the background if it hasn't loaded: a shared extension's data lives there.
+void LoadSoon(const std::string& folder) {
+  ProfileManager* manager = g_browser_process ? g_browser_process->profile_manager() : nullptr;
+  if (!manager || LoadedProfile(folder)) {
+    return;
+  }
+  manager->LoadProfileByPath(manager->user_data_dir().AppendASCII(folder), /*incognito=*/false, base::DoNothing());
+}
+
 content::BrowserContext* StorageContext(content::BrowserContext* context, const std::string& extension_id) {
   std::string folder;
   const SharedStorage* shared = SharedStorageOf(context, extension_id, &folder);
@@ -96,7 +106,12 @@ content::BrowserContext* StorageContext(content::BrowserContext* context, const 
     return context;
   }
   Profile* home = LoadedProfile(shared->home);
-  return home ? home : context;
+  if (!home) {
+    // Not loaded yet (SetSharedExtensionStorage started it): this profile's own data until it has.
+    LoadSoon(shared->home);
+    return context;
+  }
+  return home;
 }
 
 std::vector<content::BrowserContext*> StoragePeers(content::BrowserContext* context, const std::string& extension_id) {
@@ -124,6 +139,10 @@ void SetSharedExtensionStorage(std::map<std::string, SharedStorage> by_extension
   StorageByExtension() = std::move(by_extension);
   g_extension_storage_context = &StorageContext;
   g_extension_storage_peers = &StoragePeers;
+  // Each home loads now, so its data is there when an extension in another profile starts.
+  for (const auto& [id, shared] : StorageByExtension()) {
+    LoadSoon(shared.home);
+  }
 }
 
 void SetManagedExtensions(std::map<std::string, std::set<std::string>> ids_by_profile) {
