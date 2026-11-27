@@ -585,33 +585,36 @@ private struct ColorWheel: View {
             let big = CGPoint(x: c + h.big.x, y: c + h.big.y), small = CGPoint(x: c + h.small.x, y: c + h.small.y)
             let accent = color(BoostWheel.accent(hue: hue, strength: strength))
             ZStack {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color.white)
+                        .overlay(AngularGradient(stops: BoostWheel.ringGradient.map { .init(color: Color(red: $0.1, green: $0.2, blue: $0.3), location: $0.0) }, center: .center).opacity(0.06))
+                    Canvas { ctx, s in
+                        for x in stride(from: 3.0, to: s.width - 3, by: 4) {
+                            for y in stride(from: 3.0, to: s.height - 3, by: 4) {
+                                ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)), with: .color(.black.opacity(0.095)))
+                            }
+                        }
+                        // The orbit both handles are on, and the line between them.
+                        let r = hypot(h.big.x, h.big.y)
+                        ctx.stroke(Path(ellipseIn: CGRect(x: c - r, y: c - r, width: 2 * r, height: 2 * r)), with: .color(Color(white: 0.92)), lineWidth: 1.5)
+                        var line = Path()
+                        line.move(to: small)
+                        line.addLine(to: big)
+                        ctx.stroke(line, with: .color(accent), lineWidth: 2)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 if strength > 0 {
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(AngularGradient(stops: BoostWheel.ringGradient.map { .init(color: Color(red: $0.1, green: $0.2, blue: $0.3), location: $0.0) }, center: .center))
+                        .inset(by: 3.5)
+                        .stroke(AngularGradient(stops: BoostWheel.ringGradient.map { .init(color: Color(red: $0.1, green: $0.2, blue: $0.3), location: $0.0) }, center: .center), lineWidth: 7)
                 } else {
                     // Arc's frame: brushed metal, dark at the top left and right, light at the bottom.
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(AngularGradient(colors: [Color(white: 0.55), Color(white: 0.25), Color(white: 0.45), Color(white: 0.85),
-                                                       Color(white: 0.95), Color(white: 0.7), Color(white: 0.55)], center: .center, angle: .degrees(180)))
-                }
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .fill(Color.white)
-                    .overlay(AngularGradient(stops: BoostWheel.ringGradient.map { .init(color: Color(red: $0.1, green: $0.2, blue: $0.3), location: $0.0) }, center: .center).opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                    .padding(7)
-                Canvas { ctx, s in
-                    for x in stride(from: 7.0, to: s.width - 7, by: 4) {
-                        for y in stride(from: 7.0, to: s.height - 7, by: 4) {
-                            ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)), with: .color(.black.opacity(0.095)))
-                        }
-                    }
-                    // The orbit both handles are on, and the line between them.
-                    let r = hypot(h.big.x, h.big.y)
-                    ctx.stroke(Path(ellipseIn: CGRect(x: c - r, y: c - r, width: 2 * r, height: 2 * r)), with: .color(Color(white: 0.92)), lineWidth: 1.5)
-                    var line = Path()
-                    line.move(to: small)
-                    line.addLine(to: big)
-                    ctx.stroke(line, with: .color(accent), lineWidth: 2)
+                        .inset(by: 3.5)
+                        .stroke(AngularGradient(colors: [Color(white: 0.55), Color(white: 0.25), Color(white: 0.45), Color(white: 0.85),
+                                                         Color(white: 0.95), Color(white: 0.7), Color(white: 0.55)], center: .center, angle: .degrees(180)), lineWidth: 7)
                 }
                 Circle().fill(accent).frame(width: 22, height: 22).overlay(Circle().stroke(.white, lineWidth: 3)).shadow(radius: 1.5)
                     .position(small)
