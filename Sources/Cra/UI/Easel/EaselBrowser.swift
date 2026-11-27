@@ -208,6 +208,24 @@ enum EaselFiles {
         listChanged()
     }
 
+    /// Easels deleted this session: a tab still closing must not write one back.
+    static var deleted: Set<UUID> = []
+
+    /// Runs the removal a second after a delete; a test runs it when it chooses.
+    static var afterDelete: (@escaping @MainActor @Sendable () -> Void) -> Void = {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: $0)
+    }
+
+    /// Deleting from Library ▸ Easels: the easel's file and its pictures.
+    static func delete(_ id: UUID) {
+        deleted.insert(id)
+        EaselFolder.remove(id, in: folder)
+        // An edit made just before is written 0.4 s later (JSONStore.save): remove what it writes too, unless Import or
+        // a drawing brought the easel back since.
+        afterDelete { if deleted.contains(id) { EaselFolder.remove(id, in: folder) } }
+        listChanged()
+    }
+
     /// An easel going (Library ▸ Easels ▸ Delete, or deleted on another Mac): every tab showing it
     /// closes through `close`, and none writes it back.
     static func closeTabs(of id: UUID, in store: SidebarStore, close: (UUID) -> Void) {

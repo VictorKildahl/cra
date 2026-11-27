@@ -53,6 +53,43 @@ enum EaselBrowserTests {
 
         await easelOpenTwice()
         print("Easel browser: an easel open on two canvases takes sync's change on both passed")
+
+        deleteRemovesASaveThatLandsAfterIt()
+        deleteLeavesAnEaselImportBroughtBack()
+        print("Easel browser: the removal a second after Delete passed")
+    }
+
+    /// Deletes a new easel, runs `between`, then the removal that follows a second later; returns the easel's file.
+    @MainActor
+    static func deleteThenRemoveLater(_ title: String, between: (UUID) -> Void) -> URL {
+        let given = EaselFiles.afterDelete
+        defer { EaselFiles.afterDelete = given }
+        var later: [@MainActor @Sendable () -> Void] = []
+        EaselFiles.afterDelete = { later.append($0) }
+        let easel = Easel(title: title)
+        EaselFiles.store(easel.id).saveNow(easel)
+        EaselFiles.delete(easel.id)
+        between(easel.id)
+        for work in later { work() }
+        return EaselFiles.store(easel.id).url
+    }
+
+    /// An edit saved just after Delete (JSONStore.save waits 0.4 s): the removal a second later takes it away.
+    @MainActor
+    static func deleteRemovesASaveThatLandsAfterIt() {
+        let file = deleteThenRemoveLater("Saved After Delete") { EaselFiles.store($0).saveNow(Easel(id: $0, title: "A Late Save")) }
+        precondition(!FileManager.default.fileExists(atPath: file.path), "the removal after a delete takes the save that landed after it")
+    }
+
+    /// Deleted here, then Import brought it back within the second: the removal after the delete took Import's copy away
+    /// (Greptile, PR #894).
+    @MainActor
+    static func deleteLeavesAnEaselImportBroughtBack() {
+        let file = deleteThenRemoveLater("Brought Back by Import") { id in
+            EaselFiles.store(id).saveNow(Easel(id: id, title: "From Import"))
+            EaselFiles.synced()
+        }
+        precondition(FileManager.default.fileExists(atPath: file.path), "the removal after a delete leaves the easel Import brought back")
     }
 
     /// One easel open on two canvases (a tab and a Peek): sync's change, its deletion and Import's

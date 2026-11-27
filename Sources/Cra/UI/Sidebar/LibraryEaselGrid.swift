@@ -258,18 +258,3 @@ enum EaselThumbnail {
         return image
     }
 }
-
-extension EaselFiles {
-    /// Deleting from Library ▸ Easels: the easel's file and its pictures.
-    /// Easels deleted this session: a tab still closing must not write one back.
-    @MainActor static var deleted: Set<UUID> = []
-
-    @MainActor static func delete(_ id: UUID) {
-        deleted.insert(id)
-        let remove = { EaselFolder.remove(id, in: folder) }
-        remove()
-        // An edit made just before is written 0.4 s later (JSONStore.save): remove what it writes too.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: remove)
-        listChanged()
-    }
-}

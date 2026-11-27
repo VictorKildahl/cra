@@ -439,18 +439,18 @@ final class SettingsSyncService {
         let target = Self.bundleFolder(in: picked)
         do {
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-            let easels = localEasels()
+            // One snapshot of the sidebar, settings, shortcuts and easels: an easel made or deleted during the copy goes
+            // with its rows.
+            let files = try localFiles().files, easels = localEasels()
             guard !easels.holds else { return done(Self.unreadableEasels(easels)) }
             let (pictures, copies) = try sendPictures(easels, to: target)
             // Export's task leaves sync's knowledge of the pictures as it is.
             transferPictures(copies) { [self] result in
                 if let failed = result.failed { return done(failed) }
-                // The easels listed before the copy, with the pictures the folder held then or the copy sent; one this Mac
-                // couldn't read stays out as it does from sync.
-                let unreadable = Set(easels.pictures.filter { result.unreadable[localURL($0).path] != nil || unreadableFiles[localURL($0).path] != nil })
-                let (kept, held) = easels.holding(pictures.merging(result.sent) { a, _ in a }, unreadable: unreadable)
+                // Every easel listed, with the pictures the folder held then or the copy sent: one gone from this Mac since
+                // stays out, as sync leaves out a picture it lacks.
                 do {
-                    _ = try write(localFiles().files, easels: kept, pictures: held, to: target)
+                    _ = try write(files, easels: easels, pictures: pictures.merging(result.sent) { a, _ in a }, to: target)
                     done(nil)
                 } catch { done(error.localizedDescription) }
             }
@@ -624,23 +624,9 @@ final class SettingsSyncService {
             let isPicture = { (path: String) in SettingsSync.easelPath(path)?.picture != nil }
             return named.filter { !isPicture($0.key) } == files && Set(named.keys.filter(isPicture)) == pictures
         }
-
-        /// These easels with the pictures of theirs in `held`. One lacking a picture it lists that isn't `unreadable` (gone
-        /// from this Mac while Export… copied) is left out with its pictures.
-        func holding(_ held: [String: String], unreadable: Set<String>) -> (easels: LocalEasels, pictures: [String: String]) {
-            let lacking = Set(pictures.filter { held[$0] == nil && !unreadable.contains($0) }.compactMap { SettingsSync.easelPath($0)?.id })
-            var kept = self
-            for id in lacking {
-                kept.files["\(SettingsSync.easelsName)/\(id.uuidString).json"] = nil
-                kept.easels[id] = nil
-                kept.json[id] = nil
-            }
-            kept.pictures = pictures.filter { SettingsSync.easelPath($0).map { !lacking.contains($0.id) } ?? false }
-            return (kept, held.filter { kept.pictures.contains($0.key) })
-        }
     }
     private var localEaselsMade: LocalEasels?
-    /// Test hooks (#615): how often an easel file or picture was read (in the sync folder, also a read tried), and an easel decoded.
+    /// Test hooks (#615): how often an easel file or picture was read, and an easel decoded.
     private(set) var easelReads = 0
     private(set) var easelDecodes = 0
     /// A file's size and date when it was hashed, and its hash.
@@ -718,9 +704,9 @@ final class SettingsSyncService {
     /// The copy of an easel file this Mac last wrote or applied, read from the sync folder; nil when it isn't there.
     private func sentCopy(_ path: String) -> (hash: String, easel: Easel, json: Data)? {
         guard let folder, let hash = state.lastWritten?.easels?[path], let (id, _) = SettingsSync.easelPath(path),
-              let url = Self.bundleFile(path, in: folder) else { return nil }
+              let json = Self.coordinatedRead(path, in: folder) else { return nil }
         easelReads += 1
-        guard let json = Self.coordinatedRead(url), Self.hash(json) == hash, let easel = decodeEasel(json), easel.id == id else { return nil }
+        guard Self.hash(json) == hash, let easel = decodeEasel(json), easel.id == id else { return nil }
         return (hash, easel, json)
     }
 
@@ -750,13 +736,14 @@ final class SettingsSyncService {
         return Date(timeIntervalSince1970: TimeInterval(found.st_ctimespec.tv_sec) + TimeInterval(found.st_ctimespec.tv_nsec) / 1e9)
     }
 
-    /// An easel JSON's hash, read on the main thread unless its size and date are those it was hashed at. Pictures are
-    /// hashed off it (`seen`).
-    private func fileHash(_ url: URL, coordinated: Bool) -> String? {
+    /// The hash of an easel JSON in the folder, read on the main thread unless its size and date are those it was hashed
+    /// at. Pictures are hashed off it (`seen`).
+    private func fileHash(_ path: String, in folder: URL) -> String? {
+        let url = folder.appendingPathComponent(path)
         guard let found = Self.stat(url) else { return nil }
         if let known = fileHashes[url.path], known.size == found.size, known.modified == found.modified { return known.hash }
+        guard let data = Self.coordinatedRead(path, in: folder) else { return nil }
         easelReads += 1
-        guard let data = coordinated ? Self.coordinatedRead(url) : try? Data(contentsOf: url) else { return nil }
         let hash = Self.hash(data)
         fileHashes[url.path] = (found.size, found.modified, hash)
         return hash
@@ -874,7 +861,7 @@ final class SettingsSyncService {
         var written = pictures
         for (path, hash) in easels.files {
             guard let target = Self.bundleURL(path, in: folder, unlink: true) else { throw CocoaError(.fileWriteNoPermission, userInfo: [NSFilePathErrorKey: path]) }
-            if (downloadStatus(target).map { $0 == .current } ?? true) && Self.bundleFile(path, in: folder).flatMap({ fileHash($0, coordinated: true) }) == hash {
+            if (downloadStatus(target).map { $0 == .current } ?? true) && fileHash(path, in: folder) == hash {
                 written[path] = hash
                 continue
             }
@@ -948,14 +935,6 @@ final class SettingsSyncService {
         return url
     }
 
-    /// `bundleURL` when the path names a regular file: a link, a FIFO or a device a peer put there is never read.
-    nonisolated static func bundleFile(_ path: String, in folder: URL) -> URL? {
-        guard let url = bundleURL(path, in: folder) else { return nil }
-        var found = Darwin.stat()
-        guard lstat(url.path, &found) == 0, found.st_mode & S_IFMT == S_IFREG else { return nil }
-        return url
-    }
-
     nonisolated private static func isLink(_ url: URL) -> Bool {
         (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeSymbolicLink
     }
@@ -991,6 +970,18 @@ final class SettingsSyncService {
         var data: Data?
         NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: .withoutChanges, error: nil) { u in
             data = try? Data(contentsOf: u)
+        }
+        return data
+    }
+
+    /// An easel file or picture at a bundle path, read through a `BundleDirectory`: nil for a link, a FIFO or a device.
+    /// `ready` runs once the coordinator lets it read: a test swaps one in there.
+    nonisolated static func coordinatedRead(_ path: String, in folder: URL, ready: () -> Void = {}) -> Data? {
+        var data: Data?
+        // On the bundle folder: the coordinator opens what it is given, and waits for ever on a FIFO a peer put there.
+        NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: folder, options: .withoutChanges, error: nil) { _ in
+            ready()
+            data = BundleDirectory.read(path, in: folder)
         }
         return data
     }
@@ -1072,8 +1063,7 @@ final class SettingsSyncService {
                 states[path] = .downloading
                 continue
             }
-            // An easel JSON is read only as a regular file: a FIFO or a device would hold the main thread.
-            switch picture == nil ? Self.bundleFile(path, in: folder).flatMap { fileHash($0, coordinated: true) }.map(Seen.hash) ?? .absent : seen(url) {
+            switch picture == nil ? fileHash(path, in: folder).map(Seen.hash) ?? .absent : seen(url) {
             case .hash(let hash): states[path] = .present(hash: hash)
             case .absent, .unreadable: states[path] = .missing
             case .unseen:
@@ -1090,9 +1080,8 @@ final class SettingsSyncService {
         for (path, hash) in paths {
             guard let (id, picture) = SettingsSync.easelPath(path), picture == nil else { continue }
             let read = { () -> Easel? in
-                guard let url = Self.bundleFile(path, in: folder) else { return nil }
+                guard let data = Self.coordinatedRead(path, in: folder) else { return nil }
                 self.easelReads += 1
-                guard let data = Self.coordinatedRead(url) else { return nil }
                 return Self.hash(data) == hash ? self.decodeEasel(data) : nil
             }
             guard let easel = folderEasels[hash] ?? read(), easel.id == id else { return nil }
@@ -1224,7 +1213,7 @@ final class SettingsSyncService {
         var bytes: [UUID: Data] = [:]
         for (path, hash) in paths {
             guard let (id, picture) = SettingsSync.easelPath(path), picture == nil, touched.contains(id) else { continue }
-            guard let source = Self.bundleFile(path, in: from), let data = Self.coordinatedRead(source), Self.hash(data) == hash else {
+            guard let data = Self.coordinatedRead(path, in: from), Self.hash(data) == hash else {
                 throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: path])
             }
             bytes[id] = data
@@ -1331,11 +1320,11 @@ final class SettingsSyncService {
 
         func run() -> Result {
             var result = Result()
-            /// A file's hash, and its bytes when read now; nil when it isn't there or can't be read.
-            func hashed(_ url: URL, coordinated: Bool) -> (hash: String, data: Data?)? {
+            /// A file's hash, and its bytes when `read` read them now; nil when it isn't there or can't be read.
+            func hashed(_ url: URL, _ read: () -> Data?) -> (hash: String, data: Data?)? {
                 guard let found = SettingsSyncService.stat(url) else { return nil }
                 if let k = result.hashed[url.path] ?? known[url.path], k.size == found.size, k.modified == found.modified { return (k.hash, nil) }
-                guard let data = coordinated ? SettingsSyncService.coordinatedRead(url) : try? Data(contentsOf: url) else {
+                guard let data = read() else {
                     result.unreadable[url.path] = SettingsSyncService.attributesChanged(url)
                     return nil
                 }
@@ -1347,22 +1336,23 @@ final class SettingsSyncService {
             func written(_ target: URL, hash: String) {
                 if let found = SettingsSyncService.stat(target) { result.hashed[target.path] = (found.size, found.modified, hash) }
             }
-            // A bundle path is checked again here, as a peer may have swapped in a link, a FIFO or a device since.
+            // A bundle file is read through a `BundleDirectory`, as a peer may have swapped in a link, a FIFO or a device since.
             for step in steps {
                 do {
                     switch step {
                     case .hash(let path, let folder):
-                        guard let url = SettingsSyncService.bundleFile(path, in: folder) else {
+                        guard let url = SettingsSyncService.bundleURL(path, in: folder) else {
                             // Counts as missing until it changes.
                             let url = folder.appendingPathComponent(path)
                             result.unreadable[url.path] = SettingsSyncService.attributesChanged(url)
                             continue
                         }
-                        _ = hashed(url, coordinated: true)
+                        _ = hashed(url) { SettingsSyncService.coordinatedRead(path, in: folder) }
                     case .send(let picture, let path, let folder, let onItsWay):
                         // One this Mac can't read stays out of the bundle, as one it lacks does.
-                        guard let here = hashed(picture, coordinated: false) else { continue }
-                        if onItsWay || SettingsSyncService.bundleFile(path, in: folder).flatMap({ hashed($0, coordinated: true) })?.hash == here.hash {
+                        guard let here = hashed(picture, { try? Data(contentsOf: picture) }) else { continue }
+                        if onItsWay || SettingsSyncService.bundleURL(path, in: folder)
+                            .flatMap({ url in hashed(url) { SettingsSyncService.coordinatedRead(path, in: folder) } })?.hash == here.hash {
                             result.sent[path] = here.hash
                             continue
                         }
@@ -1378,8 +1368,7 @@ final class SettingsSyncService {
                         written(folder.appendingPathComponent(path), hash: here.hash)
                         result.sent[path] = here.hash
                     case .take(let path, let folder, let target, let hash):
-                        guard let source = SettingsSyncService.bundleFile(path, in: folder), let data = SettingsSyncService.coordinatedRead(source),
-                              SettingsSyncService.hash(data) == hash else {
+                        guard let data = SettingsSyncService.coordinatedRead(path, in: folder), SettingsSyncService.hash(data) == hash else {
                             throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: (path as NSString).lastPathComponent])
                         }
                         result.reads += 1

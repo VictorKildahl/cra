@@ -1,7 +1,8 @@
 import Foundation
 
 /// A folder in a sync or export bundle, held open by descriptor and reached without following a link below the bundle
-/// folder: a peer on a shared folder can swap a folder for a link at any moment. Every bundle write and prune uses it.
+/// folder: a peer on a shared folder can swap a folder for a link at any moment. Every bundle write and prune, and every
+/// read of an easel file or picture, uses it.
 final class BundleDirectory {
     private let fd: Int32
 
@@ -58,6 +59,34 @@ final class BundleDirectory {
             let renameFailure = Self.failure()
             unlinkat(fd, temp, 0)
             throw renameFailure
+        }
+    }
+
+    /// The bytes of the regular file at a path under `folder` ("Easels/<id>.json"); nil when a folder on its way is a
+    /// link, or the file is a link, a FIFO or a device, which it never waits on.
+    static func read(_ path: String, in folder: URL) -> Data? {
+        var parts = path.split(separator: "/").map(String.init)
+        guard let name = parts.popLast() else { return nil }
+        return (try? BundleDirectory(folder, path: parts))?.read(name)
+    }
+
+    /// Opens `name` without waiting on a FIFO, checks that what it opened is a regular file, then reads it.
+    func read(_ name: String) -> Data? {
+        let file = openat(fd, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard file >= 0 else { return nil }
+        defer { close(file) }
+        var found = stat()
+        // O_NONBLOCK only kept the open from waiting on a FIFO: a regular file is read as any other.
+        guard fstat(file, &found) == 0, found.st_mode & S_IFMT == S_IFREG,
+              fcntl(file, F_SETFL, fcntl(file, F_GETFL) & ~O_NONBLOCK) == 0 else { return nil }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let n = buffer.withUnsafeMutableBytes { Darwin.read(file, $0.baseAddress, $0.count) }
+            if n < 0, errno == EINTR { continue }
+            guard n >= 0 else { return nil }
+            if n == 0 { return data }
+            data.append(contentsOf: buffer[..<n])
         }
     }
 

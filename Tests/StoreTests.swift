@@ -5195,7 +5195,8 @@ enum StoreTests {
         importCopiesThePicturesItLacksOffTheMainThread()
         settingsTurnsExportBackOnOnceItAnswers()
         exportKeepsThePicturesOfAnEaselDeletedWhileItCopies()
-        exportLeavesOutAnEaselDeletedBeforeItsPictureCopied()
+        exportKeepsAnEaselDeletedBeforeItsPictureCopied()
+        exportKeepsTheFileOfAnEaselRowDeletedWhileItCopies()
         bundleWriteFollowsNoLinkSwappedInOnceItMayWrite()
         bundleDirectoryWritesThroughNoLinkAtAnyLevel()
         exportNamesAPictureItCouldNotWrite()
@@ -5206,6 +5207,9 @@ enum StoreTests {
         syncReadsNoPictureThroughALinkSwappedInWhileTheTaskWaits()
         syncReadsNoFIFOSwappedInWhileTheTaskWaits()
         syncReadsNoFIFONamedAsAnEaselFile()
+        bundleReadWaitsOnNoFIFOSwappedInAfterItsCheck()
+        bundleReadFollowsNoLinkSwappedInAfterItsCheck()
+        exportWritesTheSidebarOfTheEaselsItListed()
         useThatSidebarHashesAPictureOffTheMainThread()
         importNamesAPictureGoneBeforeItApplies()
     }
@@ -5372,16 +5376,19 @@ enum StoreTests {
         expect(held.tasks.count == 1, "Export… hands its picture copy to a task (\(held.tasks.count) tasks)")
     }
 
-    /// What Export… leaves in its folder when the user deletes an easel while its picture copy waits; `exportedBefore`:
-    /// the folder already holds that easel's pictures from an earlier Export…, and a second easel's picture is copied.
+    /// What Export… leaves in its folder when the user deletes an easel, which has a row, while its picture copy waits;
+    /// `exportedBefore`: the folder holds its pictures from an earlier Export…, and a second easel's picture is copied.
     @MainActor
-    private static func exportAfterDeletingAnEaselWhileItsCopyWaits(exportedBefore: Bool) -> (easel: Easel, manifest: SyncManifest?, folder: URL, dir: URL) {
+    private static func exportAfterDeletingAnEaselWhileItsCopyWaits(exportedBefore: Bool)
+        -> (easel: Easel, manifest: SyncManifest?, sidebar: String?, folder: URL, dir: URL) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-export-deleted-\(UUID().uuidString)", isDirectory: true)
         let easels = dir.appendingPathComponent("Easels", isDirectory: true), exported = dir.appendingPathComponent("export", isDirectory: true)
         let (easel, pictures) = pictured("Deleted while Export… copies")
         saveEasel(easel, pictures: pictures, in: easels)
         let clock = ManualScheduler()
-        let sync = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easels)
+        let store = SidebarStore(clock: clock)
+        _ = store.createTab(url: easel.url)
+        let sync = SettingsSyncService(store: store, clock: clock, device: "Studio", deviceID: "studio", easels: easels)
         if exportedBefore {
             sync.runPictures = picturesInPlace
             expect(answer { sync.export(to: exported, done: $0) } == .some(nil), "the first Export… writes the easel and its picture")
@@ -5399,35 +5406,45 @@ enum StoreTests {
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
         let manifest = (try? Data(contentsOf: folder.appendingPathComponent(SettingsSync.manifestName)))
             .flatMap { try? decoder.decode(SyncManifest.self, from: $0) }
-        return (easel, manifest, folder, dir)
+        let sidebar = (try? Data(contentsOf: folder.appendingPathComponent(SettingsSync.sidebarName))).map { String(decoding: $0, as: UTF8.self) }
+        return (easel, manifest, sidebar, folder, dir)
     }
 
-    /// Whether an exported easel and its pictures went together, each named picture held: the easel with them all, or neither.
-    private static func exportHoldsTheEaselWithItsPicturesOrNeither(_ easel: Easel, _ manifest: SyncManifest?, in folder: URL) -> Bool {
+    /// Whether the export names the easel's JSON, and holds every file its manifest names.
+    private static func exportHoldsTheEaselAndWhatItNames(_ easel: Easel, _ manifest: SyncManifest?, in folder: URL) -> Bool {
         guard let named = manifest?.easels else { return false }
-        let mine = named.keys.filter { SettingsSync.easelPath($0)?.id == easel.id }
-        let pictures = Set(easel.items.flatMap(Easel.files(of:))).map { "\(SettingsSync.easelsName)/\(easel.id.uuidString)/\($0)" }
         let held = named.keys.allSatisfy { FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) }
-        return held && (mine.isEmpty || Set(mine) == Set(pictures + ["\(SettingsSync.easelsName)/\(easel.id.uuidString).json"]))
+        return held && named["\(SettingsSync.easelsName)/\(easel.id.uuidString).json"] != nil
     }
 
     /// An easel deleted while Export… copied another's picture kept its JSON in the export and lost the pictures an
     /// earlier Export… had put there (Greptile, PR #894).
     @MainActor
     private static func exportKeepsThePicturesOfAnEaselDeletedWhileItCopies() {
-        let (easel, manifest, folder, dir) = exportAfterDeletingAnEaselWhileItsCopyWaits(exportedBefore: true)
+        let (easel, manifest, _, folder, dir) = exportAfterDeletingAnEaselWhileItsCopyWaits(exportedBefore: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        expect(exportHoldsTheEaselWithItsPicturesOrNeither(easel, manifest, in: folder),
-               "the export holds the deleted easel with its picture, or neither (\(manifest?.easels?.keys.sorted() ?? []))")
+        expect(exportHoldsTheEaselAndWhatItNames(easel, manifest, in: folder),
+               "the export holds the deleted easel and every picture it names (\(manifest?.easels?.keys.sorted() ?? []))")
     }
 
-    /// An easel deleted while Export… waited to copy its picture went into the export without the picture.
+    /// An easel deleted while Export… waited to copy its picture went into the export naming a picture it didn't hold.
     @MainActor
-    private static func exportLeavesOutAnEaselDeletedBeforeItsPictureCopied() {
-        let (easel, manifest, folder, dir) = exportAfterDeletingAnEaselWhileItsCopyWaits(exportedBefore: false)
+    private static func exportKeepsAnEaselDeletedBeforeItsPictureCopied() {
+        let (easel, manifest, _, folder, dir) = exportAfterDeletingAnEaselWhileItsCopyWaits(exportedBefore: false)
         defer { try? FileManager.default.removeItem(at: dir) }
-        expect(exportHoldsTheEaselWithItsPicturesOrNeither(easel, manifest, in: folder),
-               "the export holds the deleted easel with its picture, or neither (\(manifest?.easels?.keys.sorted() ?? []))")
+        expect(exportHoldsTheEaselAndWhatItNames(easel, manifest, in: folder),
+               "the export holds the deleted easel and every picture it names (\(manifest?.easels?.keys.sorted() ?? []))")
+    }
+
+    /// An easel deleted while Export… copied left its row in the exported sidebar without its file: Import of that export
+    /// opened the row as a blank easel.
+    @MainActor
+    private static func exportKeepsTheFileOfAnEaselRowDeletedWhileItCopies() {
+        let (easel, manifest, sidebar, _, dir) = exportAfterDeletingAnEaselWhileItsCopyWaits(exportedBefore: false)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let row = sidebar?.contains(easel.id.uuidString) == true
+        let file = manifest?.easels?["\(SettingsSync.easelsName)/\(easel.id.uuidString).json"] != nil
+        expect(row == file, "the export holds the deleted easel's row with its file, or neither (row: \(row), file: \(file))")
     }
 
     /// A peer swapped an easel's picture folder in the bundle for a link once the coordinator let the write go, after
@@ -5665,6 +5682,68 @@ enum StoreTests {
         let reads = macs.syncB.easelReads
         macs.clockB.advance(by: 30)
         expect(macs.syncB.easelReads == reads, "the look leaves the FIFO alone (\(macs.syncB.easelReads - reads) reads)")
+    }
+
+    /// A peer swapped an easel file for a FIFO after its check: the file coordinator opened it before the read and waited
+    /// for a writer for ever, on the main thread. A read that waits stops the suite here.
+    @MainActor
+    private static func bundleReadWaitsOnNoFIFOSwappedInAfterItsCheck() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-bundle-fifo-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = "\(SettingsSync.easelsName)/\(UUID().uuidString).json", file = dir.appendingPathComponent(path)
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? Data("an easel".utf8).write(to: file)
+        let read = SettingsSyncService.coordinatedRead(path, in: dir) {
+            try? FileManager.default.removeItem(at: file)
+            _ = mkfifo(file.path, 0o644)
+        }
+        expect(read == nil, "the read takes nothing from the FIFO")
+    }
+
+    /// A peer swapped an easel's picture folder in the bundle for a link after the read's check: the read took a file
+    /// from outside the bundle.
+    @MainActor
+    private static func bundleReadFollowsNoLinkSwappedInAfterItsCheck() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let outside = outsideFolder(in: macs)
+        try? Data("outside".utf8).write(to: outside.appendingPathComponent("p.png"))
+        let id = UUID().uuidString
+        let pictureFolder = macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(id)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: pictureFolder, withIntermediateDirectories: true)
+        try? Data("a picture".utf8).write(to: pictureFolder.appendingPathComponent("p.png"))
+        let read = SettingsSyncService.coordinatedRead("\(SettingsSync.easelsName)/\(id)/p.png", in: macs.bundle) {
+            try? FileManager.default.removeItem(at: pictureFolder)
+            try? FileManager.default.createSymbolicLink(at: pictureFolder, withDestinationURL: outside)
+        }
+        expect(read == nil, "the read takes nothing through the link (\(read.map { String(decoding: $0, as: UTF8.self) } ?? "nothing"))")
+    }
+
+    /// An easel made while Export… copied a picture went into the exported sidebar without its file: Import of that
+    /// export opened its row as a blank easel (Greptile, PR #894).
+    @MainActor
+    private static func exportWritesTheSidebarOfTheEaselsItListed() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-export-snapshot-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let easels = dir.appendingPathComponent("Easels", isDirectory: true), exported = dir.appendingPathComponent("export", isDirectory: true)
+        let (easel, pictures) = pictured("Exported while another is made")
+        saveEasel(easel, pictures: pictures, in: easels)
+        let clock = ManualScheduler()
+        let store = SidebarStore(clock: clock)
+        let sync = SettingsSyncService(store: store, clock: clock, device: "Studio", deviceID: "studio", easels: easels)
+        let held = HeldPictures()
+        held.hold(sync)
+        var said: String?? = nil
+        sync.export(to: exported) { said = .some($0) }
+        let made = Easel(title: "Made while Export… copies")
+        saveEasel(made, in: easels)
+        _ = store.createTab(url: made.url)
+        held.runAll()
+        let folder = exported.appendingPathComponent(SettingsSync.folderName, isDirectory: true)
+        let sidebar = (try? Data(contentsOf: folder.appendingPathComponent(SettingsSync.sidebarName))).map { String(decoding: $0, as: UTF8.self) }
+        let inSidebar = sidebar?.contains(made.id.uuidString) == true
+        let file = FileManager.default.fileExists(atPath: folder.appendingPathComponent("\(SettingsSync.easelsName)/\(made.id.uuidString).json").path)
+        expect(said == .some(nil) && inSidebar == file, "the export holds the new easel's row with its file, or neither (row: \(inSidebar), file: \(file))")
     }
 
     /// Use That Sidebar hashed a picture that changed since the question on the main thread.

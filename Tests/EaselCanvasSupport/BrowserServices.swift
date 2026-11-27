@@ -31,9 +31,10 @@ final class JSONStore<T: Codable> {
     func saveNow(_ value: T) { try! JSONEncoder().encode(value).write(to: url) }
 }
 
-extension EaselFiles {
-    static var deleted: Set<UUID> = []
-    static func delete(_ id: UUID) { deleted.insert(id) }
+enum EaselFolder {
+    static func remove(_ id: UUID, in folder: URL) {
+        for name in [id.uuidString + ".json", id.uuidString] { try? FileManager.default.removeItem(at: folder.appendingPathComponent(name)) }
+    }
 }
 
 struct TabData { var url: String }
