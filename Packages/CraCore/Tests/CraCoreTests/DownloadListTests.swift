@@ -65,4 +65,26 @@ struct DownloadListTests {
         #expect(!DownloadList.holdsBin([live(2, "broken.iso", at: 0, failed: true)], now: t0))
         #expect(!DownloadList.holdsBin([], now: t0))
     }
+
+    /// Chromium went quiet about a running download (no bytes for a while: a slow server, several
+    /// downloads sharing one, Safe Browsing's check at the end). With Safe Browsing on, the engine writes
+    /// it to "Unconfirmed <n>.crdownload", so neither the file nor <file>.crdownload is there yet: that
+    /// read as Cancelled while Finder showed it downloading (#895). The engine reports a real cancel itself.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/895"))
+    func quietDownloadWithoutItsFileIsNotCancelledOnTheEngine() {
+        #expect(DownloadList.quietEnding(total: 257_100_000, partialBesideIt: false, size: nil, chromiumEngine: true) == nil)
+        #expect(DownloadList.quietEnding(total: -1, partialBesideIt: false, size: nil, chromiumEngine: true) == nil)
+        // The file there at its full size, nothing partial beside it: it finished while Chromium was quiet.
+        #expect(DownloadList.quietEnding(total: 257_100_000, partialBesideIt: false, size: 257_100_000, chromiumEngine: true) == .complete)
+        #expect(DownloadList.quietEnding(total: 257_100_000, partialBesideIt: true, size: 257_100_000, chromiumEngine: true) == nil)
+        #expect(DownloadList.quietEnding(total: 257_100_000, partialBesideIt: false, size: 1_000, chromiumEngine: true) == nil)
+    }
+
+    /// CEF cancels a download without a word when its tab closes, and writes straight to the file: on CEF
+    /// the file gone still means it ended.
+    @Test func quietDownloadWithoutItsFileIsCancelledOnCEF() {
+        #expect(DownloadList.quietEnding(total: 257_100_000, partialBesideIt: false, size: nil, chromiumEngine: false) == .cancelled)
+        #expect(DownloadList.quietEnding(total: 257_100_000, partialBesideIt: false, size: 257_100_000, chromiumEngine: false) == .complete)
+        #expect(DownloadList.quietEnding(total: 257_100_000, partialBesideIt: false, size: 1_000, chromiumEngine: false) == nil)
+    }
 }
