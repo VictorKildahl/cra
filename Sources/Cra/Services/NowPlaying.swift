@@ -19,9 +19,21 @@ final class NowPlaying {
         var hasVideo = false
         /// The tab's media volume (Arc's volume drawer), 0...1.
         var volume = 1.0
+        /// What the page's media session and media element said at the last read (the island player,
+        /// Discussion #761), and when on the app's clock. Only read while that player is chosen.
+        var media: NowPlayingMedia?
+        var mediaReadAt: TimeInterval = 0
+
+        /// Where the media is, moved on since the read while it plays.
+        var clock: NowPlayingClock? {
+            guard let m = media, let p = m.position else { return nil }
+            return NowPlayingClock(position: p, duration: m.duration, rate: m.rate, playing: playing && !m.paused, readAt: mediaReadAt)
+        }
     }
 
-    enum Action { case togglePlayback, previous, next, toggleMute, dismiss, show, pictureInPicture, setVolume(Double) }
+    /// `skip` moves the media by seconds (negative: back), `seek` puts it at seconds from the start, and
+    /// `refreshMedia` reads the page's media session again (the island player).
+    enum Action { case togglePlayback, previous, next, toggleMute, dismiss, show, pictureInPicture, setVolume(Double), skip(Double), seek(Double), refreshMedia }
 
     var entries: [Entry] = []
     /// Tabs in the window's panes, and tabs whose video is in Picture in Picture: no card.

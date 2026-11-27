@@ -222,6 +222,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     var pageAdopted: ((UUID, UUID) -> Void)?
     /// The window's sidebar player (Arc's "now playing"), fed with this manager's pages.
     var nowPlaying: NowPlaying?
+    /// The island player's next read of what its cards play (scheduleMediaPoll).
+    private var mediaPoll: ScheduledWork?
     /// A tab's page closed (the tab closed or went to sleep), with what Chromium kept for it.
     var pageClosed: (UUID) -> Void = { _ in }
     private var byBrowser: [ObjectIdentifier: UUID] = [:]
@@ -1441,6 +1443,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             let js = "(v => { if (window.__cra) window.__cra.volume = v; document.querySelectorAll('video,audio').forEach(m => m.volume = v); })(\(max(0, min(1, v))))"
             runtimes[id]?.browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { _, _ in }
             return
+        case .skip(let seconds): return seekMedia(id, by: seconds, to: nil)
+        case .seek(let seconds): return seekMedia(id, by: 0, to: seconds)
+        case .refreshMedia: return refreshMediaInfo(id)
         case .toggleMute, .show: return
         }
         guard let rt = runtimes[id] else { nowPlaying?.remove(id); return }
@@ -1568,6 +1573,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     /// Which track buttons the page answers (media session handlers), and whether it has a video.
     private func refreshMediaControls(_ id: UUID) {
         guard let browser = runtimes[id]?.browser else { return }
+        refreshMediaInfo(id)
         let webKit = browser is WebKitBrowser
         let js = """
         (() => { const has = \(webKit ? "window.__cra?.query() ?? []" : "[]");
@@ -1587,6 +1593,71 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             DispatchQueue.main.async {
                 guard let actions = Self.jsonObject(result)?["actions"] as? [String] else { return }
                 self?.nowPlaying?.update(id) { $0.hasPrevious = actions.contains("previoustrack"); $0.hasNext = actions.contains("nexttrack") }
+            }
+        }
+    }
+
+    // MARK: Island player (Discussion #761)
+
+    /// Only the island player shows what plays (title, artist, artwork, time): Arc's cards read nothing more.
+    private var readsMedia: Bool { store.settings.nowPlayingStyle == .island }
+
+    /// Reads the page's media session and playing media element in PageScript's isolated world (every engine),
+    /// and starts loading the artwork the island shows through the page's own network (NowPlayingArtwork).
+    func refreshMediaInfo(_ id: UUID) {
+        guard readsMedia, let browser = runtimes[id]?.browser else { return }
+        browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(NowPlayingMedia.script, userGesture: false)) { [weak self] result, _ in
+            DispatchQueue.main.async {
+                guard let self, let np = self.nowPlaying, np.entries.contains(where: { $0.id == id }) else { return }
+                let media = Self.stringResult(result).flatMap(NowPlayingMedia.parse)
+                let now = self.clock.now.timeIntervalSinceReferenceDate
+                np.update(id) { $0.media = media; $0.mediaReadAt = now }
+                if let url = media?.artworkURL(forPixels: NowPlayingArtwork.pixels), let browser = self.runtimes[id]?.browser {
+                    NowPlayingArtwork.shared.load(url, through: browser)
+                }
+            }
+        }
+        scheduleMediaPoll()
+    }
+
+    /// While the island shows cards, what they play is read again every 2 s: a playlist moves on, a page seeks,
+    /// the rate changes. In between the island moves the time on itself (NowPlayingClock). Nothing is read while
+    /// Arc's cards are chosen or no card shows.
+    private func scheduleMediaPoll() {
+        guard mediaPoll == nil, readsMedia, nowPlaying?.shown.isEmpty == false else { return }
+        mediaPoll = clock.after(2) { [weak self] in
+            guard let self else { return }
+            self.mediaPoll = nil
+            guard self.readsMedia, let np = self.nowPlaying else { return }
+            for e in np.shown { self.refreshMediaInfo(e.id) }
+        }
+    }
+
+    /// The island's skips and progress bar: the playing media element's time (no user gesture), else, on
+    /// Chromium, the page's own seek handlers (a page playing audio it never added to the document).
+    private func seekMedia(_ id: UUID, by delta: Double, to target: Double?) {
+        guard let rt = runtimes[id], delta.isFinite, target?.isFinite ?? true else { return }
+        let js = """
+        ((by, to) => {
+          const media = [...document.querySelectorAll('video,audio')];
+          const m = media.find(x => !x.paused && !x.ended) ?? media.find(x => x.currentTime > 0) ?? media[0];
+          if (!m) return 'none';
+          const end = isFinite(m.duration) ? m.duration : Infinity;
+          m.currentTime = Math.max(0, Math.min(end, to ?? m.currentTime + by));
+          return 'seeked';
+        })(\(delta), \(target.map { "\($0)" } ?? "null"))
+        """
+        rt.browser.evaluate(inIsolatedWorld: PageScript.world, params: Self.evaluateParams(js, userGesture: false)) { [weak self, weak rt] result, _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if Self.stringResult(result) == "none", delta != 0, let rt, !(rt.browser is WebKitBrowser) {
+                    let action = delta < 0 ? "seekbackward" : "seekforward"
+                    rt.browser.sendDevToolsMethod("Cra.mediaSession", params: Self.jsonObjectString(["action": action])) { [weak self] _, _ in
+                        DispatchQueue.main.async { self?.refreshMediaInfo(id) }
+                    }
+                    return
+                }
+                self.refreshMediaInfo(id)
             }
         }
     }

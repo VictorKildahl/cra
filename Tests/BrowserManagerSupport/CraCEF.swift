@@ -165,6 +165,7 @@ open class CraBrowser {
             return true
         }
     }
+    public func hasPending(_ method: String) -> Bool { replies.contains { $0.method == method } }
     public func reply(to method: String, with result: String?) {
         guard let index = replies.firstIndex(where: { $0.method == method }) else { fatalError("No pending \(method)") }
         replies.remove(at: index).completion(result, nil)

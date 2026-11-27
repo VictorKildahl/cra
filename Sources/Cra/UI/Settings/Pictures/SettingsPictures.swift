@@ -140,6 +140,36 @@ extension SettingsArt {
         }
     }
 
+    /// The island player at the bottom of the sidebar: a bar with a tab row's corners in the player's own white, its
+    /// artwork, a line of title and level bars (Discussion #761).
+    static var nowPlayingIsland: some View {
+        let t = ArtTint.mauve
+        let cover = ArtTint.peach.theme
+        return ArtCanvas(tint: t) {
+            ArtWindow(tint: t, rows: 3) {
+                ArtLines(count: 5, width: 36).padding(.leading, 4).padding(.top, 4)
+            }
+            .at(9, 5)
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1.2, style: .continuous).fill(t.theme.blendedToward(.white, 0.9))
+                HStack(spacing: 1) {
+                    RoundedRectangle(cornerRadius: 0.7, style: .continuous).fill(cover).frame(width: 3.4, height: 3.4)
+                    Capsule().fill(t.ink.opacity(0.6)).frame(width: 3.6, height: 1)
+                    Spacer(minLength: 0)
+                    HStack(alignment: .bottom, spacing: 0.45) {
+                        ForEach([1.8, 2.8, 1.3, 2.3], id: \.self) { h in
+                            Capsule().fill(t.ink.opacity(0.6)).frame(width: 0.6, height: h)
+                        }
+                    }
+                }
+                .padding(.horizontal, 0.9)
+            }
+            .frame(width: 13, height: 5.4)
+            .clipShape(RoundedRectangle(cornerRadius: 1.2, style: .continuous))
+            .at(11.5, 42)
+        }
+    }
+
     /// The page fills the card, and the toolbar slides in over its top where the pointer is.
     static var autoHideToolbar: some View {
         let t = ArtTint.mint

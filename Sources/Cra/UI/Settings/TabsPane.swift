@@ -70,6 +70,12 @@ struct TabsPane: View {
                                   detail: "The now-playing player at the bottom of the sidebar takes your space’s colour, like a selected tab, instead of Arc’s white or black.",
                                   isOn: Binding(get: { store.settings.nowPlayingTint == .theme },
                                                 set: { store.settings.nowPlayingTint = $0 ? .theme : .arc })) { SettingsArt.nowPlayingTint }
+                SettingsCardDivider()
+                // Discussion #761, not in Arc: the island player (NowPlayingStyle), after Yab's.
+                SettingsSwitchRow("Player with artwork",
+                                  detail: "The now-playing player becomes a slim bar with the artwork, title and artist of what’s playing. Hover it for a progress bar and 15-second skips.",
+                                  isOn: Binding(get: { store.settings.nowPlayingStyle == .island },
+                                                set: { store.settings.nowPlayingStyle = $0 ? .island : .arc })) { SettingsArt.nowPlayingIsland }
             }
 
             SettingsHeader("Pages").padding(.top, 20)

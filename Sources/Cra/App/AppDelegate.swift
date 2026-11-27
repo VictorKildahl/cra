@@ -1664,6 +1664,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["pageMarginSetting"].flatMap(Double.init) { store.settings.pageMargin = v; return }
             // nowPlayingTint=arc|theme: Settings ▸ Tabs ▸ "Player in the space's colour" switched (Ideas #366).
             if let v = dict["nowPlayingTint"].flatMap(NowPlayingTint.init(rawValue:)) { store.settings.nowPlayingTint = v; return }
+            // nowPlayingStyle=arc|island: Settings ▸ Tabs ▸ "Player with artwork" switched (Discussion #761).
+            if let v = dict["nowPlayingStyle"].flatMap(NowPlayingStyle.init(rawValue:)) { store.settings.nowPlayingStyle = v; return }
             // sidebarSide=left|right: Settings ▸ Sidebar on the right, as its switch sets it (#464).
             if let v = dict["sidebarSide"].flatMap(SidebarSide.init(rawValue:)) { store.settings.sidebarSide = v; return }
             if let v = dict["instantLinksFail"] {
@@ -3245,6 +3247,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let actions: [String: NowPlaying.Action] = ["toggle": .togglePlayback, "next": .next, "previous": .previous,
                                                            "pip": .pictureInPicture, "dismiss": .dismiss]
                 if let action = actions[op], let id = np.entries.last?.id { main.browsers.performNowPlaying(id, action) }
+                // open and fold: the stack as a hover opens and folds it.
+                if op == "open" || op == "fold" { (main.shell.sidebarHost as? SidebarView)?.debugSetPlayerOpen(op == "open") }
+                // skip=<seconds> and seek=<seconds>: the island's skip buttons and progress bar (Discussion #761).
+                if op == "skip", let s = dict["seconds"].flatMap(Double.init), let id = np.entries.last?.id { main.browsers.performNowPlaying(id, .skip(s)) }
+                if op == "seek", let s = dict["seconds"].flatMap(Double.init), let id = np.entries.last?.id { main.browsers.performNowPlaying(id, .seek(s)) }
+                // What the island read: "Cra nowPlaying[<label>] media <host> title="…" artist="…" pos=… dur=… art=<WxH|loading|failed|none>".
+                for e in np.entries where store.settings.nowPlayingStyle == .island {
+                    let host = CraLog.host(main.browsers.runtime(for: e.id)?.browser.currentURL ?? "")
+                    let m = e.media
+                    let dur = m?.duration.map { $0.isFinite ? String(format: "%.0f", $0) : "live" } ?? "none"
+                    let pos = e.clock.map { String(format: "%.0f", $0.position(at: Date().timeIntervalSinceReferenceDate)) } ?? "none"
+                    NSLog("Cra nowPlaying%@ media %@ title=\"%@\" artist=\"%@\" pos=%@ dur=%@ art=%@", label, host, m?.title ?? "", m?.artist ?? "",
+                          pos, dur, NowPlayingArtwork.shared.debugState(m?.artworkURL(forPixels: NowPlayingArtwork.pixels)))
+                }
+                // The cards as drawn, front first: "Cra nowPlaying[<label>] card island h=30 open=0 line=… art=… tint=#… …".
+                for c in (main.shell.sidebarHost as? SidebarView)?.debugPlayerCards ?? [] { NSLog("Cra nowPlaying%@ card %@", label, c) }
                 for e in np.entries {
                     let host = CraLog.host(main.browsers.runtime(for: e.id)?.browser.currentURL ?? "")
                     NSLog("Cra nowPlaying%@ %@ playing=%d prev=%d next=%d video=%d pip=%d", label, host, e.playing ? 1 : 0, e.hasPrevious ? 1 : 0,

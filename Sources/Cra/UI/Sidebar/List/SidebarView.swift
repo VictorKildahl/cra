@@ -177,6 +177,9 @@ final class SidebarView: NSView {
 
     /// cra://debug's readout of the now-playing cards' fill (Ideas #366).
     var debugPlayerFill: String { player.debugFillHex }
+    /// cra://debug's readout of the player's cards, front first (Discussion #761).
+    var debugPlayerCards: [String] { player.debugCards }
+    func debugSetPlayerOpen(_ open: Bool) { player.debugSetOpen(open) }
 
     required init?(coder: NSCoder) { fatalError() }
 
@@ -188,6 +191,7 @@ final class SidebarView: NSView {
             let space = store.focusedSpace(window: ui.windowID)
             _ = SystemAppearance.shared.isDark
             _ = store.settings.nowPlayingTint
+            _ = store.settings.nowPlayingStyle
             _ = SidebarGlassSetting.shared.isOn
             bannerHeight = UpdateBannerView.preferredHeight
             return (space, ui.libraryPage, ui.downloadsListOpen, DownloadHistory.shared.recent.count)
@@ -195,6 +199,7 @@ final class SidebarView: NSView {
             Task { @MainActor in self?.observe() }
         }
         let playerLook = (tint: store.settings.nowPlayingTint, glass: SidebarGlassSetting.shared.isOn)
+        player.setStyle(store.settings.nowPlayingStyle)
         let paletteChanged = lastSpaceID == nil || space.theme.shown != shownTheme || space.id != lastSpaceID
             || shownPlayerLook.map { $0 != playerLook } ?? true
         shownTheme = space.theme.shown
@@ -471,7 +476,7 @@ final class SidebarView: NSView {
         bannerHost.frame = NSRect(x: 0, y: bannerTop, width: b.width, height: bannerHeight)
         // The player rests where the list ends and takes that room from it; opened, it grows over the list.
         player.frame = NSRect(x: 0, y: th, width: b.width, height: max(0, bannerTop - th))
-        let listBottom = bannerTop - NowPlayingMetrics.restHeight(cards: player.shownCount)
+        let listBottom = bannerTop - player.restHeight
         // While a space is being made its page stands where the column was, and the column is off to the left.
         pager.frame = NSRect(x: creationHost != nil ? -b.width * (1 - creationPull) : 0, y: th, width: b.width, height: max(0, listBottom - th))
         creationClip?.frame = creationFrame
