@@ -1,0 +1,14 @@
+# promise: #848
+# On macOS 27 Chrome's own window occlusion checker leaves pages white or not drawing after a window comes forward
+# (crbug.com/448103577; Cra's Little Windows came up white on macOS 27.2.1), so Cra starts Chromium with Chrome's
+# emergency shutoff for it, MacOcclusionForceShutoff, there: chrome://version's command line says so. CRA_MACOS_MAJOR
+# says which macOS the scenario stands in for; macOS 26 keeps the checker (ChromiumStartFeaturesTests).
+env CRA_MACOS_MAJOR=27
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+pace 0.5
+
+cra://open?url=chrome://version
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'shutoff:'+document.getElementById('command_line').innerText.includes('MacOcclusionForceShutoff')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"shutoff:true"

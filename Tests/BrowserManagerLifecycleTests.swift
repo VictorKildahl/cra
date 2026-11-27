@@ -256,6 +256,7 @@ enum BrowserManagerLifecycleTests {
         nowPlayingSkipsPictureInPictureCase()
         nowPlayingSkipsUncontrollableSoundCase()
         nowPlayingFollowsMediaSessionCase()
+        await nowPlayingIslandReadsMediaCase()
         await leaveVideoTabPictureInPictureCase()
         await webKitPictureInPictureCase()
         webKitPictureInPictureBackToTabCase()
@@ -1990,6 +1991,58 @@ enum BrowserManagerLifecycleTests {
         let replacement = manager.ensureRuntime(for: id)!
         manager.browser(runtime.browser, didChangeSoundPlaying: true)
         expect(!replacement.soundPlaying, "a retired page's sound cannot start the replacement's notes")
+        manager.closeAll()
+    }
+
+    /// Discussion #761: with the island player chosen, a card's page is asked what plays (its media session and
+    /// media element, in PageScript's world), the answer lands on the card with the time it was read, it is
+    /// asked again every 2 s while a card shows, and skipping moves the page's media. Arc's cards ask nothing.
+    @MainActor
+    private static func nowPlayingIslandReadsMediaCase() async {
+        let store = SidebarStore()
+        let clock = ManualScheduler()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let np = NowPlaying()
+        manager.nowPlaying = np
+        let a = store.createTab(url: "https://example.test/music").id, b = store.createTab(url: "https://example.test/b").id
+        let ra = manager.ensureRuntime(for: a)!
+        _ = manager.ensureRuntime(for: b)
+        let mediaScript = "navigator.mediaSession ? navigator.mediaSession.metadata"
+        ra.browser.isAudible = true
+        manager.browser(ra.browser, didChangeAudible: true)
+        manager.show(b, focus: false)
+        manager.performNowPlaying(a, .refreshMedia)
+        expect(!ra.browser.lastIsolatedParams.contains(mediaScript), "Arc's cards never read the page's media session")
+
+        store.settings.nowPlayingStyle = .island
+        manager.performNowPlaying(a, .refreshMedia)
+        expect(ra.browser.lastIsolatedParams.contains(mediaScript), "the island asks the card's page what plays")
+        let media = #"{"title":"Slow Tides","artist":"Harbour Lights","album":"","artwork":[],"position":12,"duration":120,"rate":1,"paused":false}"#
+        let answer = String(data: try! JSONSerialization.data(withJSONObject: ["result": ["value": media]]), encoding: .utf8)!
+        // The controls' read and the media read are both waiting; the media read is the newest.
+        while ra.browser.hasPending("\(PageScript.world):Runtime.evaluate") {
+            ra.browser.reply(to: "\(PageScript.world):Runtime.evaluate", with: answer)
+        }
+        await drainMainQueue()
+        let read = np.entries.first { $0.id == a }
+        expect(read?.media?.title == "Slow Tides" && read?.media?.artist == "Harbour Lights", "the answer lands on the card")
+        expect(read?.clock?.position(at: clock.now.timeIntervalSinceReferenceDate + 3) == 15, "the card's time moves on from the read")
+
+        clock.advance(by: 2)
+        expect(ra.browser.hasPending("\(PageScript.world):Runtime.evaluate"), "the island reads again 2 s later while the card shows")
+        while ra.browser.hasPending("\(PageScript.world):Runtime.evaluate") { ra.browser.reply(to: "\(PageScript.world):Runtime.evaluate", with: nil) }
+
+        manager.performNowPlaying(a, .skip(15))
+        expect(ra.browser.lastIsolatedParams.contains("(15.0, null)"), "skipping moves the page's media 15 s on")
+        manager.performNowPlaying(a, .seek(42))
+        expect(ra.browser.lastIsolatedParams.contains("(0.0, 42.0)"), "the progress bar puts it at 42 s")
+        while ra.browser.hasPending("\(PageScript.world):Runtime.evaluate") { ra.browser.reply(to: "\(PageScript.world):Runtime.evaluate", with: nil) }
+
+        store.settings.nowPlayingStyle = .arc
+        let before = ra.browser.lastIsolatedParams
+        clock.advance(by: 4)
+        manager.performNowPlaying(a, .refreshMedia)
+        expect(ra.browser.lastIsolatedParams == before, "back on Arc's cards, nothing is read")
         manager.closeAll()
     }
 

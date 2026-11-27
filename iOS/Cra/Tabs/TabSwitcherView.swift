@@ -279,7 +279,7 @@ final class TabCardView: UIView {
         clip.layer.cornerCurve = .continuous
         clip.backgroundColor = Palette.dynamic(light: .white, dark: Palette.rgb(0x2a2a2e))
         addSubview(clip)
-        picture.contentMode = .scaleAspectFill
+        picture.contentMode = .scaleToFill
         clip.addSubview(picture)
         dimmer.backgroundColor = Palette.rgb(0x1a1a3a)
         dimmer.alpha = 0
@@ -342,7 +342,8 @@ final class TabCardView: UIView {
         // tab grows its band back with it.
         let cardBand = bandHeight * frame.width / max(1, screen.width) * fill
         band.frame = CGRect(x: 0, y: 0, width: frame.width, height: cardBand)
-        picture.frame = CGRect(x: 0, y: cardBand, width: frame.width, height: max(0, frame.height - cardBand))
+        let area = CGRect(x: 0, y: cardBand, width: frame.width, height: max(0, frame.height - cardBand))
+        picture.frame = MobileTabCarousel.pictureFrame(image: picture.image?.size ?? .zero, in: area)
         dimmer.frame = clip.bounds
         dimmer.alpha = dim
         // Rounded in the row, square where it meets the page's content at the band's bottom.

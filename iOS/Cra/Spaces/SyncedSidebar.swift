@@ -88,6 +88,19 @@ enum SyncedSidebar {
                                      favoritesContainerID: containers[0].id, pinnedContainerID: containers[1].id,
                                      todayContainerID: containers[2].id, createdAt: Date()))
         document.spaceOrder.append(playID)
+        // `-CraDemoSpaces <n>`: n more empty Spaces, more than the icon bar can show at once (#885).
+        let extra = max(0, LaunchOptions.value("CraDemoSpaces").flatMap(Int.init) ?? 0)
+        let emojis = ["🧪", "📚", "🎵", "✈️", "🚌", "🧭", "🛠️", "🌱", "📷", "🍳", "🏠", "🎯"]
+        for n in stride(from: 1, through: extra, by: 1) {
+            let emoji = emojis[(n - 1) % emojis.count]
+            let id = UUID()
+            let boxes = [SidebarItem.container(.favorites(spaceID: id)), .container(.pinned(spaceID: id)), .container(.today(spaceID: id))]
+            document.items += boxes
+            document.spaces.append(Space(id: id, title: "Extra \(n)", emoji: emoji, theme: SpaceTheme.presets[n % SpaceTheme.presets.count],
+                                         favoritesContainerID: boxes[0].id, pinnedContainerID: boxes[1].id,
+                                         todayContainerID: boxes[2].id, createdAt: Date()))
+            document.spaceOrder.append(id)
+        }
         return document
     }
 

@@ -52,6 +52,8 @@ final class ExtensionPopupWindow: NSWindow {
     /// A title-bar drag is under way (willMove is only posted for those, not when the main
     /// window carries this child along).
     private var dragging = false
+    /// The title-bar drag is Cra's own (dragTitleBar), not one macOS runs.
+    private var ownDrag = false
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
@@ -178,10 +180,62 @@ final class ExtensionPopupWindow: NSWindow {
         HitchMonitor.mark("extension popup: bubble taken back from Chrome's window (\(bubbleTakenBack))")
     }
 
-    /// The press that may start a title-bar drag: AppKit carries the bubble along only while it is the frame's child.
+    /// The press that may start a title-bar drag. Cra drags the frame itself (#786): in a drag macOS runs, the page
+    /// (Chrome's bubble, a child window) moved with the frame only as far as macOS carries child windows, and on macOS
+    /// 27.2 it trailed behind the frame and missed the click after (MotasR, 0.1.56 to 0.1.58), though not on 26.
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown { keepBubble() }
+        if event.type == .leftMouseDown, event.clickCount == 1, Self.leftButtonDown(), pressesTitleBar(event) {
+            dragTitleBar()
+            return
+        }
         super.sendEvent(event)
+    }
+
+    /// The events of a title-bar drag after its press, as AppKit's own tracking takes them; a test stands in.
+    static var nextDragEvent: (NSWindow) -> NSEvent? = { window in
+        window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp], until: .distantFuture, inMode: .eventTracking, dequeue: true)
+    }
+
+    /// A press on the frame's title bar that drags it, not on a traffic light.
+    private func pressesTitleBar(_ event: NSEvent) -> Bool {
+        guard event.window === self, isMovable else { return false }
+        let titleHeight = max(Self.titleBarHeight, frame.height - contentLayoutRect.maxY)
+        guard event.locationInWindow.y >= frame.height - titleHeight else { return false }
+        guard let root = contentView?.superview else { return true }
+        var hit = root.hitTest(root.convert(event.locationInWindow, from: nil))
+        while let view = hit {
+            if view is TrafficLight { return false }
+            hit = view.superview
+        }
+        return true
+    }
+
+    /// Moves the frame with the pointer until the button comes up, and the page with it in the same step: taken back
+    /// from Chrome if Chrome took it, and put under the title bar. The drop is where later popups hang (#634).
+    private func dragTitleBar() {
+        let startPointer = Self.pointer(), startOrigin = frame.origin
+        dragging = true
+        ownDrag = true
+        dragStart = NSPoint(x: frame.minX, y: frame.maxY)
+        dragPointer = startPointer
+        defer { ownDrag = false; dragging = false }
+        while let event = Self.nextDragEvent(self) {
+            let p = Self.pointer()
+            var target = NSRect(origin: NSPoint(x: startOrigin.x + p.x - startPointer.x, y: startOrigin.y + p.y - startPointer.y),
+                                size: frame.size)
+            // As a drag macOS runs keeps the title bar below the menu bar.
+            if let screen = NSScreen.screens.first(where: { $0.frame.contains(p) }) { target = constrainFrameRect(target, to: screen) }
+            keepBubble()
+            // One screen update for both windows, so no frame shows the frame moved and the page not yet.
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                if frame.origin != target.origin { setFrameOrigin(target.origin) }
+                pinBubbleInFrame()
+            }
+            if event.type == .leftMouseUp { break }
+        }
+        keepDrop()
     }
 
     /// Sizes the frame to the popup page and puts the bubble in it (Chrome re-anchors the
@@ -189,6 +243,11 @@ final class ExtensionPopupWindow: NSWindow {
     private func layout() {
         guard let bubble, !placing else { return }
         keepBubble()
+        // Cra's own drag places the frame until its drop, the button already up on its last step (#786).
+        if ownDrag {
+            pinBubbleInFrame()
+            return
+        }
         // While the title bar is dragged AppKit carries the bubble along; afterwards the
         // frame stays where it was dropped.
         if dragging {
@@ -282,7 +341,7 @@ final class ExtensionPopupWindow: NSWindow {
     }
 
     private func userMoved() {
-        guard dragging, !placing, bubble != nil else { return }
+        guard dragging, !ownDrag, !placing, bubble != nil else { return }
         // Chrome may have taken the bubble mid-drag, leaving it behind while the frame went on: take it back now and
         // put it under the title bar, or it follows at the offset it was left at until the drop (#786, 0.1.57).
         if bubble?.parent !== self, Self.leftButtonDown() { keepBubble() }

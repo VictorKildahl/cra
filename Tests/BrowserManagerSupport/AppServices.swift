@@ -74,6 +74,8 @@ enum TestRoot { case today }
         var backgroundTabsBelowCurrent = false
         /// Settings ▸ Tabs ▸ "Always keep these sites active" (#458), by host; AppSettings matches subdomains.
         var keepActiveHosts: Set<String> = []
+        /// Settings ▸ Tabs ▸ "Player with artwork" (Discussion #761): only the island reads what plays.
+        var nowPlayingStyle: NowPlayingStyle = .arc
         func keepsActive(url: String) -> Bool { keepActiveHosts.contains(URL(string: url)?.host ?? "") }
         var defaultLinkDestination: LinkDestination = .littleWindowInUse
         var linkRoutes: [LinkRoute] = []

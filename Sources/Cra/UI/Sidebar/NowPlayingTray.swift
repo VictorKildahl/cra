@@ -40,9 +40,63 @@ enum NowPlayingMetrics {
     static let controlsTrailing: CGFloat = 12.5
 
     /// Height the tab list gives up while the player rests (with its gap to the list).
-    static func restHeight(cards: Int) -> CGFloat {
+    static func restHeight(cards: Int) -> CGFloat { tray.restHeight(cards: cards) }
+
+    static let tray = NowPlayingTrayLayout(collapsedHeight: collapsedHeight, expandedHeight: expandedHeight, drawerHeight: drawerHeight,
+                                           gap: gap, peek: peek, peekInset: peekInset, inset: inset, ghostRow: true,
+                                           openDuration: 0.2, openCurve: (0.15, 0.85, 0.3, 1), closeDuration: 0.2,
+                                           closeCurve: (0.15, 0.85, 0.3, 1), hoverDelay: 0)
+}
+
+/// How the tray stacks and moves one style's cards (Arc's, or the island's, Discussion #761): Arc's stack either
+/// way, the newest in front with up to two peeking out behind, opening every card on hover.
+struct NowPlayingTrayLayout {
+    let collapsedHeight: CGFloat
+    let expandedHeight: CGFloat
+    let drawerHeight: CGFloat
+    let gap: CGFloat
+    let peek: CGFloat
+    let peekInset: CGFloat
+    let inset: CGFloat
+    /// The second card shows the tops of its controls (Arc's ghost row).
+    let ghostRow: Bool
+    let openDuration: TimeInterval
+    let openCurve: (Float, Float, Float, Float)
+    let closeDuration: TimeInterval
+    let closeCurve: (Float, Float, Float, Float)
+    /// How long the pointer rests on the cards before they open (the island's 0.12 s; Arc's at once).
+    let hoverDelay: TimeInterval
+    let restingCards = 3
+    let peekFade: CGFloat = 0.2
+    /// An open card's height for its width, where it depends on it (the island stacks when narrow).
+    var openHeight: ((CGFloat) -> CGFloat)? = nil
+
+    func expandedHeight(width: CGFloat) -> CGFloat { openHeight?(width) ?? expandedHeight }
+
+    func restHeight(cards: Int) -> CGFloat {
         cards == 0 ? 0 : collapsedHeight + CGFloat(min(cards, restingCards) - 1) * peek + 8
     }
+}
+
+/// What the tray needs from a card of either style.
+@MainActor
+protocol NowPlayingCard: NSView {
+    var colors: NowPlayingColors { get set }
+    var drawerOpen: Bool { get set }
+    var contentHidden: Bool { get set }
+    var ghostVisible: Bool { get set }
+    func apply(_ m: NowPlayingCardModel)
+    /// The stack opened or folded (the island swaps its rest row for the open card).
+    func setOpened(_ open: Bool, animated: Bool)
+    /// Moves the progress row on while the card is open.
+    func tick(now: TimeInterval)
+    var debugReadout: String { get }
+}
+
+extension NowPlayingCard {
+    func setOpened(_ open: Bool, animated: Bool) {}
+    func tick(now: TimeInterval) {}
+    var debugReadout: String { "arc h=\(Int(frame.height.rounded()))" }
 }
 
 /// The card's colours for a theme colour and scheme. Arc derives them from the window palette
@@ -120,14 +174,43 @@ final class NowPlayingTrayView: NSView {
     private let store: SidebarStore
     private let ui: SidebarUIState
     private let favicons: FaviconCache
-    private var cards: [UUID: NowPlayingCardView] = [:]
+    private var cards: [UUID: any NowPlayingCard] = [:]
     private var order: [UUID] = []
     private var expanded = false
+    /// Arc's cards or the island (Settings ▸ Tabs ▸ "Player with artwork", Discussion #761).
+    private(set) var style: NowPlayingStyle = .arc
+    private var layoutStyle: NowPlayingTrayLayout { style == .island ? NowPlayingIslandMetrics.tray : NowPlayingMetrics.tray }
+    /// The island's progress rows move on while the stack is open.
+    private var ticker: Timer?
+    private var hoverWork: DispatchWorkItem?
+    private var observation = 0
     private var drawerID: UUID?
     private var colors = NowPlayingColors(themeColor: nil, dark: true)
     /// The number of cards changed: the sidebar gives the list more or less room.
     var onCountChange: (() -> Void)?
     var shownCount: Int { order.count }
+    /// The room the resting player takes from the tab list.
+    var restHeight: CGFloat { layoutStyle.restHeight(cards: order.count) }
+
+    /// Switches the player's look: the cards are made again in the new style, and the island reads what they play.
+    func setStyle(_ new: NowPlayingStyle) {
+        guard new != style else { return }
+        style = new
+        for card in cards.values { card.removeFromSuperview() }
+        cards = [:]
+        order = []
+        expanded = false
+        drawerID = nil
+        stopTicking()
+        observe()
+        onCountChange?()
+    }
+
+    /// cra://debug?nowPlaying=open|fold: the stack as a hover opens and folds it, without the pointer.
+    func debugSetOpen(_ open: Bool) { setExpanded(open && !order.isEmpty) }
+
+    /// cra://debug's readout of each card, front first.
+    var debugCards: [String] { order.reversed().compactMap { cards[$0]?.debugReadout } }
 
     init(store: SidebarStore, ui: SidebarUIState, favicons: FaviconCache) {
         self.store = store
@@ -154,13 +237,17 @@ final class NowPlayingTrayView: NSView {
     /// colour where the cards sit) for the theme-coloured cards (Ideas #366).
     func setTheme(_ hex: String?, dark: Bool, tint: NowPlayingTint = .arc, ground: NSColor? = nil) {
         colors = NowPlayingColors(themeColor: hex, dark: dark, tint: tint, ground: ground)
-        for c in cards.values { c.colors = colors }
+        for var c in cards.values { c.colors = colors }
     }
 
     /// cra://debug's readout: the cards' fill now ("#RRGGBB").
     var debugFillHex: String { colors.fillHex }
 
     private func observe() {
+        // A style switch observes again at once (the island also follows the artwork); the observation it
+        // replaced may still fire once, and then does nothing.
+        observation &+= 1
+        let generation = observation
         let shown = withObservationTracking { () -> [(NowPlaying.Entry, NowPlayingCardModel)] in
             ui.nowPlaying.shown.map { e in
                 let item = store.item(e.id)
@@ -168,17 +255,33 @@ final class NowPlayingTrayView: NSView {
                 // What's playing: the page's own title (a video's name), not a favorite's or a
                 // renamed tab's fixed name, which is all the sidebar shows for those.
                 let live = item?.tab?.savedTitle ?? ""
-                return (e, NowPlayingCardModel(title: live.isEmpty ? item?.displayTitle ?? "" : live, icon: icon, playing: e.playing,
-                                               muted: item?.tab?.muted ?? false, hasPrevious: e.hasPrevious, hasNext: e.hasNext,
-                                               hasVideo: e.hasVideo, volume: e.volume))
+                var model = NowPlayingCardModel(title: live.isEmpty ? item?.displayTitle ?? "" : live, icon: icon, playing: e.playing,
+                                                muted: item?.tab?.muted ?? false, hasPrevious: e.hasPrevious, hasNext: e.hasNext,
+                                                hasVideo: e.hasVideo, volume: e.volume)
+                // The island's artwork (Discussion #761): the page's picture, else the site's icon.
+                if style == .island {
+                    model.media = e.media
+                    model.clock = e.clock
+                    model.artwork = NowPlayingArtwork.shared.picture(e.media?.artworkURL(forPixels: NowPlayingArtwork.pixels))?.image
+                }
+                return (e, model)
             }
         } onChange: { [weak self] in
-            Task { @MainActor in self?.observe() }
+            Task { @MainActor in
+                guard let self, self.observation == generation else { return }
+                self.observe()
+            }
         }
+        apply(shown)
+    }
+
+    private func apply(_ shown: [(NowPlaying.Entry, NowPlayingCardModel)]) {
         let ids = shown.map(\.0.id)
         for (e, m) in shown {
+            let fresh = cards[e.id] == nil
             let card = cards[e.id] ?? makeCard(e.id)
             card.apply(m)
+            if fresh, style == .island { ui.nowPlaying.perform(e.id, .refreshMedia) }
         }
         for (id, card) in cards where !ids.contains(id) {
             cards[id] = nil
@@ -189,14 +292,17 @@ final class NowPlayingTrayView: NSView {
         }
         let countChanged = ids.count != order.count
         order = ids
-        if order.isEmpty { expanded = false }
+        if order.isEmpty {
+            expanded = false
+            stopTicking()
+        }
         if let d = drawerID, !ids.contains(d) { drawerID = nil }
         place(animated: true)
         if countChanged { onCountChange?() }
     }
 
-    private func makeCard(_ id: UUID) -> NowPlayingCardView {
-        let card = NowPlayingCardView(colors: colors) { [weak self] action in
+    private func makeCard(_ id: UUID) -> any NowPlayingCard {
+        let perform: (NowPlaying.Action) -> Void = { [weak self] action in
             guard let self else { return }
             if case .toggleMute = action {
                 // Arc's volume button opens the volume drawer; the tab's mute stays on its row.
@@ -206,6 +312,8 @@ final class NowPlayingTrayView: NSView {
             }
             self.ui.nowPlaying.perform(id, action)
         }
+        let card: any NowPlayingCard = style == .island ? NowPlayingIslandCardView(colors: colors, perform: perform)
+                                                        : NowPlayingCardView(colors: colors, perform: perform)
         card.frame = restFrame(level: 0)
         card.alphaValue = 0
         addSubview(card, positioned: .below, relativeTo: nil)
@@ -217,21 +325,22 @@ final class NowPlayingTrayView: NSView {
 
     /// `level` counts back from the front card.
     private func restFrame(level k: Int) -> NSRect {
-        let m = NowPlayingMetrics.self
+        let m = layoutStyle
         let k = CGFloat(min(k, m.restingCards - 1))
         return NSRect(x: m.inset + k * m.peekInset, y: k * m.peek, width: bounds.width - 2 * (m.inset + k * m.peekInset),
                       height: m.collapsedHeight)
     }
 
     private func place(animated: Bool) {
-        let m = NowPlayingMetrics.self
-        var frames: [(NowPlayingCardView, NSRect, CGFloat)] = []
+        let m = layoutStyle
+        var frames: [(any NowPlayingCard, NSRect, CGFloat)] = []
         var y: CGFloat = 0
         for (k, id) in order.reversed().enumerated() {
-            guard let card = cards[id] else { continue }
+            guard var card = cards[id] else { continue }
             card.drawerOpen = expanded && drawerID == id
+            card.setOpened(expanded, animated: animated && window != nil)
             if expanded {
-                let h = m.expandedHeight + (card.drawerOpen ? m.drawerHeight : 0)
+                let h = m.expandedHeight(width: bounds.width - 2 * m.inset) + (card.drawerOpen ? m.drawerHeight : 0)
                 let f = NSRect(x: m.inset, y: y, width: bounds.width - 2 * m.inset, height: h)
                 y += h + m.gap
                 frames.append((card, f, f.maxY <= bounds.height ? 1 : 0))
@@ -245,8 +354,9 @@ final class NowPlayingTrayView: NSView {
         let front = frames.first?.0
         let second = frames.count > 1 ? frames[1].0 : nil
         let hideBehind = { [expanded] in
-            for (card, _, _) in frames {
-                card.ghostVisible = !expanded && card === second   // pictured before its controls hide
+            for (c, _, _) in frames {
+                var card = c
+                card.ghostVisible = m.ghostRow && !expanded && card === second   // pictured before its controls hide
                 card.contentHidden = !expanded && card !== front
             }
         }
@@ -257,8 +367,9 @@ final class NowPlayingTrayView: NSView {
             return
         }
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.2
-            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.15, 0.85, 0.3, 1)
+            let curve = expanded ? m.openCurve : m.closeCurve
+            ctx.duration = expanded ? m.openDuration : m.closeDuration
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: curve.0, curve.1, curve.2, curve.3)
             ctx.allowsImplicitAnimation = true
             for (card, f, a) in frames {
                 card.animator().frame = f
@@ -294,10 +405,60 @@ final class NowPlayingTrayView: NSView {
 
     private func setHovered(_ hovered: Bool) {
         let want = NowPlayingHover.opens(overCards: hovered, cards: order.count, downloadsListOpen: ui.downloadsListOpen)
+        guard want != expanded else {
+            if !want { hoverWork?.cancel(); hoverWork = nil }
+            return
+        }
+        // The island waits for the pointer to settle (0.12 s) so crossing it on the way to a tab leaves it be.
+        let delay = layoutStyle.hoverDelay
+        if want, delay > 0 {
+            guard hoverWork == nil else { return }
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.hoverWork = nil
+                self.setExpanded(true)
+            }
+            hoverWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+            return
+        }
+        hoverWork?.cancel()
+        hoverWork = nil
+        setExpanded(want)
+    }
+
+    private func setExpanded(_ want: Bool) {
         guard want != expanded else { return }
         expanded = want
         if !want { drawerID = nil }
         place(animated: true)
+        if want, style == .island {
+            // Fresh times for the open cards, then they move on by themselves.
+            for id in order { ui.nowPlaying.perform(id, .refreshMedia) }
+            startTicking()
+        } else {
+            stopTicking()
+        }
+    }
+
+    private func startTicking() {
+        guard ticker == nil else { return }
+        let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickCards() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        ticker = t
+        tickCards()
+    }
+
+    private func stopTicking() {
+        ticker?.invalidate()
+        ticker = nil
+    }
+
+    private func tickCards() {
+        let now = Date().timeIntervalSinceReferenceDate
+        for card in cards.values { card.tick(now: now) }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -316,13 +477,17 @@ struct NowPlayingCardModel: Equatable {
     var hasNext: Bool
     var hasVideo: Bool
     var volume: Double
+    /// The island's (Discussion #761): what the page says plays, where it is, and its artwork.
+    var media: NowPlayingMedia?
+    var clock: NowPlayingClock?
+    var artwork: NSImage?
 }
 
 /// One card: the title row on top (shown while the stack is open), the controls, and the volume
 /// drawer below them. The content stays pinned to the card's bottom, so a resting card shows only
 /// the controls and opening it reveals the title from above.
 @MainActor
-final class NowPlayingCardView: NSView {
+final class NowPlayingCardView: NSView, NowPlayingCard {
     private let content = NSView()
     private let title = NSTextField.sidebarLabel(size: 13)
     private let titleRow = NSView()

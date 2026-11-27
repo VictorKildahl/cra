@@ -242,8 +242,38 @@ struct SpacesView: View {
     }
 
     /// The bar: the Spaces' icons 63 pt apart, the shown one bright, the rest faded into the bar.
+    /// Icons wider than the sheet scroll sideways, keeping the shown one in view; a row that asked
+    /// for their full width pushed the whole sheet past both edges of a small phone (#885).
     private func icons(_ spaces: [MobileSpaces.SpaceView], palette: Palette) -> some View {
-        HStack(spacing: 29) {
+        GeometryReader { proxy in
+            let scrolls = MobileSpaceBar.scrolls(count: spaces.count, width: proxy.size.width)
+            ScrollViewReader { reader in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    iconRow(spaces, palette: palette)
+                        .padding(.horizontal, scrolls ? MobileSpaceBar.margin : 0)
+                        .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
+                }
+                .scrollDisabled(!scrolls)
+                // The icons sit 14 pt low, past the bar's middle; a scroll view would clip them.
+                .scrollClipDisabled()
+                .onAppear { if scrolls { reveal(model.selected, with: reader, animated: false) } }
+                .onChange(of: model.selected) { _, id in if scrolls { reveal(id, with: reader, animated: true) } }
+            }
+        }
+        .frame(height: Metrics.bar)
+        .background {
+            palette.bar.ignoresSafeArea(edges: [.horizontal, .bottom])
+                .overlay(alignment: .top) { Rectangle().fill(palette.barEdge).frame(height: 1 / 3) }
+        }
+    }
+
+    private func reveal(_ id: UUID?, with reader: ScrollViewProxy, animated: Bool) {
+        guard let id else { return }
+        if animated { withAnimation(.easeInOut(duration: 0.25)) { reader.scrollTo(id, anchor: .center) } } else { reader.scrollTo(id, anchor: .center) }
+    }
+
+    private func iconRow(_ spaces: [MobileSpaces.SpaceView], palette: Palette) -> some View {
+        HStack(spacing: MobileSpaceBar.spacing) {
             ForEach(spaces) { space in
                 Button { model.selected = space.id } label: {
                     Group {
@@ -255,7 +285,7 @@ struct SpacesView: View {
                     }
                     .saturation(space.id == model.selected ? 1 : 0.3)
                     .opacity(space.id == model.selected ? 1 : 0.45)
-                    .frame(width: 34, height: 34)
+                    .frame(width: MobileSpaceBar.icon, height: MobileSpaceBar.icon)
                     // Centred 39 pt under the bar's top edge, past the middle of its 50.
                     .offset(y: 14)
                 }
@@ -263,13 +293,8 @@ struct SpacesView: View {
                 .accessibilityLabel(space.title)
                 .accessibilityAddTraits(space.id == model.selected ? .isSelected : [])
                 .accessibilityIdentifier("space-icon-\(space.title)")
+                .id(space.id)
             }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: Metrics.bar)
-        .background {
-            palette.bar.ignoresSafeArea(edges: [.horizontal, .bottom])
-                .overlay(alignment: .top) { Rectangle().fill(palette.barEdge).frame(height: 1 / 3) }
         }
     }
 

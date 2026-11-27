@@ -1633,6 +1633,43 @@ final class SpacesTests: BrowserTestCase {
         waitForPage("Inbox")
     }
 
+    // promise: #885
+    /// Twelve Spaces' icons are wider than a phone: the bar scrolls and the sheet stays on screen,
+    /// its title at the 29 pt margin and its close button in the corner. The bar was a row that
+    /// didn't scroll, so on an iPhone 13 mini with eight Spaces the whole sheet grew past both edges,
+    /// cutting off the start of every row and the close button.
+    func testManySpacesKeepTheSheetOnScreen() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraDemoSpaces", "10"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        let noThanks = app.buttons["share-prompt-no-thanks"]
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 5))
+        noThanks.tap()
+        let title = app.staticTexts["space-title"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        sleep(1)
+        keep("many-spaces")
+        let window = app.windows.firstMatch.frame
+        XCTAssertEqual(title.frame.minX - window.minX, 29, accuracy: 2, "the title starts at the sheet's margin")
+        let close = app.buttons["spaces-close"]
+        XCTAssertTrue(close.exists)
+        XCTAssertLessThanOrEqual(close.frame.maxX, window.maxX + 0.5, "the close button is on screen")
+        XCTAssertGreaterThan(close.frame.minX, window.midX)
+        let first = app.buttons["space-icon-Personal"]
+        XCTAssertTrue(first.isHittable, "the open Space's icon is in view")
+        XCTAssertGreaterThanOrEqual(first.frame.minX, window.minX)
+        // The last Space, picked by swiping the pages, brings its icon into view.
+        for _ in 0..<11 { app.swipeLeft() }
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == 'Extra 10'")).firstMatch.waitForExistence(timeout: 3))
+        sleep(1)
+        let last = app.buttons["space-icon-Extra 10"]
+        XCTAssertTrue(last.isHittable, "the open Space's icon scrolls into view")
+        XCTAssertLessThanOrEqual(last.frame.maxX, window.maxX)
+        XCTAssertEqual(title.frame.minX - window.minX, 29, accuracy: 2)
+    }
+
     // promise: #670
     /// "Set up" on the share prompt opens the how-to sheet; closed, the Spaces are there and the
     /// prompt doesn't come back.

@@ -54,6 +54,7 @@ Launch arguments put the app in a state for a screenshot or a test:
 | `-CraSummarize YES` | Summarizes the first page once it has loaded |
 | `-CraSyncDir <folder>` or `demo` | The folder the Mac's sidebar syncs into, or a made-up sidebar |
 | `-CraHoldConnecting YES` | Keeps the Spaces sheet on "Connecting", for a screenshot |
+| `-CraDemoSpaces <n>` | With `-CraSyncDir demo`, n more empty Spaces, more than the icon bar fits (#885) |
 | `-CraHoldPill YES` | Keeps the New Tab pill pressed in, as under a finger |
 | `-CraSyncDelay <seconds>` | Makes each read of the synced sidebar take that long |
 | `-CraFakeVoice <text>` | What voice search hears instead of the microphone |

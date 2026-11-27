@@ -3765,6 +3765,7 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
                                       (long)g_pageWindowsShownAnimated];
 }
 
++ (void)setEnabledFeatures:(NSArray<NSString*>*)features {}
 + (void)runMessageLoop { CefRunMessageLoop(); }
 + (void)whenReady:(void (^)(void))block { block(); }
 + (void)quitMessageLoop { CraQuitMessageLoop(); }

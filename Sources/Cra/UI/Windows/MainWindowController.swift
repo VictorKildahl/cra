@@ -3248,12 +3248,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                               audible: audible, awayFromPinnedPage: !away.isEmpty) {
             case .deselectKeepingPage:
                 store.favoritesClosedWithCmdW.formUnion(panes)
-                if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
+                if wasSelected { store.selectTab(store.closeSuccessor(ofDeselectedFavorite: id, window: windowID), window: windowID) }
                 CraLog.note("close tab: favorite deselected, its page kept")
                 return
             case .deselectGoingHome:
                 store.favoritesClosedWithCmdW.formUnion(panes)
-                if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
+                if wasSelected { store.selectTab(store.closeSuccessor(ofDeselectedFavorite: id, window: windowID), window: windowID) }
                 for p in away { resetPinnedTab(p) }
                 CraLog.note("close tab: favorite deselected, back to its pinned page")
                 return

@@ -85,7 +85,7 @@ struct SecureDNSTests {
 
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/133")) func summaryNamesTheServerInEffect() {
         #expect(SecureDNS(mode: "secure", templates: "https://dns.google/dns-query{?dns}").summary.contains("dns.google"))
-        #expect(SecureDNS(mode: "automatic", templates: "").summary.hasPrefix("Automatic uses the network’s own resolver"))
+        #expect(SecureDNS(mode: "automatic", templates: "").summary.hasPrefix("System DNS uses the network’s own resolver"))
         #expect(SecureDNS(mode: "off", templates: "").summary.contains("plain text"))
         #expect(SecureDNS(mode: "secure", templates: "").summary.contains("No provider"))
         #expect(!SecureDNS(mode: "secure", templates: "https://dns.nextdns.io/a1b2c3").summary.contains("a1b2c3"))

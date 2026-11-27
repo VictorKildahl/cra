@@ -127,6 +127,18 @@ MainActor.assumeIsolated {
         DispatchQueue.main.async { delegate.bootstrapIfNeeded() }
         HitchMonitor.startIfRequested()
     }
+    // Chrome's own window occlusion checker leaves pages white on macOS 27 (#848, ChromiumStartFeatures).
+    let productVersion: String = {
+        var size = 0
+        guard sysctlbyname("kern.osproductversion", nil, &size, nil, 0) == 0, size > 0 else { return "" }
+        var bytes = [CChar](repeating: 0, count: size)
+        guard sysctlbyname("kern.osproductversion", &bytes, &size, nil, 0) == 0 else { return "" }
+        return String(cString: bytes)
+    }()
+    let macOS = ChromiumStartFeatures.macOSMajor(environment: ProcessInfo.processInfo.environment,
+                                                 actual: ChromiumStartFeatures.major(productVersion: productVersion)
+                                                     ?? ProcessInfo.processInfo.operatingSystemVersion.majorVersion)
+    CraCEFRuntime.setEnabledFeatures(ChromiumStartFeatures.enabled(macOSMajor: macOS))
     CraCEFRuntime.runMessageLoop()
     if !ready { didNotStart() }
     PerfRecorder.quit()
