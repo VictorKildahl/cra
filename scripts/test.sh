@@ -19,6 +19,7 @@ suite "Shipped-issue tests" scripts/promises.py
 suite "Shipped-issue lock" python3 Tests/test_promises.py
 suite "Engine element checks" python3 Tests/test_element_checks.py
 suite "Chromium filter worker and loader" Tests/test-filter-worker.sh
+suite "Filter list scriptlets (#845)" node --test Tests/ScriptletTests.js
 suite "Engine security check" python3 Tests/test_engine_security.py
 suite "Web features map" python3 -I scripts/web-features.py
 suite "Web features check" python3 Tests/test_web_features.py
@@ -27,6 +28,7 @@ suite "Load paths (#720)" scripts/test-load-paths.sh
 suite "Scenario lines" scripts/test-scenario-line.sh
 if [ "${1:-}" != core ]; then
   suite "Browser manager" Tests/test-browser-manager.sh
+  suite "Filter group disclosure" scripts/test-filter-group-card.sh
   suite "Ask on Page DOM" scripts/test-ask-on-page-content.sh
   suite "Ask on Page quote scripts" scripts/test-ask-on-page-quotes.sh
   suite "Ask on Page service" scripts/test-ask-on-page-service.sh
@@ -56,6 +58,7 @@ if [ "${1:-}" != core ]; then
   suite "Tidy Downloads lifecycle" scripts/test-tidy-downloads.sh
   suite "Tidy Tabs model" scripts/test-tidy-tabs-model.sh
   suite "Tidy Tabs lifecycle" scripts/test-tidy-tabs.sh
+  suite "DNS provider menu" scripts/test-dns-provider-menu.sh
   suite "Policies" scripts/test-policies.sh
   suite "Import skipped list" scripts/test-skipped-list.sh
   suite "Content blocker" scripts/test-content-blocker.sh

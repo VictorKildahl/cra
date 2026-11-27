@@ -17,12 +17,33 @@ public struct BlockListCount: Equatable, Sendable {
     /// domain lines, network rules and hiding rules apply; an Adblock Plus "||ads.example^" line is one
     /// network rule, not also a domain. Without them (the CEF engine), its domains and hiding rules do.
     public init(_ list: CachedBlocklist, networkRules: Bool) {
+        let page = Self.pageRules(list)
         if networkRules && list.hasNetworkSource {
-            applied = list.plainDomains.count + list.networkRules.count + list.hidingRules.count
+            applied = list.plainDomains.count + list.networkRules.count + page.used.count
         } else {
-            applied = list.domains.count + list.hidingRules.count
+            applied = list.domains.count + page.used.count
         }
-        skipped = list.skippedRules
+        skipped = list.skippedRules + page.unused
+    }
+
+    /// A list's page rules (element hiding, scriptlets, procedural hiding; #845): the ones Cra runs, and how many it
+    /// keeps but doesn't (a scriptlet it doesn't implement, a `trusted-` one or `:style()` from a list it doesn't trust).
+    public static func pageRules(_ list: CachedBlocklist) -> (used: [String], unused: Int) {
+        let trusted = Scriptlets.isTrusted(source: list.url)
+        var used: [String] = []
+        var unused = 0
+        for line in list.hidingRules {
+            let runs: Bool
+            if Scriptlets.parse(line) != nil {
+                runs = ScriptletTable.counts(line, trusted: trusted)
+            } else if line.contains(":style(") {
+                runs = ProceduralTable.counts(line, trusted: trusted)
+            } else {
+                runs = true
+            }
+            if runs { used.append(line) } else { unused += 1 }
+        }
+        return (used, unused)
     }
 
     /// "48,210 rules · 3,102 Cra can’t use"; nothing when the list has no rule at all.
@@ -47,7 +68,7 @@ public struct BlockListCount: Equatable, Sendable {
             } else {
                 domains.formUnion(list.domains)
             }
-            hiding.formUnion(list.hidingRules)
+            hiding.formUnion(pageRules(list).used)
         }
         return domains.count + network.count + hiding.count
     }

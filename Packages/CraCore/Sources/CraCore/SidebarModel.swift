@@ -658,6 +658,8 @@ public struct AppSettings: Codable, Equatable {
     /// the data folder's Blocklists folder.
     public var customBlocklists: [String] = []
     public var disabledCustomBlocklists: [String] = []
+    /// 1 once Strict's page lists came in (#845, `upgradeStrictLists`); settings from before say 0.
+    public var strictListsVersion = 1
     public var personalBlockFilters: String?
     /// Exact HTTP(S) hosts where the user paused list filtering.
     public var pausedFilterHosts: Set<String>?
@@ -796,6 +798,8 @@ public struct AppSettings: Codable, Equatable {
     public var translucentSidebar: Bool = false
     /// Ideas #366, not in Arc: the now-playing cards' colour (NowPlayingTint). Arc's by default.
     public var nowPlayingTint: NowPlayingTint = .arc
+    /// Discussion #761, not in Arc: the now-playing player's look (NowPlayingStyle). Arc's cards by default.
+    public var nowPlayingStyle: NowPlayingStyle = .arc
     /// GitHub #464, not in Arc: the sidebar docks on the window's right (SidebarSide). Left is Arc's.
     public var sidebarSide: SidebarSide = .left
     /// GitHub #91, Settings ▸ Performance: Cra records its own performance on this Mac (stalls,
@@ -824,6 +828,9 @@ public struct AppSettings: Codable, Equatable {
     /// Arc Max's Instant Links (instantLinksEnabled): Shift-Return on a search in ⌘T has the Mac's
     /// Apple Intelligence model turn it into searches, and opens the top results. Off by default, like Arc Max.
     public var instantLinks: Bool = false
+    /// Arc Max's ChatGPT in the Command Bar (gptSiteSearchEnabled, #828): "ChatGPT" and Tab in ⌘T, or ⌥⌘G, asks
+    /// ChatGPT on chatgpt.com, as in Arc. Off by default, like Arc Max.
+    public var chatGPTInCommandBar: Bool = false
     /// Arc's per-profile Download location (#190), by DownloadLocation.key(profileID:). A profile
     /// that isn't here saves to the Downloads folder without asking.
     public var downloadLocations: [String: DownloadLocation] = [:]
@@ -1065,6 +1072,8 @@ extension AppSettings {
         let legacyMasterOff = !c.contains(.adAwayEnabled) && !c.contains(.anudeepEnabled) && !oldMaster
         personalFiltersEnabled = previousPersonalSetting ?? !legacyMasterOff
         customBlocklists = addresses
+        strictListsVersion = try c.decodeIfPresent(Int.self, forKey: .strictListsVersion) ?? 0
+        upgradeStrictLists()
         if legacyMasterOff {
             for address in customBlocklists { setFilterList(address, enabled: false) }
         }
@@ -1135,6 +1144,7 @@ extension AppSettings {
         pageMargin = (try? c.decodeIfPresent(Double.self, forKey: .pageMargin)) ?? PageMargin.arc
         translucentSidebar = try c.decodeIfPresent(Bool.self, forKey: .translucentSidebar) ?? false
         nowPlayingTint = (try? c.decodeIfPresent(NowPlayingTint.self, forKey: .nowPlayingTint)) ?? .arc
+        nowPlayingStyle = (try? c.decodeIfPresent(NowPlayingStyle.self, forKey: .nowPlayingStyle)) ?? .arc
         sidebarSide = (try? c.decodeIfPresent(SidebarSide.self, forKey: .sidebarSide)) ?? .left
         perfRecording = try c.decodeIfPresent(Bool.self, forKey: .perfRecording) ?? Self.perfRecordingDefault
         perfHidesSiteNames = try c.decodeIfPresent(Bool.self, forKey: .perfHidesSiteNames) ?? false
@@ -1144,6 +1154,7 @@ extension AppSettings {
         fiveSecondPreviews = try c.decodeIfPresent(Bool.self, forKey: .fiveSecondPreviews) ?? false
         askOnPage = try c.decodeIfPresent(Bool.self, forKey: .askOnPage) ?? false
         instantLinks = try c.decodeIfPresent(Bool.self, forKey: .instantLinks) ?? false
+        chatGPTInCommandBar = try c.decodeIfPresent(Bool.self, forKey: .chatGPTInCommandBar) ?? false
         downloadLocations = (try? c.decodeIfPresent([String: DownloadLocation].self, forKey: .downloadLocations)) ?? [:]
         newDocumentApps = NewDocumentApp.decodeMap(try? c.decodeIfPresent([String: String].self, forKey: .newDocumentApps))
         profileAutoArchive = (try? c.decodeIfPresent([String: String].self, forKey: .profileAutoArchive)) ?? [:]

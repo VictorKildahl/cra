@@ -21,20 +21,21 @@ extension CraBrowser {
         }
     }
 
-    /// Arc's "Clear Cookies and Refresh" and "Clear Cache and Refresh": this site's cookies, or
-    /// the HTTP cache, then a reload.
-    func clearSiteDataAndReload(cookies: Bool) {
-        guard let u = URL(string: currentURL), let host = u.host, let scheme = u.scheme else { return }
-        let done: (String?, String?) -> Void = { [weak self] _, error in
+    /// Arc's "Clear Cookies and Refresh" and "Clear Cache and Refresh", and Cra's "Clear Site Data and Refresh"
+    /// (#853): what SiteDataClearing says for the page in front, then its reload.
+    func clearSiteDataAndReload(_ kind: SiteDataClearing.Kind) {
+        guard let plan = SiteDataClearing.plan(kind, address: currentURL) else { return }
+        let params = String(decoding: (try? JSONSerialization.data(withJSONObject: plan.call.params, options: .sortedKeys)) ?? Data("{}".utf8),
+                            as: UTF8.self)
+        CraLog.note("clearing \(kind.rawValue) for \(CraLog.host(currentURL)): \(plan.call.method) \(plan.call.params["storageTypes"] ?? "")")
+        sendDevToolsMethod(plan.call.method, params: params) { [weak self] _, error in
             if let error { NSLog("Cra: clearing site data failed: %@", error) }
-            DispatchQueue.main.async { self?.reload() }
-        }
-        if cookies {
-            let params = ["origin": "\(scheme)://\(host)\(u.port.map { ":\($0)" } ?? "")", "storageTypes": "cookies"]
-            let json = String(decoding: (try? JSONSerialization.data(withJSONObject: params)) ?? Data("{}".utf8), as: UTF8.self)
-            sendDevToolsMethod("Storage.clearDataForOrigin", params: json, completion: done)
-        } else {
-            sendDevToolsMethod("Network.clearBrowserCache", params: "{}", completion: done)
+            DispatchQueue.main.async {
+                switch plan.reload {
+                case .normal: self?.reload()
+                case .ignoringCache: self?.reloadIgnoringCache()
+                }
+            }
         }
     }
 }

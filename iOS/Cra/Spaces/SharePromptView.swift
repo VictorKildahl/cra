@@ -155,6 +155,9 @@ struct ShareGuideView: View {
             }
             .buttonStyle(.plain)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { shareFrame = $0 }
+            // No wider than SheetHost's content on a wide screen (the open iPhone Duo, #866).
+            .frame(maxWidth: MobileScreenClass.contentCap)
+            .frame(maxWidth: .infinity)
             .padding(.leading, 27)
             .padding(.trailing, 32)
             .padding(.top, 862 - 832)

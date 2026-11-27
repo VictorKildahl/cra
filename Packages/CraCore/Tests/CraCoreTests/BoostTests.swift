@@ -1,4 +1,5 @@
 import CraCore
+import Foundation
 import Testing
 
 /// Arc's Boosts (Arc 1.172.1): per-site restyles from the editor's controls.
@@ -68,6 +69,35 @@ struct BoostTests {
         // Every saturated colour of one lightness comes out the same, as in Arc.
         let red = tint.apply(1, 0, 0), blue = tint.apply(0, 0, 1)
         #expect(abs(red.r - blue.r) < 1e-9 && abs(red.g - blue.g) < 1e-9 && abs(red.b - blue.b) < 1e-9)
+    }
+
+    /// The small wheel handle is the dark half of the tint (#478): moving it changes what happens to
+    /// dark pixels but not light ones, and a boost saved before it was movable keeps Arc's eighth turn.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/478"))
+    func theDarkHueIsTheSmallHandle() throws {
+        var b = Boost(host: "example.com")
+        b.hue = 0.2; b.strength = 0.6
+        let original = try #require(b.tint)
+        #expect(abs(original.darkHue - BoostWheel.accentOffset) < 1e-9)
+        b.darkHue = 0.4
+        let tint = try #require(b.tint)
+        #expect(abs(tint.darkHue - 0.4) < 1e-9)
+        let white = tint.apply(1, 1, 1), black = tint.apply(0, 0, 0)
+        let oldWhite = original.apply(1, 1, 1), oldBlack = original.apply(0, 0, 0)
+        #expect(max(abs(white.r - oldWhite.r), abs(white.g - oldWhite.g), abs(white.b - oldWhite.b)) < 1e-9,
+                "light pixels keep the big handle's hue")
+        #expect(max(abs(black.r - oldBlack.r), abs(black.g - oldBlack.g), abs(black.b - oldBlack.b)) > 0.01,
+                "dark pixels follow the small handle")
+
+        let old = """
+        {"id":"6E4C0D40-CDBA-4F0D-9E4B-5A2D8E4B0001","host":"example.com","name":"My Boost","enabled":true,
+         "hue":0.3,"strength":0.5,"invert":false,"contrast":50,"brightness":50,"saturation":50,"font":null,
+         "textScale":1,"textCase":"none","zapped":[],"css":"","js":""}
+        """
+        let decoded = try JSONDecoder().decode(Boost.self, from: Data(old.utf8))
+        #expect(decoded.darkHue == BoostWheel.accentOffset)
+        let saved = try JSONEncoder().encode(b)
+        #expect(String(data: saved, encoding: .utf8)?.contains("\"darkHue\":0.4") == true)
     }
 
     @Test func eachControlWritesItsRule() {

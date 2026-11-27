@@ -1,0 +1,25 @@
+# A download in the list that hovering the Library button opens looked the same under the pointer and
+# pressed as at rest, so it didn't look like something to pick (GitHub #896). Under the pointer the row
+# gets the space's hover fill, pressed the selected tab's, and the list closing lights none.
+# promise: #896
+home
+budget rss=600 stalls50=5
+cra://open?url=file://${FIXTURES}/Pages/downloads.html
+expect-log loaded file:
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","x":36,"y":56,"button":"left","clickCount":1}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","x":36,"y":56,"button":"left","clickCount":1}
+expect-log Download finished from a data: address
+cra://debug?downloads=1
+wait 1
+cra://debug?downloadsTray=rest&row=leave
+expect-log downloads tray rest: open=true .* row=none
+cra://debug?downloadsTray=hover&row=hover
+expect-log downloads tray hover: open=true .* row=hover
+cra://debug?downloadsTray=press&row=press
+expect-log downloads tray press: open=true .* row=pressed
+cra://debug?downloadsTray=release&row=release
+expect-log downloads tray release: open=true .* row=hover
+cra://debug?downloads=0
+wait 1
+cra://debug?downloadsTray=closed&row=hover
+expect-log downloads tray closed: open=false .* row=none

@@ -12,7 +12,8 @@ format = "UDZO"
 filesystem = "HFS+"
 files = [app]
 symlinks = {"Applications": "/Applications"}
-icon = "resources/AppIcon.icns"
+# The volume icon is the app's own .icns, which actool renders from resources/AppIcon.icon (scripts/build.sh).
+icon = os.path.join(app, "Contents", "Resources", "AppIcon.icns")
 background = "resources/dmg/background.png"
 
 window_rect = ((110, 110), (800, 400))

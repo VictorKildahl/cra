@@ -21,6 +21,8 @@ struct SiteControlCenterActions {
     var manageExtensions: () -> Void = {}
     var clearCache: () -> Void = {}
     var clearCookies: () -> Void = {}
+    /// Cra's "Clear Site Data" (#853): everything the page's origin keeps, then a reload past the cache.
+    var clearSiteData: () -> Void = {}
     var siteSettings: () -> Void = {}
     /// The lock: the page's certificate. nil without one (http, Chromium's pages).
     var showCertificate: (() -> Void)?
@@ -63,8 +65,7 @@ final class SiteControlCenterView: NSView {
     private let incognito: Bool
     /// The page's tab, whose extension icons the tiles show.
     private let tab: UUID?
-    /// A WebKit page's service ("Spotify"): the card that says why takes the extensions' place,
-    /// and the ad blocker's switch goes (it is Chromium's).
+    /// A WebKit page's service ("Spotify"): the card that says why takes the extensions' place.
     private let protectedMedia: String?
     /// The Safari's Engine row, nil without it (a page that uses no DRM).
     private let safariEngine: SafariEngineRow?
@@ -252,8 +253,8 @@ final class SiteControlCenterView: NSView {
             ("gearshape.fill", "Automatic Picture-In-Picture", autoPiP ? "Allowed" : "Disabled",
              autoPiP, { store.settings.toggleAutoPictureInPicture(url: url) }),
         ]
-        // Chromium's blocker doesn't see a WebKit page: no switch that does nothing there.
-        if protectedMedia == nil, let host = AppSettings.filterHost(url) {
+        // WebKit pages block with the same lists (WebKitContentBlocking), so the switch is on both engines.
+        if let host = AppSettings.filterHost(url) {
             let active = store.settings.pausedFilterHosts?.contains(host) != true
             rowsSpec.insert(("shield.fill", "Ad Blocking", active ? "On" : "Off · Reload page",
                              active, { store.settings.toggleFilters(on: host) }), at: 1)
@@ -818,12 +819,15 @@ private final class SiteSecurityPill: SiteHoverView {
     }
 }
 
-/// Arc's footer "…": Clear Cache, Clear Cookies, Manage Extensions, Add Extension, All Site Settings.
+/// Arc's footer "…": Clear Cache, Clear Cookies, Manage Extensions, Add Extension, All Site Settings, with Cra's
+/// Clear Site Data after Arc's two clearing rows (CraCore SiteMoreMenu, #853).
 private final class SiteMoreButton: SiteHoverView {
     private let colors: SiteControlCenterColors
+    private let actions: SiteControlCenterActions
 
     init(colors: SiteControlCenterColors, actions: SiteControlCenterActions) {
         self.colors = colors
+        self.actions = actions
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = 16
@@ -835,29 +839,50 @@ private final class SiteMoreButton: SiteHoverView {
         _ = ArcTooltipAnchorView.attach(to: self, help: "More")
         setAccessibilityLabel("More")
         setAccessibilityRole(.button)
-        onClick = {
-            let menu = NSMenu()
-            func add(_ title: String, _ action: @escaping () -> Void) { menu.addItem(BlockMenuItem(title: title, action: action)) }
-            add("Clear Cache", actions.clearCache)
-            add("Clear Cookies", actions.clearCookies)
-            menu.addItem(.separator())
-            // Arc 1.172.2's order.
-            add("Manage Boosts…", actions.manageBoosts)
-            let newBoost = BlockMenuItem(title: "New Boost…", action: { actions.newBoost?() })
-            newBoost.isEnabled = actions.newBoost != nil
-            menu.autoenablesItems = false
-            menu.addItem(newBoost)
-            menu.addItem(.separator())
-            add("Manage Extensions…", actions.manageExtensions)
-            add("Add Extension…", actions.addExtension)
-            menu.addItem(.separator())
-            add("All Site Settings", actions.siteSettings)
+        onClick = { [weak self] in
+            guard let self else { return }
+            let menu = Self.menu(self.actions)
             menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         }
         refresh()
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// The menu, its rows from SiteMoreMenu. New Boost… is off without a page that takes a boost.
+    static func menu(_ actions: SiteControlCenterActions) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for group in SiteMoreMenu.groups {
+            if menu.numberOfItems > 0 { menu.addItem(.separator()) }
+            for row in group {
+                let run: () -> Void
+                switch row {
+                case .clearCache: run = actions.clearCache
+                case .clearCookies: run = actions.clearCookies
+                case .clearSiteData: run = actions.clearSiteData
+                case .manageBoosts: run = actions.manageBoosts
+                case .newBoost: run = { actions.newBoost?() }
+                case .manageExtensions: run = actions.manageExtensions
+                case .addExtension: run = actions.addExtension
+                case .allSiteSettings: run = actions.siteSettings
+                }
+                let item = BlockMenuItem(title: row.title, action: run)
+                if row == .newBoost { item.isEnabled = actions.newBoost != nil }
+                menu.addItem(item)
+            }
+        }
+        return menu
+    }
+
+    /// cra://debug?siteControlsPress=More:<row>: the "…" menu's row run as a pick would, or its rows listed.
+    func debugPick(_ title: String) -> String {
+        let menu = Self.menu(actions)
+        let titles = menu.items.map { $0.isSeparatorItem ? "-" : $0.title }.joined(separator: "|")
+        guard let item = menu.items.first(where: { $0.title == title }) as? BlockMenuItem else { return "more menu: \(titles)" }
+        item.perform()
+        return "more menu picked \(title): \(titles)"
+    }
 
     override func refresh() {
         // SwiftUI's .brightness(0.04) on hover.
@@ -876,6 +901,8 @@ final class BlockMenuItem: NSMenuItem {
     }
     required init(coder: NSCoder) { fatalError() }
     @objc private func run() { block() }
+    /// What a pick runs (SiteMoreButton.debugPick).
+    func perform() { block() }
 }
 
 /// Shows the Site Control Center in an NSPopover under a toolbar or pill button.
@@ -926,6 +953,7 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
         acts.siteSettings = closing(actions.siteSettings)
         acts.clearCache = closing(actions.clearCache)
         acts.clearCookies = closing(actions.clearCookies)
+        acts.clearSiteData = closing(actions.clearSiteData)
         acts.showCertificate = actions.showCertificate.map(closing)
         acts.learnAboutProtectedMedia = closing(actions.learnAboutProtectedMedia)
         // The page opens again in the other engine: the popover's content would be the old page's.
@@ -1066,6 +1094,11 @@ final class SiteControlCenterPopover: NSObject, NSPopoverDelegate {
             if (v is SiteActionButton || v is SiteSettingRow || v is SiteExtensionTile), v.accessibilityLabel() == label { return v }
             for s in v.subviews { if let f = find(s) { return f } }
             return nil
+        }
+        // "More:<row>" (or "More:" to list them): a row of the "…" menu, which a scenario can't pop up (#853).
+        if label.hasPrefix("More:") {
+            func more(_ v: NSView) -> SiteMoreButton? { (v as? SiteMoreButton) ?? v.subviews.lazy.compactMap(more).first }
+            return CraLog.note("site controls \(more(root)?.debugPick(String(label.dropFirst(5))) ?? "more menu: no button")")
         }
         guard let v = find(root) else { return CraLog.note("site controls press: no \(label)") }
         if accessory, let row = v as? SiteSettingRow { row.pressAccessory() } else { _ = v.accessibilityPerformPress() }

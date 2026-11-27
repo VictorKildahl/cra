@@ -70,7 +70,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeFrontmostApp()
         PerfCEF.install(app: self)
         CraCEFRuntime.setChromeHosting(store.settings.chromeEngine)
-        CraCEFRuntime.setDocumentStartScript(PageScript.mainWorld, isolatedScript: PageScript.isolatedWorld, world: PageScript.world)
+        // PageScript's scripts, with the filter lists' scriptlets as the last run left them (#845).
+        FilterPageScripts.install(table: nil)
+        // WebKit pages' ad blocking, as the last run compiled it, until the lists are read again.
+        WebKitContentBlocking.shared.restore()
         startContentBlocking()
         observeGlobalShortcut()
         observeMenuBarMode()
@@ -540,6 +543,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         observeChanges(of: { [store] in store.settings.hasActiveBlockFilters }) {
             CraCEFRuntime.setContentBlockingEnabled($0)
+            WebKitContentBlocking.shared.enabled = $0
         }
         observeChanges(of: { [store] in
             (store.settings.adAwayEnabled ? ["adaway"] : []) + (store.settings.anudeepEnabled ? ["anudeep"] : [])
@@ -759,6 +763,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    /// Help ▸ Troubleshooting ▸ Open Task Manager: Chrome's own, which belongs to the browser, as in Arc. Any open page's
+    /// hidden Chrome window can open it, so no tab in front is no reason to refuse (#855, ChromeCommandPages).
+    private func openTaskManager() {
+        let elsewhere = mainWindows.filter { $0 !== main }.flatMap { $0.browsers.runtimes.values.map(\.browser) }
+            + littleWindows.compactMap(\.browser)
+        let pages = ChromeCommandPages.order(front: main.currentBrowser, sameWindow: main.browsers.runtimes.values.map(\.browser),
+                                             elsewhere: elsewhere)
+        if let page = pages.first(where: { $0.runChromeCommand("IDC_TASK_MANAGER") }) {
+            CraLog.note("task manager: opened from \(page === main.currentBrowser ? "the page in front" : "another open page")")
+            return
+        }
+        CraLog.note("task manager: no page open, \"Open a Page First\"")
+        main.showToast("Open a Page First")
+    }
+
     func openExternalURL(_ url: String) {
         // A link from another app soon after starting on a new tab: its tab is what the window
         // shows, so the bar that was waiting for a new tab goes.
@@ -803,7 +822,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .space(let id) where store.space(id) != nil:
             store.createTab(url: url, in: id, select: true)
         case .space, .mostRecentSpace:
-            store.createTab(url: url, select: true)
+            let tab = store.createTab(url: url, select: true)
+            main.browsers.beginRedirectRouting(for: tab.id, space: store.focusedSpaceID(window: main.windowID))
         }
         main.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -1355,6 +1375,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if dict["windowCoverage"] != nil { CraLog.note(main.windowCoverageReadout()); return }
             if let mode = dict["coverWindow"] { main.debugCoverWindow(mode); return }
             if let mode = dict["missionControl"] { main.debugMissionControl(mode); return }
+            // littleBreakNextShow=hide|size: the next Little Window to come up leaves its page hidden or laid out at its
+            // grow-in's start, as #848's white Little Window; littlePage=<label>: what Cra sees of the newest Little
+            // Window's page (LittlePageHealth's verdict and PageProbe's line).
+            if let mode = dict["littleBreakNextShow"] { LittleWindowController.debugBreakNextShow = mode; return }
+            if let label = dict["littlePage"] {
+                guard let w = littleWindows.last else { CraLog.note("little page \(label): no Little Window"); return }
+                w.lookAtPage { verdict, said in
+                    let v: String
+                    switch verdict {
+                    case .drawing: v = "drawing"
+                    case .notJudged: v = "not judged"
+                    case .stuck(let reasons): v = "stuck (" + reasons.joined(separator: ", ") + ")"
+                    }
+                    CraLog.note("little page \(label): \(v), \(said)")
+                }
+                return
+            }
             // pageDrawn=<label>: whether the front tab's page is in its card and draws there. Its frames
             // come in Chromium's CALayerHost under the page's view; a page Chrome attached to its own
             // never-shown window drew there instead, and the tab stayed blank (GitHub #469).
@@ -1487,7 +1524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // clickToast=1: a click on the toast up now, through the event queue as the pointer's (#543).
             if dict["clickToast"] == "1" { main.clickToastForTest(); return }
             // toastShown=<label>: whether a toast is up in the front window (#543: a click leaves it up).
-            if let label = dict["toastShown"] { CraLog.note("toast shown \(label): \(main.toastIsShown ? "yes" : "no")"); return }
+            if let label = dict["toastShown"] { CraLog.note("toast shown \(label): \(main.toastIsShown ? "yes '\(main.toastText)'" : "no")"); return }
             // dragAt=x,y&by=dx,dy: a press there moved by dx,dy (down is +) and released, through the event
             // queue as clickAt's click (#547); target=floating as for clickAt.
             if let g = dict["dragAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,
@@ -1644,6 +1681,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if let v = dict["pageMarginSetting"].flatMap(Double.init) { store.settings.pageMargin = v; return }
             // nowPlayingTint=arc|theme: Settings ▸ Tabs ▸ "Player in the space's colour" switched (Ideas #366).
             if let v = dict["nowPlayingTint"].flatMap(NowPlayingTint.init(rawValue:)) { store.settings.nowPlayingTint = v; return }
+            // nowPlayingStyle=arc|island: Settings ▸ Tabs ▸ "Player with artwork" switched (Discussion #761).
+            if let v = dict["nowPlayingStyle"].flatMap(NowPlayingStyle.init(rawValue:)) { store.settings.nowPlayingStyle = v; return }
             // sidebarSide=left|right: Settings ▸ Sidebar on the right, as its switch sets it (#464).
             if let v = dict["sidebarSide"].flatMap(SidebarSide.init(rawValue:)) { store.settings.sidebarSide = v; return }
             if let v = dict["instantLinksFail"] {
@@ -2443,6 +2482,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // drag can move it (#308), where the page card sits in it (#315) and the loading bar over it (#548), whether
             // it floats (Stay On Top) and has a sheet open (#333), and which side its sidebar is on (#464). Lights are "hidden", or
             // their alpha; "-" when a window has none.
+            // titleRow=<label>: how far each shown sidebar glyph in the traffic lights' row sits above (+) or below (−) the
+            // lights' centre, in points, left to right (#876; Arc's toggle, ← → ↻ share the lights' centre).
+            if let label = dict["titleRow"] {
+                for (i, m) in mainWindows.enumerated() {
+                    guard let w = m.window, let close = w.standardWindowButton(.closeButton), let content = w.contentView else { continue }
+                    let lights = close.convert(close.bounds, to: nil).midY
+                    func glyphs(_ v: NSView) -> [NSView] {
+                        (v is SidebarGlyphButton && !v.isHiddenOrHasHiddenAncestor ? [v] : []) + v.subviews.flatMap(glyphs)
+                    }
+                    let row = glyphs(content).map { $0.convert($0.bounds, to: nil) }.filter { abs($0.midY - lights) < 12 }
+                        .sorted { $0.minX < $1.minX }.map { String(format: "%+.1f", $0.midY - lights) }
+                    CraLog.note("title row \(label): main\(i) glyphs=\(row.joined(separator: ","))")
+                }
+            }
             if let label = dict["windowState"] {
                 func lights(_ w: NSWindow) -> String {
                     [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { type in
@@ -2509,11 +2562,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         : m.shell.solidBackdrop ? (m.shell.solidDarkGradient && !m.shell.solidLightMaterial ? "dark-gradient" : side(!m.shell.solidLightMaterial)) : "-"
                     // seeThrough: the window shows the blurred desktop under the sidebar, through the material
                     // (dark vibrant) or the backdrop layer (light vibrant, one colour), not an opaque fill (#643).
-                    NSLog("Cra theme shown %@: space=%@ follows=%d theme=%@ shell=%@ sidebar=%@ library=%@ material=%@ seeThrough=%d vibrant=%d intensity=%.2f",
+                    // ground: the backdrop layer's flat grey (0–255) while it draws no capture, an inactive window's (#876);
+                    // "blur" or "tint" while it does, "-" off the layer path.
+                    let ground = m.shell.drawnBackdrop.map { $0.source == .none ? String(format: "%.0f", 255 * $0.liftTop) : $0.source == .blur ? "blur" : "tint" } ?? "-"
+                    NSLog("Cra theme shown %@: space=%@ follows=%d theme=%@ shell=%@ sidebar=%@ library=%@ material=%@ seeThrough=%d vibrant=%d intensity=%.2f active=%d ground=%@",
                           label, space.title, space.theme.followsSystem ? 1 : 0,
                           side(space.theme.shown.isDark), side(m.shell.isDarkTheme), drawn, m.sidebarUI.libraryPage.map { "\($0)" } ?? "-", material,
                           m.window?.isOpaque == false && !(m.shell.vibrancy.isHidden && m.shell.backdropHost.isHidden) ? 1 : 0,
-                          space.theme.shown.vibrant ? 1 : 0, space.theme.shown.intensity)
+                          space.theme.shown.vibrant ? 1 : 0, space.theme.shown.intensity, m.shell.windowActive ? 1 : 0, ground)
                 }
                 return
             }
@@ -2799,6 +2855,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("app windows \(label): done")
                 return
             }
+            // taskManagerEnd=<page title>: in Chrome's Task Manager, the page's row picked and "End task" pressed,
+            // through the window's accessibility elements as VoiceOver would (#855).
+            if let title = dict["taskManagerEnd"] { CraLog.note("task manager end \(title): \(TaskManagerAccess.endTask(title: title))"); return }
             // chromeWindows=<label>: Chromium's own windows (its tab strip and toolbar) a user could see,
             // on screen and not see-through, each named (#472).
             if let label = dict["chromeWindows"] {
@@ -3076,8 +3135,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let label = dict["downloadsTray"] {
-                let tray = (main.sidebarUI.downloadsTray as? DownloadsTrayView)?.hoverReadout ?? "none"
-                CraLog.note("downloads tray \(label): open=\(main.sidebarUI.downloadsListOpen) \(tray)")
+                let trayView = main.sidebarUI.downloadsTray as? DownloadsTrayView
+                let tray = trayView?.hoverReadout ?? "none"
+                // &row=hover|press|release|leave (#896): the first row after that pointer event, and its fill.
+                let row = dict["row"].map { " " + (trayView?.debugFirstRow($0) ?? "row=none") } ?? ""
+                CraLog.note("downloads tray \(label): open=\(main.sidebarUI.downloadsListOpen) \(tray)\(row)")
                 return
             }
             if let label = dict["downloadState"] {
@@ -3210,6 +3272,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 let actions: [String: NowPlaying.Action] = ["toggle": .togglePlayback, "next": .next, "previous": .previous,
                                                            "pip": .pictureInPicture, "dismiss": .dismiss]
                 if let action = actions[op], let id = np.entries.last?.id { main.browsers.performNowPlaying(id, action) }
+                // open and fold: the stack as a hover opens and folds it.
+                if op == "open" || op == "fold" { (main.shell.sidebarHost as? SidebarView)?.debugSetPlayerOpen(op == "open") }
+                // skip=<seconds> and seek=<seconds>: the island's skip buttons and progress bar (Discussion #761).
+                if op == "skip", let s = dict["seconds"].flatMap(Double.init), let id = np.entries.last?.id { main.browsers.performNowPlaying(id, .skip(s)) }
+                if op == "seek", let s = dict["seconds"].flatMap(Double.init), let id = np.entries.last?.id { main.browsers.performNowPlaying(id, .seek(s)) }
+                // What the island read: "Cra nowPlaying[<label>] media <host> title="…" artist="…" pos=… dur=… art=<WxH|loading|failed|none>".
+                for e in np.entries where store.settings.nowPlayingStyle == .island {
+                    let host = CraLog.host(main.browsers.runtime(for: e.id)?.browser.currentURL ?? "")
+                    let m = e.media
+                    let dur = m?.duration.map { $0.isFinite ? String(format: "%.0f", $0) : "live" } ?? "none"
+                    let pos = e.clock.map { String(format: "%.0f", $0.position(at: Date().timeIntervalSinceReferenceDate)) } ?? "none"
+                    NSLog("Cra nowPlaying%@ media %@ title=\"%@\" artist=\"%@\" pos=%@ dur=%@ art=%@", label, host, m?.title ?? "", m?.artist ?? "",
+                          pos, dur, NowPlayingArtwork.shared.debugState(m?.artworkURL(forPixels: NowPlayingArtwork.pixels)))
+                }
+                // The cards as drawn, front first: "Cra nowPlaying[<label>] card island h=30 open=0 line=… art=… tint=#… …".
+                for c in (main.shell.sidebarHost as? SidebarView)?.debugPlayerCards ?? [] { NSLog("Cra nowPlaying%@ card %@", label, c) }
                 for e in np.entries {
                     let host = CraLog.host(main.browsers.runtime(for: e.id)?.browser.currentURL ?? "")
                     NSLog("Cra nowPlaying%@ %@ playing=%d prev=%d next=%d video=%d pip=%d", label, host, e.playing ? 1 : 0, e.hasPrevious ? 1 : 0,
@@ -3265,6 +3343,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     CraLog.note("row point: none"); return
                 }
                 CraLog.note("row point: \(Int(p.x)) \(Int(p.y))")
+                return
+            }
+            // reorder=<label>&drag=<id>&path=<row id>:<f>,…: the row dragged over each row f of the way down,
+            // as a drag would; "reorder <label>: ticks=<n> places=<…>" (#883).
+            if let label = dict["reorder"] {
+                let path = (dict["path"] ?? "").split(separator: ",").compactMap { step -> (row: UUID, f: CGFloat)? in
+                    let parts = step.split(separator: ":")
+                    guard parts.count == 2, let id = UUID(uuidString: String(parts[0])), let f = Double(parts[1]) else { return nil }
+                    return (id, CGFloat(f))
+                }
+                guard let id = dict["drag"].flatMap(UUID.init(uuidString:)),
+                      let r = SpaceListView.debugReorder(id, path: path, ui: main.sidebarUI) else {
+                    CraLog.note("reorder \(label): no row"); return
+                }
+                CraLog.note("reorder \(label): ticks=\(r.ticks) places=\(r.places.joined(separator: ","))")
                 return
             }
             // folderPreviewOpen=<label>: "Cra folderPreview <label>: open=<folder id>" or "open=none" (#743).
@@ -4385,7 +4478,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             main.openExtensions(commandHeld: held) { [bindings] e in bindings.action(for: e)?.id == "openExtensions" }
         case "manageExtensions": main.openExtensionsPage()
         case "cast": if main.currentBrowser?.runChromeCommand("IDC_ROUTE_MEDIA") != true { main.showToast("Nothing to Cast") }
-        case "taskManager": if main.currentBrowser?.runChromeCommand("IDC_TASK_MANAGER") != true { main.showToast("Open a Page First") }
+        case "taskManager": openTaskManager()
         case "showArchive": main.showLibrary(.archive)
         case "clearArchive": store.clearArchive()
         case "stayOnTop": main.toggleStayOnTop()
@@ -4404,6 +4497,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             main.showToast("Copied Cra Info!")  // Arc's `basicInfoCopied` toast, "Copied Arc Info!"
         case "print": main.currentBrowser?.print()
         case "capturePage": main.capturePage()
+        case ChatGPTCommandBar.actionID: main.newChatGPTMessage()
         case "find": main.showFindBar()
         case "findNext": main.findNext(forward: true)
         case "findPrevious": main.findNext(forward: false)
@@ -4414,13 +4508,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "toggleDeveloperMode": if let url = store.selectedTab?.tab?.url { store.settings.toggleDeveloperMode(url: url) }
         case "reload": main.currentBrowser?.reload()
         case "hardReload": main.currentBrowser?.reloadIgnoringCache()
-        case "clearCache": main.currentBrowser?.clearSiteDataAndReload(cookies: false)
-        case "clearCookies": main.currentBrowser?.clearSiteDataAndReload(cookies: true)
+        case "clearCache": main.currentBrowser?.clearSiteDataAndReload(.cache)
+        case "clearCookies": main.currentBrowser?.clearSiteDataAndReload(.cookies)
+        case "clearSiteData": main.currentBrowser?.clearSiteDataAndReload(.siteData)
         // View ▸ Stop Loading while an agent's pill is up in the window: its Take Over (AgentPill).
         case "stop": if !main.takeOverFromAgent() { main.currentBrowser?.stopLoading() }
-        case "zoomIn": main.zoom(by: 0.5)
-        case "zoomOut": main.zoom(by: -0.5)
-        case "resetZoom": main.currentBrowser?.resetZoom()
+        case "zoomIn": main.zoom(in: true)
+        case "zoomOut": main.zoom(in: false)
+        case "resetZoom": main.resetPageZoom()
         case "viewSource": main.currentBrowser?.viewSource()
         // Like Arc: ⌥⌘I closes open DevTools; ⌥⌘J and Network switch to their panel and close
         // DevTools only when that panel already shows (DevToolsToggle.run).
@@ -4721,7 +4816,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         view.addItem(.separator())
         view.addItem(item("stop")); view.addItem(item("reload")); view.addItem(item("hardReload"))
         // Arc's View menu order: cookies, then cache.
-        view.addItem(item("clearCookies")); view.addItem(item("clearCache"))
+        // Cra's Clear Site Data and Refresh (#853) sits with them.
+        view.addItem(item("clearCookies")); view.addItem(item("clearCache")); view.addItem(item("clearSiteData"))
         view.addItem(.separator())
         view.addItem(item("resetZoom")); view.addItem(item("zoomIn")); view.addItem(item("zoomOut"))
         view.addItem(.separator())

@@ -1,0 +1,29 @@
+# promise: #856
+# ⌘+ ⌘− and ⌘0 as in Arc 1.174.3: Chrome's zoom steps (100 → 110 → 125 %, back down to 90 %), and each one shows
+# Arc's toast at the page's top right naming the zoom ("125%", "100%" on Actual Size), gone after a few seconds.
+# Before, Cra stepped by half a zoom level (110 %, 120 %) and showed nothing.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+pace 0.5
+
+cra://open?url=${PAGE}?n=zoom
+expect-log GET /page\.html\?n=zoom
+wait 2
+cra://action/zoomIn
+cra://debug?toastShown=in1
+expect-log toast shown in1: yes '110%'
+cra://action/zoomIn
+cra://debug?toastShown=in2
+expect-log toast shown in2: yes '125%'
+cra://debug?zoomLevel=1
+expect-log zoom level 1\.22
+cra://action/zoomOut
+cra://action/zoomOut
+cra://action/zoomOut
+cra://debug?toastShown=out3
+expect-log toast shown out3: yes '90%'
+cra://action/resetZoom
+cra://debug?toastShown=reset
+expect-log toast shown reset: yes '100%'
+cra://debug?zoomLevel=1
+expect-log zoom level 0\.0

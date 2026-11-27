@@ -148,9 +148,12 @@ open class CraBrowser {
         if inDevTools { devToolsScripts.append(script) } else { scripts.append(script) }
     }
     public private(set) var lastIsolatedParams = ""
+    /// Every isolated-world evaluation's params, in order.
+    public private(set) var isolatedParams: [String] = []
     /// Recorded as "<world>:Runtime.evaluate".
     public func evaluate(inIsolatedWorld world: String, params: String, completion: @escaping (String?, String?) -> Void) {
         lastIsolatedParams = params
+        isolatedParams.append(params)
         replies.append(("\(world):Runtime.evaluate", completion))
     }
     public var guardedEvaluations: [() -> Bool] = []
@@ -162,6 +165,7 @@ open class CraBrowser {
             return true
         }
     }
+    public func hasPending(_ method: String) -> Bool { replies.contains { $0.method == method } }
     public func reply(to method: String, with result: String?) {
         guard let index = replies.firstIndex(where: { $0.method == method }) else { fatalError("No pending \(method)") }
         replies.remove(at: index).completion(result, nil)

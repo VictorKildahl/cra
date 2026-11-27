@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 source = Path("Sources/Cra/UI/Settings/MaxPane.swift").read_text()
 assignments = [line.strip() for line in source.splitlines() if line.strip().startswith("store.settings.") and line.strip().endswith(" = on")]
-assert len(assignments) == 6
+assert len(assignments) == 7  # the six on-device features and ChatGPT in the Command Bar (#828)
 Path(sys.argv[1]).write_text("@MainActor func applyProductionMaxSwitch(_ store: SidebarStore, _ on: Bool) {\n" + "\n".join(assignments) + "\n}\n")
 PYMAX
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \

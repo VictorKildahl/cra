@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><title>timeline fixture</title>
+<body>
+<main id="timeline"></main>
+<script>
+// As X's timeline: posts arrive after the page loads, a promoted one marked only by the text "Ad".
+function post(id, label, text) {
+  const cell = document.createElement('div');
+  cell.dataset.testid = 'cellInnerDiv';
+  cell.id = id;
+  cell.innerHTML = '<div><span>' + label + '</span><p>' + text + '</p></div>';
+  document.getElementById('timeline').append(cell);
+}
+setTimeout(() => { post('p1', '@friend', 'hello'); post('ad1', 'Ad', 'buy now'); post('p2', '@friend', 'Adventure'); }, 300);
+setTimeout(() => {
+  const wrap = document.createElement('section');
+  wrap.id = 'sponsored-wrap';
+  wrap.innerHTML = '<article>Sponsored · shoes</article>';
+  document.getElementById('timeline').append(wrap);
+}, 600);
+</script>

@@ -117,4 +117,163 @@ final class PageGestureTests: BrowserTestCase {
         for _ in 0..<5 { drag(fromX: 0.2, toX: 0.9, y: 0.5) }
         XCTAssertEqual(rowTitles(), ["First"], "past the page's left end, the drag went Back")
     }
+
+    // MARK: What the swipe shows while it goes
+
+    private var base: String { ProcessInfo.processInfo.environment["CRA_POPUP_TEST_BASE_URL"] ?? "http://127.0.0.1:18765" }
+
+    /// The lines of the last swipe's trace (`-CraTracePageSwipe YES`).
+    private func swipeTrace() -> [String] {
+        let trace = app.descendants(matching: .any)["page-swipe-trace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 2))
+        return (trace.value as? String ?? "").split(separator: "\n").map(String.init)
+    }
+
+    /// Waits for the swipe's trace to have a line starting with `start`: the swipe has got that far.
+    private func waitForTrace(_ start: String, file: StaticString = #filePath, line: UInt = #line) {
+        let trace = app.descendants(matching: .any)["page-swipe-trace"]
+        let shown = expectation(for: NSPredicate(format: "value CONTAINS %@", "\n" + start), evaluatedWith: trace)
+        XCTAssertEqual(XCTWaiter.wait(for: [shown], timeout: 5), .completed,
+                       "the trace never showed \(start): \(trace.value as? String ?? "")", file: file, line: line)
+    }
+
+    /// The numbers on a trace line, after its words.
+    private func numbers(_ line: String) -> [CGFloat] {
+        line.split(separator: " ").compactMap { Double($0) }.map { CGFloat($0) }
+    }
+
+    /// Arc Search shows the page Back goes to underneath while the finger drags the page away, moving at a third of
+    /// its speed from a third of the screen off to the left. Before, nothing was under the page, and the page it went
+    /// to faded in afterwards.
+    func testSwipingBackShowsThePageItGoesBackToUnderneath() {
+        launch(["-CraOpenURL", base + "/swipe-first", "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
+        waitForPage("Swipe First")
+        let heading = app.webViews.staticTexts["Swipe First"].frame.minY
+        app.webViews.links["Next page"].tap()
+        waitForPage("Swipe Second")
+        drag(fromX: 0.3, toX: 0.8, y: 0.5, settle: true)
+        waitForPage("Swipe First")
+        let lines = swipeTrace()
+        XCTAssertEqual(lines.first, "back picture kept", "the page it went back to was underneath as a picture: \(lines)")
+        let width = app.windows.firstMatch.frame.width
+        let moves = lines.filter { $0.hasPrefix("edge ") }.map(numbers)
+        XCTAssertGreaterThan(moves.count, 5, "the pages followed the finger: \(lines)")
+        // Mid-way, the page underneath is a third of the page's way still to go off to the left.
+        guard let mid = moves.first(where: { $0[0] > width * 0.3 && $0[0] < width * 0.6 }) else {
+            return XCTFail("no frame mid-way: \(lines)")
+        }
+        XCTAssertEqual(mid[1], -(width - mid[0]) / 3, accuracy: 1, "the page underneath moves at a third of the speed")
+        // Arc Search's magnet: the page holds back at 0.28 of the finger's way until it has come 21 pt, the finger 75 pt
+        // in, and lets go there with a tick.
+        guard let held = moves.first(where: { $0[2] > 20 && $0[2] < 60 }) else { return XCTFail("no held frame: \(lines)") }
+        XCTAssertEqual(held[0], held[2] * 0.28, accuracy: 2, "held, the page moves 0.28 of the finger's way")
+        let letGo = lines.first { $0.hasPrefix("let go with the finger at ") }.map(numbers)?.first
+        XCTAssertEqual(letGo ?? 0, 75, accuracy: 15, "the magnet let go with the finger about 75 pt in: \(lines)")
+        XCTAssertTrue(lines.contains("went back"))
+        waitForTrace("lifted after ")
+        // The page is back where it was, as its picture showed it, so nothing jumps as the picture gives way. (Before
+        // the page began under the status band, WebKit put it back a status bar higher than that.)
+        XCTAssertEqual(app.webViews.staticTexts["Swipe First"].frame.minY, heading, accuracy: 2,
+                       "the page came back where it was left")
+        keep("back")
+    }
+
+    /// Arc Search's Back on a tab's first page: the page shrinks into a card and the tab before it comes out of the
+    /// tab button's front card into one beside it, 20 pt to its left; let go, the tab closes into the archive.
+    func testSwipingBackOnAFirstPageBringsTheTabBeforeItOutOfTheTabButton() {
+        launch(["-CraOpenURL", Self.page("First", color: "gold"), "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
+        waitForPage("First")
+        openTab(Self.page("Second"), title: "Second")
+        let button = app.buttons["bar-tabs"].frame
+        // Past where the magnet lets go of a closing tab, the finger 185 pt in.
+        drag(fromX: 0.15, toX: 0.85, y: 0.5, settle: true)
+        waitForPage("First")
+        let lines = swipeTrace()
+        XCTAssertEqual(lines.first, "closingTab picture kept", "the tab before it came out as its picture: \(lines)")
+        let cards = lines.filter { $0.hasPrefix("page ") }.map(numbers)
+        guard let first = cards.first, let last = cards.last, first.count == 6, last.count == 6 else {
+            return XCTFail("no card frames: \(lines)")
+        }
+        // page, x, y, width, height, finger: small, on the tab button, at first...
+        let center = CGPoint(x: first[1] + first[3] / 2, y: first[2] + first[4] / 2)
+        XCTAssertTrue(button.insetBy(dx: -30, dy: -30).contains(center), "out of the tab button \(button): \(first)")
+        XCTAssertLessThan(first[3], 120, "small at first: \(first)")
+        // ...and by the end the page's card size, 20 pt in from the sides, with its right edge 20 pt left of the
+        // page's card, whose left edge is the page's travel plus 20.
+        let width = app.windows.firstMatch.frame.width
+        XCTAssertEqual(last[3], width - 40, accuracy: 1.5, "the page's card size by the end: \(last)")
+        XCTAssertEqual(last[1] + last[3], last[0], accuracy: 1.5, "beside the page's card: \(last)")
+        XCTAssertTrue(lines.contains("went closingTab"))
+        XCTAssertEqual(rowTitles(), ["First"], "the swiped tab went to the archive")
+    }
+
+    /// Let go while the magnet still holds the page, it settles back, the tab stays and nothing of the swipe stays on
+    /// screen.
+    func testASwipeLetGoEarlyPutsThePageBack() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
+        waitForPage("First")
+        openTab(Self.page("Second"), title: "Second")
+        // From the edge, where a swipe always starts, held still well short of where the magnet lets go (the finger
+        // 160 pt in), so it lets go with no speed. (From mid-page, XCUITest's drags of a sixth of the screen never started a swipe.)
+        drag(fromX: 0.03, toX: 0.12, y: 0.5, settle: true)
+        waitForTrace("back in place")
+        let lines = swipeTrace()
+        XCTAssertEqual(lines.first, "closingTab picture kept")
+        XCTAssertTrue(lines.contains("went nowhere"), "\(lines)")
+        XCTAssertEqual(lines.last, "back in place", "\(lines)")
+        XCTAssertFalse(lines.contains { $0.hasPrefix("let go") }, "the magnet still held the page: \(lines)")
+        XCTAssertTrue(app.webViews.staticTexts["Second"].isHittable, "the page is back in place")
+        XCTAssertEqual(rowTitles(), ["First", "Second"])
+    }
+
+    /// Arc Search's quick swipe on a tab's first page: the tab before it comes up out of the tab button at once, and let
+    /// go short of closing, goes back down into it the way it came up while the page's card grows back to the page.
+    /// Before, a quick swipe was held like a slow one, so the tab's card stayed in the button until the finger was
+    /// 185 pt in, and let go short it flew back in a straight line.
+    func testAQuickSwipeLetGoShortBringsTheTabUpAndPutsItBackDown() {
+        launch(["-CraOpenURL", Self.page("First", color: "gold"), "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
+        waitForPage("First")
+        openTab(Self.page("Second"), title: "Second")
+        let button = app.buttons["bar-tabs"].frame
+        // Quick from the edge to 150 pt in, short of where letting go closes the tab (185 pt), held still, let go. (Much
+        // quicker, XCUITest's drag can arrive as one move, which a swipe doesn't start on.)
+        let window = app.windows.firstMatch
+        let width = window.frame.width
+        let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 150, dy: 0)),
+                    withVelocity: XCUIGestureVelocity(rawValue: 1800), thenHoldForDuration: 0.5)
+        waitForTrace("back in place")
+        let lines = swipeTrace()
+        XCTAssertEqual(lines.first, "closingTab picture kept", "\(lines)")
+        XCTAssertTrue(lines.contains { $0.hasPrefix("quick with the finger at ") }, "\(lines)")
+        XCTAssertFalse(lines.contains { $0.hasPrefix("let go") }, "short of where letting go closes the tab: \(lines)")
+        XCTAssertTrue(lines.contains("went nowhere"), "\(lines)")
+
+        // Up: out of the button to the page's card size while the finger was down (page, x, y, width, height, finger).
+        let up = lines.prefix { $0 != "went nowhere" }.filter { $0.hasPrefix("page ") }.map(numbers)
+        XCTAssertGreaterThan(up.map { $0[3] }.max() ?? 0, width - 60, "the tab's card came all the way out: \(lines)")
+        // Down, a frame at a time (how far out, x, y, width, height, the page's travel)...
+        let down = lines.filter { $0.hasPrefix("down ") }.map(numbers)
+        XCTAssertGreaterThan(down.count, 5, "\(lines)")
+        XCTAssertEqual(zip(down, down.dropFirst()).filter { $1[0] > $0[0] + 0.001 }.count, 0, "only ever down: \(down)")
+        func middle(_ card: [CGFloat], at x: Int) -> CGPoint { CGPoint(x: card[x] + card[x + 2] / 2, y: card[x + 1] + card[x + 3] / 2) }
+        // ...into the button...
+        guard let last = down.last else { return XCTFail("no frames on the way down: \(lines)") }
+        let home = middle(last, at: 1)
+        XCTAssertEqual(last[0], 0, "\(lines)")
+        XCTAssertTrue(button.insetBy(dx: -20, dy: -20).contains(home), "into the tab button \(button): \(last)")
+        // ...along the way it came out: its sideways way on the square of how far out it still is, so it comes down the
+        // screen's edge first and into the button after, not on a straight line. All the way out, it is a card's width
+        // and 20 pt to the left of the page's card.
+        var checked = 0
+        for frame in down where frame[0] > 0.2 && frame[0] < 0.8 {
+            let out = width / 2 + frame[5] - (width - 40) - 20
+            XCTAssertEqual(middle(frame, at: 1).x, home.x + (out - home.x) * frame[0] * frame[0], accuracy: 2,
+                           "on the way it came out: \(frame)")
+            checked += 1
+        }
+        XCTAssertGreaterThan(checked, 2, "frames on the way down to check: \(lines)")
+        XCTAssertTrue(app.webViews.staticTexts["Second"].isHittable, "the page is back in place")
+        XCTAssertEqual(rowTitles(), ["First", "Second"])
+    }
 }

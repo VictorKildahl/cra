@@ -506,7 +506,9 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 + (void)setImageSearchTitle:(NSString *_Nullable (^)(NSString *lensTitle))block;
 /// Run in every frame of every page browser before the page's own scripts (and once in the
 /// document already loaded): `script` in the page's world, `isolatedScript` in the isolated
-/// world named `world` (invisible to the page). Set before browsers are created.
+/// world named `world` (invisible to the page). Set before browsers are created; set again (the filter
+/// lists' scriptlets changed, #845), pages already open run the new scripts from their next document on
+/// (the Chromium engine; CEF pages keep theirs until they are made again).
 + (void)setDocumentStartScript:(NSString *)script isolatedScript:(NSString *)isolatedScript world:(NSString *)world;
 /// Third-party ad and tracker blocking: subresource and subframe requests whose host
 /// (or a parent domain) is on the blocked list are cancelled when they are third-party
@@ -569,6 +571,9 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
                            locale:(nullable NSString *)locale
                    useChromeStyle:(BOOL)useChromeStyle
                   useMockKeychain:(BOOL)useMockKeychain;
+/// Chromium features to turn on at start beside the engine's own (ChromiumStartFeatures), set before
+/// -runMessageLoop. The CEF bridge ignores them.
++ (void)setEnabledFeatures:(NSArray<NSString *> *)features;
 /// Runs the Chromium-integrated AppKit run loop. Returns after -quitMessageLoop.
 + (void)runMessageLoop;
 /// Runs `block` once Chromium is up and before the app finishes launching: at once with CEF (initialize

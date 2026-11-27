@@ -16,6 +16,13 @@
   if (query.get('beforeunload') === '1') addEventListener('beforeunload', e => { e.preventDefault(); e.returnValue = ''; });
   // ?bg=<rrggbb>: the page's background, for checks of the toolbar colour it gives its tab (#629).
   if (/^[0-9a-f]{6}$/i.test(query.get('bg') || '')) document.documentElement.style.background = document.body.style.background = '#' + query.get('bg');
+  // ?htmlbg / ?bodybg: set one background alone, for Boost's Canvas fallback (#846).
+  const cssColor = v => v === 'transparent' ? v : /^[0-9a-f]{6}$/i.test(v || '') ? '#' + v : '';
+  if (cssColor(query.get('htmlbg'))) document.documentElement.style.background = cssColor(query.get('htmlbg'));
+  if (cssColor(query.get('bodybg'))) document.body.style.background = cssColor(query.get('bodybg'));
+  // ?latecss=<s>: the dark background comes from a stylesheet served that many seconds late, as a
+  // site's own CSS file does; the load event waits for it (#846).
+  if (/^[0-9]+$/.test(query.get('latecss') || '')) document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'boost-dark.css?delay=' + query.get('latecss') }));
   // ?go=<address>: answers, then sends the tab on to that address, as a link shortener (t.co) does (#597).
   if (query.get('go')) location.replace(query.get('go'));
   const rows = document.getElementById('rows');

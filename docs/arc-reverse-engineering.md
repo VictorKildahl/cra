@@ -1177,7 +1177,9 @@ Duplicate pressed over AX, StorableSidebar.json read after each.
   Share Space…, Export “<name>” into Folder ▸ (every space, its own disabled) | Manage Spaces… | Delete Space.
   The header keeps its hover look while the menu is open. Cra leaves out Share Space… (Arc's servers).
 - [O] Rename Space…: the name turns into a selected text field and the ••• into a grey "Done" (10 pt semibold,
-  `Sidebar space header done button`, 32×26). Export … into Folder deletes the space afterwards
+  `Sidebar space header done button`, 32×26). Cra addition (X request, 27 Nov): a double-click on the name
+  (past the icon box) opens the same field; its first click has already toggled the pinned tabs, so the second
+  puts them back (ToggleRowClick). Export … into Folder deletes the space afterwards
   (`completeDeleteSpace`, "Space turned into folder"). Delete alert: "Delete your <name> Space?" / "This will
   archive all the tabs and folders inside it."
 - [O] Change Space Icon…: an NSPopover (298 × 298 window, 272 pt content) under the icon, arrow up: Emoji | Icon
@@ -2307,6 +2309,11 @@ the arm64 slice. [O] = observed, [I] = inferred.
   open tab, the sidebar address pill, a typed URL whose first match is a Little Arc route. Cra
   (`AppSettings.space(forTypedURL:)`, `MainWindowController.handleCommit`) routes the ⌘T new-tab case only, and only
   to a space; scenario `command-bar-route`.
+- Cra, past Arc (#868): a link a page opens in a new tab goes through the routes too, also through redirects: until
+  the new tab's first page has loaded, and for 2 s after it so a client redirect (google.com/url?q=…, `<meta
+  refresh>`, `location.replace`) still counts, an address matching a route to a space moves the tab there once
+  (`LinkRedirectRouting` in CraCore; scenarios `link-route`, `link-redirect-route`). A navigation inside a tab that
+  is already open stays in that tab and space, as in Arc.
 
 ## Extension popups and extension windows (Arc 1.170, 26 Oct 2026, static)
 
@@ -2684,6 +2691,8 @@ GitHub issue #4: opening in window B a tab that window A shows left A with no ta
   test bundle with two windows on the same tab: page and blur swap each time the other window becomes main.
 
 ### Folder icon picker (7 Nov 2026, user-supplied Arc captures)
+- Cra addition (X request, 27 Nov): a double-click on a folder's name renames it as the space header's does
+  (ToggleRowClick): the second click puts the folder back open or closed. Clicks on the glyph only toggle.
 - [O] A regular folder's context menu has Change Icon… before Rename…. Its popover points to the
   folder glyph and shows the title Icon, a trash button, and 24 glyphs in three rows of eight.
   There are no Emoji tab, search field or category bar. The current glyph has a rounded highlight.
@@ -3707,6 +3716,12 @@ doesn't pick a tab, and the selection saved in StorableWindows.json wasn't alway
   over to nothing; with the folder open (`AXDisclosing` on its row over AX), to Y, the row above inside it.
 - [O] A favorite closes like a pinned tab: back to the previous tab while it is loaded (F1 after D → D), else nothing.
   Tabs ▸ Next Tab runs through the favorites first.
+- [I] Since Arc 1.173 ⌘W only deselects a Favorite and its page runs on (#740). Repeated ⌘W then goes back through the
+  Favorites visited before, one further each time (F1, F2, F3 in turn: ⌘W → F2, ⌘W → F1), as reported on Discord
+  (26 Nov 2026, #870), not measured here. Cra: a Favorite closed with ⌘W never counts as a tab to go back to
+  (`CloseSuccessor.counts`, as ⌃Tab leaves it out, #784), and a Favorite's ⌘W walks the window's `ShownTabs`, newest
+  first, to the first tab still loaded in the space (`CloseSuccessor.afterDeselectedFavorite`). Today and pinned-tab
+  closes keep the one-step rule above.
 - [O] The tab a close hands over to loses its unread mark, as when it is picked.
 - [O] Splits (a `splitView` item needs `layoutOrientation`, `focusItemID` and `itemWidthFactors`, as Arc saves it;
   without them Arc moves the split into a pinned "Recently recovered" folder): a split row as the neighbour opens the
@@ -4537,6 +4552,19 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   padding 12, field padding 6; Ask in callout semibold, padding 6 × 12.
 - [?] Not read: whether Return finds or asks, the card's placement, corner, shadow and background, the theme colours,
   fade heights. The purple border in the reporter's picture is the Arc window in a purple space, not part of the card.
+- [O live] ChatGPT in the Command Bar and ⌥⌘G (27 Nov 2026, Arc 1.174 main window on a 1x screen, `gptSiteSearchEnabled`
+  switched on with Arc quit and back off after, keys posted while Victor was idle; #828). [binary] Arc's SearchEngine.chatGPT:
+  `searchURLTemplate` on `https://chat.openai.com` with `%7BsearchTerms%7D`, colour #75A99C; the Shortcuts action
+  `gptMessage`, "Compose a ChatGPT message in the Command Bar." (no menu item); the Max row "ChatGPT in the Command Bar",
+  "Add ChatGPT to your Search suggestions, or press <shortcut> to ask any question instantly." / "…or start typing ChatGPT,
+  hit Tab, to ask any question instantly."; the archetype "Ask GPT What You Typed". [live] ⌥⌘G opens the ⌘T bar already
+  scoped: the "ChatGPT" pill (drawn #64AB9C on the dark bar), "Send a Message…"; typing gives one row, a magnifier and the
+  text, no caption, filled in the pill's colour. With the switch off ⌥⌘G opens the plain bar (no toast seen). "chatg" in the
+  plain bar shows "Ask ChatGPT  Tab" at the field's end (chatgpt.com in history completed the field). A question ("what is
+  two plus two") gets a row third, after the typed search and one suggestion: ChatGPT's logo, the text, "Ask ChatGPT" and
+  the arrow tile at the end. Return in the scope opened no tab or window in two tries and recorded no visit (presumably a
+  remote gate on Arc's side), so Cra opens the message as Arc's other site searches do: a new tab on chatgpt.com/?q=.
+  Not seen: the Max row's picture (the pane doesn't scroll to it under posted events).
 - [O] Live Arc 1.173.1 (12 Nov 2026, Victor's Arc, Blank Window on Wikipedia): Ask on Page is gone. Settings ▸ Max lists
   Tidy Tabs, Instant Links, 5-Second Previews, Tidy Tab Titles, Tidy Downloads and ChatGPT in the Command Bar, no Ask on
   Page row, though `askOnPageEnabled` is 1; ⌘F opens the plain dark find bar ("Find in page…", "NOT FOUND", no Ask). The
@@ -4645,6 +4673,12 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   on average, 8 at most, away from the middle; every saturated colour of one lightness becomes one colour.
   A handle dropped exactly in the middle still halves saturation and picks a hue in Arc; Cra's middle is no tint.
   `Boost.tint` (CraCore) holds it, `cc::ColorFilter::MakeCraColorize` (cra-boost-tint.patch) draws it.
+- [O live] The small Boost handle (#478): in Arc either dot can be dragged
+  on its own and both change the page; Cra's small dot only followed the big one. Arc's model names the
+  small handle's place `secondaryHueOffset`, so Cra stores `Boost.darkHue` (turns clockwise from the big handle,
+  an eighth turn by default) and dark pixels take `hue + darkHue`; moving the big handle carries the offset with
+  it. Arc's model has no secondary saturation, so the small handle stays on the big one's circle. The exact
+  radius behaviour while dragging it was not measured.
 - [O live] Incognito (#620): an offline Arc on a fake home, every space on "Profile 2", each profile's Chromium
   `download.default_directory` its own folder. File ▸ New Incognito Window from that space, then a file:// zip:
   it landed in Profile 2's folder. Arc's incognito window is the incognito side of the opening space's profile.
@@ -4680,6 +4714,36 @@ unless noted.
   `solidActiveDarkGradient` (dim 0.585, lift 0.157). Re-captured the same way, Cra is within 4/255 of A, A on
   Light and B over black at the top, C within 7, and B over white 6–10 darker than Arc's. An imported vibrant theme keeps its baked stops and the
   light-vibrant calibration below.
+
+## An inactive window's sidebar on macOS Dark (Arc 1.174.3, 27 Nov 2026, #876, offline Arc on a fake home)
+
+Arc 1.174.3 on a fake home (network denied, Victor's Arc not running), every space set to one theme per run, macOS 26.7
+on Dark, the window left inactive with Finder in front (grey traffic lights) and captured with `screencapture -l` on a 1x
+display (HP profile, no different from sRGB here); a `-R` region capture of the same window read the same values.
+Sidebar sampled 5 pt in, 6 × 6 px means.
+
+| Theme | Arc's View ▸ Appearance | inactive, top | grey under the colour |
+|---|---|---|---|
+| one colour #26456B at 0.8, content dark | Automatic | 33/53/77 | 25 |
+| the same, content light | Automatic | 33/53/77 | 25 |
+| the same | Dark | 33/53/77 | 25 |
+| gradient #666789 / #7F6589, `translucencyStyle` dark, 0.8 | Automatic and Dark | 75/75/96 | 27.5 |
+| the same at 0.3 | Automatic | 54/54/67 | 27.5 |
+| gradient #6CBAD9 / #7F7EDC, `translucencyStyle` light, 0.8 | Automatic and Dark | 146/193/215 | 209 |
+
+- [O] Inactive, the colour sits at `solidAlpha(intensity)` over a flat grey, as before, but on macOS Dark that grey is
+  about 25 under one colour and 27.5 under a dark gradient: the sidebar goes darker when the window loses focus. The
+  reporter's recording of Arc shows the same (a dark purple space 30/25/42 in front, 17/10/28 behind). A light
+  gradient keeps about 210. The 17 Nov 207 (one colour, View ▸ Appearance ▸ Dark) was then most likely taken with macOS
+  on Light; not re-checked, since Victor's macOS stays on Dark.
+- Cra (#876): `SidebarBackdrop.solidInactiveDark` (lift 0.10) and `solidInactiveDarkGradient` (0.108) while macOS
+  shows Dark (`SystemAppearance.macOSDark`); `solidInactive` (212) and `solidInactiveLight` (252) otherwise. Pinned by
+  `inactiveDarkThemesGoDarkOnMacOSDark` and the `theme-inactive-ground` scenario (`themeShown` prints `ground=`).
+  The Translucent sidebar glass (not in Arc) stays see-through while inactive, Victor's call on #876.
+- The fake-home generator and burst scripts of this run: one `StorableSidebar.json` per theme from Victor's own
+  (sync states dropped), `CFFIXED_USER_HOME` + `sandbox-exec` denying remote ip + `--no-sandbox`, the real
+  `company.thebrowser.Browser` defaults exported first and imported back (View ▸ Appearance writes `appearance` =
+  `NSAppearanceNameDarkAqua` there).
 
 ## Theme editor hover, tab-on-tab drops, Download location (Arc 1.171, static, 5 Nov 2026, #189–#191)
 Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and field names only; no numbers).
@@ -5628,3 +5692,20 @@ colours. Other actions are `pullRequestResolveConflicts` and `pullRequestShowCom
 The client uses `GitHub-Verified-Fetch`, `X-Requested-With` and embedded
 `pullsDashboardSurfaceContentRoute` JSON. Cra limits this phase to a snapshot card and
 GET-only checks on hover; review state and the other actions remain out of scope.
+
+## Sidebar reorder haptics (Arc 1.174.3, static, 27 Nov 2026, #883)
+- [O metadata] The sidebar outline's data source holds `diffableSnapshot`, `draggingHandlers`,
+  `dragToCombineTabsIntoSplitEnabled`, `outlineView`, `tabReorderingHapticsDisabled`, `dropHapticSubject`,
+  `dropHapticSubscription` and `draggedItemIndexes`. The tick belongs to the outline, which takes tabs, folders and
+  splits alike, not to any one row type. The settings model's `hapticFeedbackWhenReordering` sits beside
+  `tabGroupCommandClick`, `newTabsAtStart` and `autoCleanTabs`; Favorites' collection view has its own
+  `dropHapticSubject`.
+- [O] `performFeedbackPattern:performanceTime:` has 16 call sites in the Arc executable. Most are
+  `.generic` (0), `.now` (1); `.alignment` (1), `.now` is the page detent (PageSwipeController, #260) and one other.
+- [I] The subject fires as the outline is offered a new drop place, so the tick comes while the finger is still on the
+  trackpad. The reporter felt it as "a tick as the item moves into a new position", the same for a tab or a folder.
+  [?] Not measured live: the subject's throttling, and whether a drop also ticks.
+- Cra (#883): `SidebarReorderHaptics` in CraCore ticks `.generic`, now, each time the drag is offered a new place
+  (any row, behind "Haptic feedback when reordering tabs"). The ticks are counted for `cra://debug?reorder=…` and
+  the `sidebar-reorder-haptics` scenario. Before this, only a tab offering to combine into a split ticked during
+  the drag. The `.alignment` tick at drop stays.

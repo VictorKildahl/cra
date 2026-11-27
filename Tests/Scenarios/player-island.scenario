@@ -1,0 +1,76 @@
+# Discussion #761: Settings ▸ Tabs ▸ "Player with artwork" turns the sidebar player into the island (after
+# Yab's). A track whose media session names a title, an artist and artwork on the page's server gets a 30 pt
+# island once its tab is off screen: the title and artist on one line, the artwork fetched through the page's own
+# network, Arc's card colour, and 15-second skips (the page has no tracks). Skipping and seeking move the
+# page's media; switching back to Arc's player makes Arc's 33 pt card again, and the island comes back. A second
+# track on a page like Bandcamp's (no media session) stacks a second island over it, its line the tab's title without
+# the "▶︎" the page puts in front and its artwork the page's og:image; opening the stack opens both. A YouTube-like
+# live stream (a finite rewind window under YouTube's shown Live badge) says Live, with no bar and no skips.
+budget rss=800 stalls50=30
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "nowPlayingStyle": "island"}
+pace 0.5
+
+cra://open?url=${ORIGIN}/now-playing.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"play()"}
+expect-log "value":"song:playing"
+cra://open?url=${PAGE}?n=other
+expect-log GET /page\.html\?n=other
+wait 3
+
+cra://debug?nowPlaying=state&label=island
+expect-log Cra nowPlaying\[island\] media 127\.0\.0\.1 title="Slow Tides" artist="Harbour Lights" pos=[0-9] dur=120 art=32x32
+expect-log Cra nowPlaying\[island\] card island h=30 open=0 line="Slow Tides.{2}Harbour Lights" art=32x32 fill=#040506 times=.* buttons=skipBack/skipAhead
+
+cra://debug?nowPlaying=skip&seconds=15&label=skip
+wait 1
+cra://debug?nowPlaying=state&label=skipped
+expect-log Cra nowPlaying\[skipped\] media 127\.0\.0\.1 .* pos=(1[89]|2[0-9]|3[0-9]) dur=120
+
+cra://debug?nowPlaying=seek&seconds=33&label=seek
+wait 1
+cra://debug?nowPlaying=state&label=sought
+expect-log Cra nowPlaying\[sought\] media 127\.0\.0\.1 .* pos=3[3-9] dur=120
+
+cra://debug?nowPlayingStyle=arc
+wait 0.5
+cra://debug?nowPlaying=state&label=arc
+expect-log Cra nowPlaying\[arc\] card arc h=33
+reject-log Cra nowPlaying\[arc\] card island
+
+cra://debug?nowPlayingStyle=island
+wait 1
+cra://debug?nowPlaying=state&label=again
+expect-log Cra nowPlaying\[again\] card island h=30 open=0 line="Slow Tides.{2}Harbour Lights" art=32x32
+
+cra://open?url=${ORIGIN}/now-playing.html?n=plain
+expect-log GET /now-playing\.html\?n=plain
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"playPlain()"}
+expect-log "value":"plain:playing"
+cra://open?url=${PAGE}?n=third
+expect-log GET /page\.html\?n=third
+wait 3
+cra://debug?nowPlaying=state&label=two
+expect-log Cra nowPlaying\[two\] media 127\.0\.0\.1 title="" artist="" pos=[0-9] dur=120 art=32x32
+expect-log Cra nowPlaying\[two\] card island h=30 open=0 line="Plain Song" art=32x32
+expect-log Cra nowPlaying\[two\] card island h=30 open=0 line="Slow Tides.{2}Harbour Lights"
+cra://debug?nowPlaying=open&label=open
+wait 1
+cra://debug?nowPlaying=state&label=opentwo
+expect-log Cra nowPlaying\[opentwo\] card island h=144 open=1 line="Plain Song"
+expect-log Cra nowPlaying\[opentwo\] card island h=144 open=1 line="Slow Tides
+
+cra://debug?nowPlaying=fold&label=fold
+cra://open?url=${ORIGIN}/now-playing.html?n=live
+expect-log GET /now-playing\.html\?n=live
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"playLive()"}
+expect-log "value":"live:playing"
+cra://open?url=${PAGE}?n=fourth
+expect-log GET /page\.html\?n=fourth
+wait 3
+cra://debug?nowPlaying=state&label=live
+expect-log Cra nowPlaying\[live\] media 127\.0\.0\.1 title="Night Radio" artist="Harbour Lights" pos=[0-9] dur=live
+expect-log Cra nowPlaying\[live\] card island h=30 open=0 line="Night Radio.{2}Harbour Lights" .* times=Live/- buttons=previousTrack/nextTrack

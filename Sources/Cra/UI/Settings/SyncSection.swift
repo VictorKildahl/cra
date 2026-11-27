@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Settings ▸ General ▸ Sync: iCloud keeps the sidebar, the settings, the shortcuts and the easels the
+/// Settings' first tab ▸ Sync: iCloud keeps the sidebar, the settings, the shortcuts and the easels the
 /// same on the user's Macs (SettingsSyncService); a folder a provider syncs is the other way.
 /// Off, the card is one switch and "Use a folder instead…"; on, the state and Stop Syncing.
 /// The same bundle backs Export… and Import… for people with one Mac.
@@ -32,12 +32,12 @@ struct SyncSection: View {
     @ViewBuilder private var content: some View {
         SettingsHeader("Sync")
         SettingsFeatureCard {
-            SettingsPlainRow("Sync with iCloud",
+            SettingsPlainRow(SettingsTab.syncSwitch,
                                detail: sync.iCloudAvailable
                                    ? "Your spaces, pinned tabs, favorites, easels, settings and shortcuts stay the same on every Mac signed in to this iCloud account."
                                    : iCloudUnavailableReason,
                                trailing: {
-                Toggle("Sync with iCloud", isOn: Binding(get: { sync.location == .iCloud }, set: { on in on ? enableICloud() : sync.disable() }))
+                Toggle(SettingsTab.syncSwitch, isOn: Binding(get: { sync.location == .iCloud }, set: { on in on ? enableICloud() : sync.disable() }))
                     .toggleStyle(.arcSwitch).labelsHidden()
                     .disabled(!sync.iCloudAvailable)
             }) {

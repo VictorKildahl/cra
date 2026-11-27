@@ -41,19 +41,21 @@ struct MobileChromeTests {
     }
 
     /// The incognito glyph keeps the same room to the field's right end off and on: before, off,
-    /// it sat 7.5 pt from the end and on (with its label) 18.5 pt (#654).
+    /// it sat 7.5 pt from the end and on (with its label) 16.5 pt (#654).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/654")) func theIncognitoGlyphKeepsItsPlaceOffAndOn() {
         let field = CGRect(x: 16, y: 16, width: 361, height: 48)
         let off = MobileSearchSheet.incognitoToggleFrame(field: field)
-        let on = MobileSearchSheet.incognitoToggleFrame(field: field, labelledWidth: 130)
+        let on = MobileSearchSheet.incognitoToggleFrame(field: field, labelledWidth: MobileSearchSheet.incognitoLabelledWidth)
         #expect(off.maxX == on.maxX)
-        #expect(field.maxX - off.maxX == 18.5)
-        #expect(off.width == 44 && on.width == 130)
+        #expect(field.maxX - off.maxX == MobileSearchSheet.incognitoTrailingInset)
+        #expect(off.width == 44 && on.width == MobileSearchSheet.incognitoLabelledWidth)
         #expect(off.midY == field.midY && on.midY == field.midY)
         let accessory = MobileSearchSheet.accessoryFrame(field: field)
-        #expect(field.maxX - accessory.midX == 29.5, "the clear button stays where Arc Search has it")
-        // The 23 pt glyph, right-aligned, is centred where the accessory's centre is, give or take a point.
-        #expect(abs((off.maxX - 11.5) - accessory.midX) <= 1)
+        #expect(field.maxX - accessory.midX == 26.5, "3 pt nearer the end than Arc Search's 29.5")
+        #expect(MobileSearchSheet.incognitoLabelledWidth == 130)
+        #expect(MobileSearchSheet.incognitoLabelGap == 6.7, "2 pt closer to the mask than the 8.7 measured")
+        // The 28 pt mask, right-aligned, sits a little left of the accessory's centre.
+        #expect(abs((off.maxX - 14) - accessory.midX) <= 3.5)
     }
 
     /// A sheet let go halfway up stays there until the keyboard comes, then goes where the
@@ -66,6 +68,60 @@ struct MobileChromeTests {
         #expect(MobileSearchSheet.openingTop(screenHeight: 852, keyboardHeight: 291, safeTop: 59, heldAt: nil) == 259, "with the keyboard up, Arc's place")
     }
 
+    /// The empty field shows the mic and the incognito toggle, a field with text the clear button;
+    /// in incognito only the toggle goes for it, as there is no mic.
+    @Test func theFieldsEndSwapsItsButtonsForTheClearButtonOnceThereIsText() {
+        #expect(MobileSearchSheet.accessories(hasText: false, incognito: false) == [.mic, .incognito])
+        #expect(MobileSearchSheet.accessories(hasText: true, incognito: false) == .clear)
+        #expect(MobileSearchSheet.accessories(hasText: false, incognito: true) == .incognito)
+        #expect(MobileSearchSheet.accessories(hasText: true, incognito: true) == .clear)
+    }
+
+    /// The Browse for Me chip is as wide as its title plus its padding either side, more than Arc
+    /// Search's fixed 100.5 pt gave it.
+    @Test func theBrowseChipFitsItsTitleWithRoomEitherSide() {
+        let size = MobileSearchSheet.browseChipSize(titleWidth: 89.2)
+        #expect(size.width == 114 && size.height == MobileSearchSheet.browseChipHeight)
+        #expect(MobileSearchSheet.browseChipPadding > (100.5 - 89.2) / 2)
+    }
+
+    /// A second keystroke leaves the same buttons showing, so whatever is moving carries on. It
+    /// used to snap every button to its end, cutting the swap short after two quick characters.
+    @Test func aSecondKeystrokeLeavesTheSwapRunning() {
+        let typed = MobileSearchSheet.accessories(hasText: true, incognito: false)
+        let empty = MobileSearchSheet.accessories(hasText: false, incognito: false)
+        #expect(MobileSearchSheet.accessoryChange(from: typed, to: typed, canAnimate: true) == .keep)
+        #expect(MobileSearchSheet.accessoryChange(from: empty, to: typed, canAnimate: true) == .swap)
+        #expect(MobileSearchSheet.accessoryChange(from: typed, to: empty, canAnimate: true) == .swap)
+        #expect(MobileSearchSheet.accessoryChange(from: empty, to: .incognito, canAnimate: true) == .mic)
+        #expect(MobileSearchSheet.accessoryChange(from: nil, to: empty, canAnimate: true) == .snap)
+        #expect(MobileSearchSheet.accessoryChange(from: empty, to: typed, canAnimate: false) == .snap)
+    }
+
+    /// In incognito the word stays beside the clear button, so typed text stops short of it.
+    @Test func typedTextStopsShortOfTheIncognitoWord() {
+        let plain = MobileSearchSheet.textTrailingReserve(incognitoWordWidth: nil, maskWidth: 28)
+        let incognito = MobileSearchSheet.textTrailingReserve(incognitoWordWidth: 52, maskWidth: 28)
+        #expect(plain == 49)
+        #expect(incognito >= MobileSearchSheet.incognitoTrailingInset + 28 + MobileSearchSheet.incognitoLabelGap + 52)
+    }
+
+    /// A drawer pulled up and let go heads for its open place at once instead of waiting where the
+    /// finger left it for the keyboard, which froze it for a moment after a flick.
+    @Test func aDrawerLetGoHeadsForItsPlaceBeforeTheKeyboardComes() {
+        let open = MobileSearchSheet.openingTop(screenHeight: 852, keyboardHeight: 291, safeTop: 59, heldAt: nil)
+        #expect(MobileSearchSheet.releasedTop(screenHeight: 852, expectedKeyboard: 291, keyboardSeen: true,
+                                              safeTop: 59, releasedAt: 600) == open, "up from low down")
+        #expect(MobileSearchSheet.releasedTop(screenHeight: 852, expectedKeyboard: 291, keyboardSeen: true,
+                                              safeTop: 59, releasedAt: 150) == open, "down from a long pull")
+        // No keyboard seen yet: up to the place without one, never down.
+        let bare = MobileSearchSheet.openingTop(screenHeight: 852, keyboardHeight: 34, safeTop: 59, heldAt: nil)
+        #expect(MobileSearchSheet.releasedTop(screenHeight: 852, expectedKeyboard: 34, keyboardSeen: false,
+                                              safeTop: 59, releasedAt: 700) == min(bare, 700))
+        #expect(MobileSearchSheet.releasedTop(screenHeight: 852, expectedKeyboard: 34, keyboardSeen: false,
+                                              safeTop: 59, releasedAt: 300) == 300)
+    }
+
     /// The same phone's bar: 76 pt tall, pill 76 × 39 centred 44.5 pt above the bottom edge,
     /// round buttons 35 pt wide centred 41 pt from each side.
     @Test func bottomBarOnAnIPhone15Pro() {
@@ -75,6 +131,78 @@ struct MobileChromeTests {
         #expect(frames.pill.midY == 807.5)
         #expect(frames.tabs == CGRect(x: 23.5, y: 790, width: 35, height: 35))
         #expect(frames.menu == CGRect(x: 334.5, y: 790, width: 35, height: 35))
+        // The right side button and the new tab pill share one vertical centre.
+        #expect(frames.pill.midY == frames.tabs.midY)
+        #expect(frames.pill.midY == frames.menu.midY)
+    }
+
+    /// The bar's controls take the light bar's dark grey ink over a light app or a light page, and
+    /// never over incognito's black bar, the floating home or tab-row buttons, or a dark app's
+    /// drawer.
+    @Test func theBarsControlsTakeTheLightChromeOnlyOverALightBar() {
+        func light(dark: Bool = false, page: Bool = false, incognito: Bool = false,
+                   floats: Bool = false, overDrawer: Bool = false) -> Bool {
+            MobileBottomBar.lightChrome(darkMode: dark, pageIsLight: page, incognito: incognito,
+                                        floats: floats, overDrawer: overDrawer)
+        }
+        #expect(light(), "a light app")
+        #expect(light(page: true), "a light page")
+        #expect(light(dark: true, page: true), "a light page in a dark app")
+        #expect(!light(dark: true), "a dark page in a dark app")
+        #expect(light(overDrawer: true), "the light app's drawer")
+        #expect(!light(dark: true, page: true, overDrawer: true), "a dark app's drawer over a light page")
+        #expect(!light(incognito: true), "incognito's black bar in a light app")
+        #expect(!light(page: true, incognito: true, overDrawer: true), "incognito's drawer over a light page")
+        #expect(!light(floats: true), "the buttons floating over the home or the tab row")
+    }
+
+    /// The page is light when the status bar's text over it is dark; with no band, the app's own
+    /// appearance decides.
+    @Test func thePageIsLightWhenTheStatusBarTextIsDark() {
+        #expect(MobileBottomBar.pageIsLight(statusBarFill: "#ffffff", darkMode: true))
+        #expect(!MobileBottomBar.pageIsLight(statusBarFill: "#000000", darkMode: false))
+        #expect(MobileBottomBar.pageIsLight(statusBarFill: nil, darkMode: false))
+        #expect(!MobileBottomBar.pageIsLight(statusBarFill: nil, darkMode: true))
+    }
+
+    /// The bar's material: the drawer's while it is out, a thick light one over a light page (not
+    /// in incognito, whose black covers it), the thinnest otherwise.
+    @Test func theBarsMaterialFollowsThePageAndTheDrawer() {
+        #expect(MobileBottomBar.material(drawerShowing: false, pageIsLight: false, incognito: false) == .page)
+        #expect(MobileBottomBar.material(drawerShowing: false, pageIsLight: true, incognito: false) == .lightPage)
+        #expect(MobileBottomBar.material(drawerShowing: false, pageIsLight: true, incognito: true) == .page)
+        #expect(MobileBottomBar.material(drawerShowing: true, pageIsLight: true, incognito: false) == .drawer)
+        #expect(MobileBottomBar.material(drawerShowing: true, pageIsLight: false, incognito: true) == .drawer)
+    }
+
+    /// The drawer's address field is frosted and lays a little white over its material, over a
+    /// light page or a dark one but not in incognito, and over the tab switcher one lift
+    /// in either appearance; the page menu's address editor keeps the
+    /// sheet's own field.
+    @Test func theDrawersFieldIsLiftedOverEitherPageAndTheTabRowButNotInIncognito() {
+        typealias Style = MobileSearchSheet.FieldStyle
+        #expect(Style(growsFromBar: false, pageIsLight: true) == .standard)
+        #expect(Style(growsFromBar: true, pageIsLight: true) == .lightPage)
+        #expect(Style(growsFromBar: true, pageIsLight: false) == .darkPage)
+        #expect(Style.standard.whiteLift(incognito: false) == nil && !Style.standard.isFrosted)
+        let light = Style.lightPage.whiteLift(incognito: false) ?? 0, dark = Style.darkPage.whiteLift(incognito: false) ?? 0
+        #expect(light > 0 && light < 0.5 && dark > 0 && dark < 0.5, "a lift, still see-through")
+        #expect(Style.lightPage.whiteLift(incognito: true) == 0 && Style.darkPage.whiteLift(incognito: true) == 0,
+                "incognito's field is the material alone")
+        #expect(Style.standard.whiteLift(incognito: true) == nil, "the page menu's field keeps its own")
+        let row = Style.darkPage.whiteLift(incognito: false, overTabRow: true) ?? 0
+        #expect(row == Style.lightPage.whiteLift(incognito: false, overTabRow: true), "the same in either appearance")
+        #expect(row > dark && row < light, "over the tab switcher, between a dark page's and a light page's")
+        #expect(Style.darkPage.whiteLift(incognito: true, overTabRow: true) == 0, "incognito still has none")
+    }
+
+    /// The mic sits left of the incognito mask, clear of it.
+    @Test func theMicSitsLeftOfTheIncognitoMask() {
+        let field = CGRect(x: 16, y: 16, width: 361, height: 48)
+        let mic = MobileSearchSheet.micFrame(field: field)
+        #expect(mic.midY == field.midY)
+        // The 28 pt mask is drawn at the toggle's right edge; the mic's 44 pt box ends before it.
+        #expect(mic.maxX < MobileSearchSheet.incognitoToggleFrame(field: field).maxX - 28)
     }
 
     @Test func bottomBarWithoutAHomeIndicator() {
@@ -108,6 +236,7 @@ struct MobileSearchMotionTests {
     /// The sheet sets off on the tap, eased out, and the keyboard takes it over; it no longer waits for the keyboard.
     @Test func theSheetSetsOffBeforeTheKeyboardComes() {
         #expect(MobileSearchMotion.leadDuration == 0.25)
+        #expect(MobileSearchMotion.settleDuration == 0.35)
     }
 
     /// The pill's plus keeps to the field's leading end as it grows, the placeholder to its right; it no longer
@@ -143,9 +272,93 @@ struct MobileSearchMotionTests {
         // Closing: the buttons go first, the surface stays solid until the last quarter.
         #expect(MobileSearchMotion.fadeWindow(from: 1, to: 0, over: buttons) == 0...0.5)
         #expect(MobileSearchMotion.fadeWindow(from: 1, to: 0, over: surface) == 0.75...1)
+        // The new tab drawer's buttons come in with its field, from the start of its opening.
+        let drawer = MobileSearchMotion.accessorySpan(growsFromBar: true)
+        #expect(MobileSearchMotion.fadeWindow(from: 0, to: 1, over: drawer) == 0...1)
+        #expect(MobileSearchMotion.opacity(openness: 0.5, over: drawer) == 0.5)
+        #expect(MobileSearchMotion.accessorySpan(growsFromBar: false) == buttons, "the page menu's sheet keeps Arc Search's")
         // From halfway open, the surface is already solid: nothing left to fade.
         #expect(MobileSearchMotion.fadeWindow(from: 0.5, to: 1, over: surface) == 0...0)
         #expect(MobileSearchMotion.fadeWindow(from: 1, to: 1, over: surface) == 0...0)
+    }
+
+    /// The new tab drawer's tabs and menu buttons leave slowly over its pull, and its top corners
+    /// stay square until the drawer is fully open.
+    @Test func theDrawerLetsItsSideButtonsGoAndRoundsItsTop() {
+        #expect(MobileNewTabDrawer.controlsFadeDistance == 120)
+        #expect(MobileNewTabDrawer.controlsOpacity(reach: 0) == 1)
+        #expect(MobileNewTabDrawer.controlsOpacity(reach: 60) == 0.5)
+        #expect(MobileNewTabDrawer.controlsOpacity(reach: 120) == 0)
+        #expect(MobileNewTabDrawer.controlsOpacity(reach: 240) == 0)
+        #expect(MobileNewTabDrawer.controlsOpacity(reach: -10) == 1, "above the bar is still in place")
+        #expect(MobileNewTabDrawer.cornerRadius(openness: 0) == 0)
+        #expect(MobileNewTabDrawer.cornerRadius(openness: 0.5) == MobileSearchSheet.cornerRadius / 2)
+        #expect(MobileNewTabDrawer.cornerRadius(openness: 1) == MobileSearchSheet.cornerRadius)
+        #expect(MobileNewTabDrawer.cornerRadius(openness: 2) == MobileSearchSheet.cornerRadius, "no more than the sheet's")
+        #expect(MobileNewTabDrawer.cornerRadius(openness: -0.5) == 0)
+        #expect(MobileSearchMotion.incognitoBlink < MobileSearchMotion.settleDuration, "a blink, not a close")
+        #expect(MobileSearchMotion.incognitoBlinkStagger < MobileSearchMotion.incognitoBlink, "a roll, not a second blink")
+        #expect(MobileSearchMotion.incognitoLabelSlide > MobileSearchMotion.incognitoBlink)
+    }
+
+    /// The open field's hairline is there only once it is all but open, so the field shrinking
+    /// into the pill carries no rim.
+    @Test func theFieldsEdgeGoesAsSoonAsItStartsToClose() {
+        #expect(MobileSearchMotion.fieldEdgeOpacity(openness: 1) == 1)
+        #expect(abs(MobileSearchMotion.fieldEdgeOpacity(openness: 0.99) - 0.5) < 0.001)
+        #expect(MobileSearchMotion.fieldEdgeOpacity(openness: 0.98) == 0)
+        #expect(MobileSearchMotion.fieldEdgeOpacity(openness: 0.5) == 0)
+    }
+}
+
+/// The new tab drawer's field and list while a finger holds it, and when it moves on its own.
+struct MobileNewTabDrawerTests {
+    @Test func aPullUpKeepsThePlusAndADragDownKeepsTheFieldUntilTheFingerLetsGo() {
+        var drawer = MobileNewTabDrawer()
+        drawer.growsFromBar = true
+        #expect(drawer.fieldOpenness(isSearching: false, pulled: 0.4) == 0.4, "no hold: the field follows the pull")
+        drawer.fieldHold = .closed
+        #expect(drawer.fieldOpenness(isSearching: false, pulled: 0.4) == 0, "pulled up: still a plus")
+        drawer.fieldHold = .open
+        #expect(drawer.fieldOpenness(isSearching: false, pulled: 0.4) == 1, "dragged down: still the field")
+        #expect(drawer.fieldOpenness(isSearching: true, pulled: nil) == 1, "searching: open, whatever the hold")
+        drawer.fieldHold = .closed
+        #expect(drawer.fieldOpenness(isSearching: true, pulled: nil) == 1)
+        drawer.fieldHold = .none
+        #expect(drawer.fieldOpenness(isSearching: false, pulled: nil) == 0, "closed into the bar")
+    }
+
+    /// Over the page the bar's material stays the drawer's background all the way down; over the
+    /// home or the tab row, a drawer let go takes it down with it instead of leaving it behind
+    /// until the drawer has settled.
+    @Test func aDrawerLetGoOverTheTabRowTakesTheMaterialDownWithIt() {
+        #expect(MobileNewTabDrawer.materialOpacity(floats: false, letGo: true, openness: 0.3) == 1, "over a page")
+        #expect(MobileNewTabDrawer.materialOpacity(floats: true, letGo: false, openness: 0.3) == 1, "still held")
+        #expect(MobileNewTabDrawer.materialOpacity(floats: true, letGo: true, openness: 0.3) == 0.3)
+        #expect(MobileNewTabDrawer.materialOpacity(floats: true, letGo: true, openness: 0) == 0, "back in the bar")
+        #expect(MobileNewTabDrawer.materialOpacity(floats: true, letGo: true, openness: 1.2) == 1)
+    }
+
+    /// In dark mode the drawer's material takes a faint grey haze so it reads frosted; light mode
+    /// and incognito take none.
+    @Test func theDrawerIsHazedInDarkModeOnly() {
+        let haze = MobileNewTabDrawer.haze(darkMode: true, incognito: false)
+        #expect(haze > 0 && haze < 0.8, "a haze, the blur still showing")
+        #expect(MobileNewTabDrawer.haze(darkMode: false, incognito: false) == 0)
+        #expect(MobileNewTabDrawer.haze(darkMode: true, incognito: true) == 0)
+        let row = MobileNewTabDrawer.haze(darkMode: true, incognito: false, overTabRow: true)
+        #expect(row > 0 && row < haze, "less over the tab switcher")
+    }
+
+    @Test func theDrawersListFollowsItsOpenPositionAndTheMenusFollowsItsField() {
+        var drawer = MobileNewTabDrawer()
+        #expect(drawer.listOpenness(fieldOpenness: 1, drawerProgress: 0.3) == 1, "the page menu's address editor")
+        #expect(drawer.fieldStyle(pageIsLight: true) == .standard)
+        drawer.growsFromBar = true
+        #expect(drawer.listOpenness(fieldOpenness: 1, drawerProgress: 0.3) == 0.3, "the new tab drawer")
+        #expect(drawer.fieldStyle(pageIsLight: true) == .lightPage)
+        #expect(drawer.fieldStyle(pageIsLight: false) == .darkPage)
+        #expect(MobileNewTabDrawer() == MobileNewTabDrawer(), "a settled drawer is the fresh one")
     }
 }
 
@@ -563,6 +776,24 @@ struct MobileArchiveTests {
 struct MobileTabCarouselTests {
     static let phone = CGSize(width: 393, height: 852)
 
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/878")) func picturesKeepTheTopLeftWhenTheScreenShapeChanges() {
+        let narrow = CGRect(x: 0, y: 10, width: 300, height: 450)
+        let widePicture = MobileTabCarousel.pictureFrame(image: CGSize(width: 951, height: 669), in: narrow)
+        #expect(abs(widePicture.minX) < 0.01 && abs(widePicture.minY - 10) < 0.01)
+        #expect(abs(widePicture.height - 450) < 0.01 && widePicture.width > 300)
+
+        let wide = CGRect(x: 0, y: 0, width: 600, height: 400)
+        let narrowPicture = MobileTabCarousel.pictureFrame(image: CGSize(width: 466, height: 678), in: wide)
+        #expect(abs(narrowPicture.minX) < 0.01 && abs(narrowPicture.minY) < 0.01)
+        #expect(abs(narrowPicture.width - 600) < 0.01 && narrowPicture.height > 400)
+
+        let portrait = CGRect(x: 0, y: 0, width: 273, height: 591.8)
+        let matching = MobileTabCarousel.pictureFrame(image: Self.phone, in: portrait)
+        #expect(abs(matching.minX - portrait.minX) < 1 && abs(matching.minY - portrait.minY) < 1)
+        #expect(abs(matching.maxX - portrait.maxX) < 1 && abs(matching.maxY - portrait.maxY) < 1)
+        #expect(MobileTabCarousel.pictureFrame(image: .zero, in: narrow) == narrow)
+    }
+
     /// Arc Search's row at rest on an iPhone 15 Pro.
     @Test func cardsSitWhereArcSearchPutsThem() {
         let focus = MobileTabCarousel.placement(relative: 0, in: Self.phone)
@@ -628,6 +859,27 @@ struct MobileTabCarouselTests {
         #expect(MobileTabCarousel.position(start: 1, translation: -pitch, count: 3, in: Self.phone) == 2)
         #expect(MobileTabCarousel.position(start: 0, translation: pitch * 3, count: 3, in: Self.phone) == -1)
         #expect(MobileTabCarousel.position(start: 2, translation: -pitch * 3, count: 3, in: Self.phone) == 3)
+        // Let go, the row moves on at the speed it was following the finger.
+        #expect(MobileTabCarousel.velocity(-pitch, at: 1, count: 3, in: Self.phone) == 1)
+        #expect(MobileTabCarousel.velocity(pitch * 3, at: -0.5, count: 3, in: Self.phone) == -1)
+        #expect(MobileTabCarousel.velocity(-pitch * 3, at: 2.2, count: 3, in: Self.phone) == 1)
+    }
+
+    /// A finger that catches the row while it settles back from past an end holds it where it
+    /// is. The catch started from the position on screen, which the drag resisted again: caught
+    /// at -0.3 and moved a hundredth of a card outwards, the row jumped to -0.1 (Greptile on
+    /// PR #882).
+    @Test func catchingTheRowPastAnEndHoldsItWhereItIs() {
+        let pitch = MobileTabCarousel.pitch(in: Self.phone)
+        for caught: CGFloat in [-0.3, 2.3] {
+            let start = MobileTabCarousel.dragStart(caughtAt: caught, count: 3)
+            let held = MobileTabCarousel.position(start: start, translation: 0, count: 3, in: Self.phone)
+            #expect(abs(held - caught) < 0.0001)
+            let outwards: CGFloat = caught < 0 ? 1 : -1
+            let moved = MobileTabCarousel.position(start: start, translation: outwards * pitch * 0.01, count: 3, in: Self.phone)
+            #expect(abs(abs(moved - caught) - 0.01 / 3) < 0.0001, "it follows a third of the finger, from where it was")
+        }
+        #expect(MobileTabCarousel.dragStart(caughtAt: 1.4, count: 3) == 1.4)
     }
 
     @Test func aFlickGoesToTheNextCardAndStopsAtTheEnds() {
@@ -663,6 +915,43 @@ struct MobileTabCarouselTests {
         let alone = MobileTabCarousel.titleWidth(titleLeft: titleLeft, cardRight: focus.maxX, nextCardLeft: nil)
         #expect(titleLeft + alone == focus.maxX - 16, "the newest card's title runs to its own edge")
         #expect(MobileTabCarousel.titleWidth(titleLeft: 300, cardRight: 310, nextCardLeft: 200) == 0)
+    }
+
+    /// Every flick in Pri's Arc Search recording (25 Nov 2026, 430 pt screen) moved one card. The
+    /// hardest was let go 61 % of the way to the next card at 1,970 pt a second; one back was let
+    /// go 31 % of the way at 1,260 pt a second. Cra sent them three cards and two.
+    @Test func aFlickMovesOneCardAsInArcSearch() {
+        let screen = CGSize(width: 430, height: 932)
+        #expect(MobileTabCarousel.restingIndex(position: 0.611, velocity: -1970, start: 0, count: 5, in: screen) == 1)
+        #expect(MobileTabCarousel.restingIndex(position: 1.69, velocity: 1260, start: 2, count: 5, in: screen) == 1)
+        // A short flick from a card still reaches the next one.
+        #expect(MobileTabCarousel.restingIndex(position: 2.05, velocity: -400, start: 2, count: 5, in: screen) == 3)
+    }
+
+    /// Let go, Arc Search's row keeps the finger's speed and slows into the card's place by the
+    /// same share every frame, never passing it (Pri's recording, 25 Nov 2026, 60 fps). Cra's
+    /// stopped dead and started again on a spring from standstill.
+    @Test func theRowSettlesAsArcSearchsDoes() {
+        let frame = 1.0 / 60
+        func ratios(_ settle: MobileTabCarousel.Settle) -> [CGFloat] {
+            (1...10).map { n in
+                (settle.target - settle.position(after: Double(n) * frame))
+                    / (settle.target - settle.position(after: Double(n - 1) * frame))
+            }
+        }
+        // The hardest flick: 0.389 cards short of its card at 8.27 cards a second. Arc's
+        // distance left shrank to 0.70–0.73 of itself every frame.
+        let hard = MobileTabCarousel.Settle(from: 0.611, velocity: 8.27, target: 1)
+        #expect(ratios(hard).allSatisfy { abs($0 - 0.71) < 0.02 })
+        let dt = 0.0001
+        #expect(abs((hard.position(after: dt) - 0.611) / dt - 8.27) < 0.01, "it starts at the finger's speed")
+        // Gentle let-goes, and ones with no speed or moving away, settle at 0.84–0.86 a frame.
+        for velocity: CGFloat in [2.07, 0, -1] {
+            let gentle = MobileTabCarousel.Settle(from: -0.211, velocity: velocity, target: 0)
+            #expect(ratios(gentle).allSatisfy { abs($0 - 0.85) < 0.01 })
+            #expect(stride(from: 0.0, to: 2, by: frame).allSatisfy { gentle.position(after: $0) <= 0 })
+            #expect(gentle.isDone(after: 0.7))
+        }
     }
 
     @Test func aCardIsThrownAwayByDistanceOrByAFlick() {
@@ -739,6 +1028,44 @@ struct MobileTabRowTests {
         #expect(close(3, at: 3) == .init(position: 3, settle: 2))
         #expect(close(3, at: 1) == .init(position: 1, settle: 1))
         #expect(!MobileTabRow(cards: []).canTake(ids[0]))
+    }
+
+    /// A card taken up while the row settles holds the row, which settles on where it was going
+    /// once the card is let go. It kept that card's place, so a card thrown earlier that left
+    /// meanwhile sent it to the next card, or past the end (Greptile on PR #882). It follows the
+    /// card instead.
+    @Test func aHeldRowResumesOnItsCardAfterAnEarlierThrowLands() {
+        let ids = Self.ids
+        var row = MobileTabRow(cards: ids)
+        // Throw the first card, flick the row towards the third, then take the second up.
+        row.startThrow(ids[0])
+        _ = row.finishThrow(ids[0], position: 1.6)
+        #expect(row.resumeIndex(heading: ids[2], position: 0.6) == 1, "the third card is second now")
+        #expect(row.resumeIndex(heading: ids[3], position: 1.6) == 2, "the newest stays in the row")
+        // A row heading for a card that has gone itself settles on the nearest.
+        #expect(row.resumeIndex(heading: ids[0], position: 2.7) == 2)
+        #expect(row.resumeIndex(heading: ids[0], position: -0.4) == 0)
+    }
+
+    /// A card thrown, then a flick before it has flown off: the row is between cards when the
+    /// card leaves. The gap took the card nearest where the row was, so a flick heading for the
+    /// third card, still at 1.1, landed on the second (Greptile on PR #882). It goes on to the
+    /// card it was heading for, at its new place, and the row keeps its speed.
+    @Test func aFlickStillLandsOnItsCardWhenAnEarlierThrowLeaves() {
+        let ids = Self.ids
+        var row = MobileTabRow(cards: ids)
+        row.startThrow(ids[0])
+        let flicked = row.finishThrow(ids[0], position: 1.1, heading: ids[2])
+        #expect(flicked?.settle == 1 && abs((flicked?.position ?? 0) - 0.1) < 0.0001)
+        // Without a flick under way the row closes the gap around the card in focus, as before.
+        var still = MobileTabRow(cards: ids)
+        still.startThrow(ids[0])
+        let held = still.finishThrow(ids[0], position: 1.1)
+        #expect(held?.settle == 0 && abs((held?.position ?? 0) - 0.1) < 0.0001)
+        // A settle reports its speed, so the row can carry on from it.
+        let settle = MobileTabCarousel.Settle(from: 1, velocity: 15, target: 2)
+        #expect(abs(settle.velocity(after: 0) - 15) < 0.0001)
+        #expect(settle.velocity(after: 0.05) < 15 && settle.velocity(after: 0.05) > 0)
     }
 }
 
@@ -1395,6 +1722,42 @@ struct MobileMotionTests {
 
     @Test func aCardIsItsPageWithinFiveFrames() {
         #expect(MobileMotion.tabOpen.remaining(after: 5.0 / 30) < 0.1)
+    }
+
+    /// The new tab drawer let go on its way down settles with a small overshoot, not a critical
+    /// damp.
+    @Test func theNewTabDrawerSettlesWithASmallOvershoot() {
+        let spring = MobileNewTabDrawer.bounce
+        #expect(spring.dampingRatio > 0.7 && spring.dampingRatio < 1)
+        #expect(spring.response > 0.2 && spring.response < MobileSearchMotion.settleDuration)
+        #expect(spring.overshoot > 0.005 && spring.overshoot < 0.06)
+    }
+
+    /// The field's buttons come in with a spring that overshoots visibly, from well under their size.
+    @Test func theFieldsButtonsComeInWithAnOvershoot() {
+        #expect(MobileMotion.accessoryEnter.overshoot > 0.05)
+        #expect(MobileSearchMotion.accessoryEnterScale < MobileSearchMotion.accessoryLeaveScale)
+    }
+
+    /// The incognito word toggled off, on and off again within one slide: only the last slide's
+    /// end may hide the word. Before, the first slide's end saw incognito off and hid the word
+    /// halfway through the last one.
+    @Test func anOlderMovesEndDoesNotCutTheLatestOneShort() {
+        var moves = MobileMotion.Ticket()
+        let firstOff = moves.next()
+        _ = moves.next()
+        let lastOff = moves.next()
+        #expect(!moves.isCurrent(firstOff), "the first slide back has been overtaken")
+        #expect(moves.isCurrent(lastOff))
+    }
+
+    /// A spring's overshoot: none when critically damped, more the less damped it is.
+    @Test func aSpringsOvershootGrowsAsItsDampingFalls() {
+        #expect(MobileMotion.Spring(response: 0.3, dampingRatio: 1).overshoot == 0)
+        #expect(MobileMotion.Spring(response: 0.3, dampingRatio: 1.2).overshoot == 0)
+        let half = MobileMotion.Spring(response: 0.3, dampingRatio: 0.5).overshoot
+        #expect(abs(half - 0.163) < 0.001)
+        #expect(MobileMotion.Spring(response: 0.3, dampingRatio: 0.8).overshoot < half)
     }
 
     @Test func draggingTheBarUpOpensTheRowByDistanceOrFlick() {
@@ -2211,6 +2574,19 @@ struct MobileSyncIntroTests {
         #expect(MobileSyncIntro.haveMacBody(iCloud: false).hasSuffix("Sign in to iCloud on this iPhone too."))
     }
 
+    /// The steps lead where the Mac's switch is: Settings' first tab, the one named after the user,
+    /// and the switch by the name the Mac gives it. General has had no Sync since the redesign (#377).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/897"))
+    func theWayToSyncNamesTheMacsSwitchWhereItIs() {
+        #expect(SettingsTab.first == .sync)
+        for iCloud in [true, false] {
+            let body = MobileSyncIntro.haveMacBody(iCloud: iCloud)
+            #expect(body.contains("first tab"))
+            #expect(body.contains(SettingsTab.syncSwitch))
+            #expect(!body.contains(SettingsTab.general.title))
+        }
+    }
+
     @Test func closingTheCardIsKeptAndOlderFilesHaveNotClosedIt() throws {
         let old = try JSONDecoder().decode(MobileSettings.self, from: Data("{}".utf8))
         #expect(!old.hasDismissedSyncCard)
@@ -2469,7 +2845,7 @@ struct MobileSideInsetsTests {
         #expect(field.maxX <= 382)
         #expect(MobileSearchSheet.accessoryFrame(field: field).maxX <= 382)
         #expect(MobileSearchSheet.incognitoToggleFrame(field: field).maxX <= 382)
-        #expect(MobileSearchSheet.incognitoToggleFrame(field: field, labelledWidth: 130).maxX <= 382)
+        #expect(MobileSearchSheet.incognitoToggleFrame(field: field, labelledWidth: MobileSearchSheet.incognitoLabelledWidth).maxX <= 382)
         let usable = CGSize(width: 382, height: size.height)
         #expect(MobileTabCarousel.placement(relative: 0, in: size, sideInsets: sides).frame.maxX <= 382)
         for relative: CGFloat in [-1, 0, 1] {

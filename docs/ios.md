@@ -54,12 +54,14 @@ Launch arguments put the app in a state for a screenshot or a test:
 | `-CraSummarize YES` | Summarizes the first page once it has loaded |
 | `-CraSyncDir <folder>` or `demo` | The folder the Mac's sidebar syncs into, or a made-up sidebar |
 | `-CraHoldConnecting YES` | Keeps the Spaces sheet on "Connecting", for a screenshot |
+| `-CraDemoSpaces <n>` | With `-CraSyncDir demo`, n more empty Spaces, more than the icon bar fits (#885) |
 | `-CraHoldPill YES` | Keeps the New Tab pill pressed in, as under a finger |
 | `-CraSyncDelay <seconds>` | Makes each read of the synced sidebar take that long |
 | `-CraFakeVoice <text>` | What voice search hears instead of the microphone |
 | `-CraShowVoice YES` | Holds the voice overlay up, for a screenshot |
 | `-CraOnboarding YES` | Shows onboarding on a test's data folder |
 | `-CraCountHaptics YES` | Counts each haptic tick in its control's accessibility value and a hidden `haptic-count` element, for UI tests; pull to refresh has no control, so it only adds to the total |
+| `-CraTraceNewTabDrawer YES` | Keeps the new tab drawer's rise, field morph, material and side-button state in hidden `new-tab-drawer-trace` and `new-tab-drawer-drag-trace` elements, for UI tests |
 
 Writing a UI test (`iOS/CraUITests`): pages are `data:` addresses passed with `-CraOpenURL`, so
 no test needs the network. The exceptions are the tests that need a real http(s) page (`PopupTests`' form POSTs, `PlainHTTPTests`, `CertificateTests`, `ExternalLinkTests`, `TabSwitcherIconTests`):
@@ -109,6 +111,13 @@ Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <t
 ### On the iPhone Duo
 
 On the Duo, the Spaces sheet's backgrounds (sync intro, Connecting, share prompt, icon bar) run under the status column, while its content stays in the safe area.
+
+The open Duo is treated like a small iPad (#866, Victor's call on 0xJeu's proposal, 27 Nov 2026), decided by
+`MobileScreenClass` (an iPhone whose screen's short side is at least 600 pt is `wide`): App Settings and the App Icon
+picker open at full height, the bottom bar's tab and menu buttons keep within 540 pt in the middle, the onboarding
+Next button and the Spaces buttons are no wider than 540 pt (SheetHost's cap), and the tab switcher stays a carousel
+laid out as on the widest iPhone (440 pt) in the middle of the screen. The closed Duo keeps its status icons following
+the page, and neither screen has a status band. iPads and iPhones keep their layouts.
 
 On the closed screen, the search field and the tab switcher’s cards stay left of the status column; the rule applies only to a portrait-shaped window with a side inset, so iPhones keep their layout.
 

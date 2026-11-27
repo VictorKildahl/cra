@@ -1,0 +1,36 @@
+# promise: #868
+# Air Traffic Control on a link a page opens in a new tab (#868, past Arc: Arc's routes were measured on links from
+# other apps and, since #421, on typed URLs): the new tab goes to the route's space and the window follows it, the
+# page that opened it stays. A link straight to the routed address is routed as its tab is made; one through a
+# redirect when the redirect lands. A link that matches no route opens where it was clicked, as before.
+# Home holds the opener; the route sends n=routed to Work.
+budget rss=700 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "defaultLinkDestination": {"littleWindow": {}}, "linkRoutes": [{"id": "E0000000-0000-0000-0000-000000000001", "match": "contains", "text": "n=routed", "destination": {"space": {"_0": "A0000000-0000-0000-0000-000000000002"}}}]}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://open?url=${PAGE}?n=home
+wait 2
+cra://debug?browserWindows=start
+expect-log Cra browser windows start: kind=normal space=Home .*open=\S*n=home 
+
+# A link with no route: a new tab in Home.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=plain'))","userGesture":true}
+wait 2
+cra://debug?browserWindows=plain
+expect-log Cra browser windows plain: kind=normal space=Home .*open=\S*n=plain 
+
+# A link straight to the routed address: Work, with the tab in front; Home keeps its tabs.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?n=routed'))","userGesture":true}
+wait 2
+cra://debug?browserWindows=direct
+expect-log Cra browser windows direct: kind=normal space=Work .*tabs=\[\S*n=routed\] open=\S*n=routed 
+
+# Through a redirect (its own address matches no route): Work once it lands. Home shows no tab after the routed
+# one left it (the window followed it, as Move to Space does), so a new page there opens the link.
+cra://action/previousSpace
+wait 1
+cra://open?url=${PAGE}?n=home-again
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${ORIGIN}/redirect?to=%2Fpage.html%3Fn%3Drouted-hop'))","userGesture":true}
+wait 2
+cra://debug?browserWindows=hop
+expect-log Cra browser windows hop: kind=normal space=Work .*open=\S*n=routed-hop 

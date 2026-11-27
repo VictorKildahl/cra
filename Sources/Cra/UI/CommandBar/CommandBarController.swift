@@ -79,6 +79,7 @@ final class CommandBarController {
     }
 
     var placeholder: String {
+        if case .site(let site)? = scope { return site.placeholder }
         if scope != nil { return "Search…" }
         switch mode {
         case .newTab: return "Search or Enter URL…"
@@ -206,6 +207,13 @@ final class CommandBarController {
         scope = offered
         pushFieldText("")
         return true
+    }
+
+    /// ⌥⌘G with ChatGPT in the Command Bar on (#828): the bar, just opened, scoped to ChatGPT, as Arc's is.
+    func openScoped(to site: SiteSearch) {
+        scopeTyped = ""
+        scope = .site(site)
+        pushFieldText("")
     }
 
     /// Backspace on the empty scoped field: back to what was typed, the hint showing again.

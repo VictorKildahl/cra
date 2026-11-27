@@ -1,0 +1,54 @@
+# promise: #845
+# The filter lists' scriptlets and procedural hiding (#845): YouTube's in-stream ads ride in the page's own player
+# data and X's promoted posts are ordinary posts with "Ad" in them, so no network or stylesheet rule reaches them.
+# A list's `##+js(…)` rules run in the page's own world before its scripts (json-prune, set-constant, the player
+# request's response pruned), its procedural rules hide posts by their text, a `trusted-` scriptlet from a list
+# Cra doesn't trust never runs, and pausing the site turns it all off. A page already open when the list comes in
+# runs it from its next load: the engine installs the new document-start script in open pages.
+port 47136
+arg --host-resolver-rules=MAP video.example 127.0.0.1, MAP social.example 127.0.0.1
+pace 0.5
+budget rss=900 stalls50=30
+
+cra://open?url=http://video.example:47136/video-player.html?n=player
+expect-log loaded video\.example \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'before:'+inlineAds+','+parsedAds+','+fetchedAds"}
+expect-log Cra cdp Runtime.evaluate .*"value":"before:2,3,2"
+
+cra://debug?blockLists=http://127.0.0.1:47136/blocklist-page-rules.txt
+expect-log block lists: [0-9]+ domains, 1 added list.*, 3 scriptlets, 2 procedural
+expect-log filter page scripts: scriptlets on
+cra://debug?cdp=Page.reload&params={}
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after:'+inlineAds+','+parsedAds+','+fetchedAds+','+untrusted"}
+expect-log Cra cdp Runtime.evaluate .*"value":"after:0,0,0,undefined"
+
+# Paused on this site: the page's data comes back whole; resumed, the ads go again.
+cra://debug?toggleSiteFilters=http://video.example:47136/video-player.html
+wait 1
+cra://debug?cdp=Page.reload&params={}
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'paused:'+inlineAds+','+parsedAds+','+fetchedAds"}
+expect-log Cra cdp Runtime.evaluate .*"value":"paused:2,3,2"
+cra://debug?toggleSiteFilters=http://video.example:47136/video-player.html
+wait 1
+cra://debug?cdp=Page.reload&params={}
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'resumed:'+inlineAds+','+parsedAds+','+fetchedAds"}
+expect-log Cra cdp Runtime.evaluate .*"value":"resumed:0,0,0"
+
+# A timeline whose posts arrive after the page loads: the promoted ones are hidden, the others (one with "Ad" only
+# inside a word) stay.
+cra://open?url=http://social.example:47136/social-timeline.html?n=feed
+expect-log loaded social\.example \(HTTP 200\)
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>['ad1','p1','p2','sponsored-wrap'].map(id=>id+':'+v(document.getElementById(id))).join(' '))(e=>getComputedStyle(e).display!=='none')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"ad1:false p1:true p2:true sponsored-wrap:false"
+
+# The list gone: nothing hidden, nothing pruned.
+cra://debug?blockLists=none
+expect-log block lists: [0-9]+ domains, 0 added lists
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>['ad1','sponsored-wrap'].map(id=>id+':'+v(document.getElementById(id))).join(' '))(e=>getComputedStyle(e).display!=='none')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"ad1:true sponsored-wrap:true"

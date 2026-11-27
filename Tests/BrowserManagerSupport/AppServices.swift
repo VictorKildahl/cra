@@ -47,6 +47,11 @@ enum TestRoot { case today }
     static let shared = BlockLists()
     func isPaused(url: String) -> Bool { false }
     func style(for host: String) -> String { "" }
+    func procedural(for host: String) -> [String] { [] }
+}
+/// The filter lists' page scripts (#845): no procedural hiding in the harness.
+@MainActor enum FilterPageScripts {
+    static func proceduralExpression(_ selectors: [String]) -> String? { nil }
 }
 
 @MainActor final class SidebarStore {
@@ -59,6 +64,7 @@ enum TestRoot { case today }
             autoPictureInPicture && !autoPictureInPictureOff.contains(URL(string: url)?.host ?? "")
         }
         var shareThemeWithWebsites = true
+        var removesAdblockWarnings = false
         var blockCookieBanners = false
         var blockAdsAndTrackers = true
         var littleWindowOnOptionCommandClick = false
@@ -68,7 +74,11 @@ enum TestRoot { case today }
         var backgroundTabsBelowCurrent = false
         /// Settings ▸ Tabs ▸ "Always keep these sites active" (#458), by host; AppSettings matches subdomains.
         var keepActiveHosts: Set<String> = []
+        /// Settings ▸ Tabs ▸ "Player with artwork" (Discussion #761): only the island reads what plays.
+        var nowPlayingStyle: NowPlayingStyle = .arc
         func keepsActive(url: String) -> Bool { keepActiveHosts.contains(URL(string: url)?.host ?? "") }
+        var defaultLinkDestination: LinkDestination = .littleWindowInUse
+        var linkRoutes: [LinkRoute] = []
     }
     func cookieBannerCSS(item: UUID) -> String? { settings.blockCookieBanners ? "#onetrust-banner-sdk { display: none !important; }" : nil }
     func themeDataCSS(item: UUID, systemDark: Bool) -> String? {
@@ -79,13 +89,30 @@ enum TestRoot { case today }
     func item(_ id: UUID) -> TestItem? { items[id] }
     var focusedSpace = UUID()
     func focusedSpaceID(window: UUID?) -> UUID { focusedSpace }
+    var spaces: Set<UUID> = []
+    func space(_ id: UUID) -> UUID? { (spaces.contains(id) || id == focusedSpace) ? id : nil }
+    var standaloneSpaces: Set<UUID> = []
+    var standaloneWindows: Set<UUID> = []
+    func isStandalone(space id: UUID?) -> Bool { id.map { standaloneSpaces.contains($0) || incognitoItems.contains($0) } ?? false }
+    func isStandalone(window id: UUID?) -> Bool { id.map(standaloneWindows.contains) ?? false || isStandalone(space: focusedSpace) }
+    var pinnedItems: Set<UUID> = []
+    var favoriteItems: Set<UUID> = []
+    func isPinned(_ id: UUID) -> Bool { pinnedItems.contains(id) || favoriteItems.contains(id) }
+    func isFavorite(_ id: UUID) -> Bool { favoriteItems.contains(id) }
     var incognitoItems: Set<UUID> = []
     func isIncognito(item: UUID) -> Bool { incognitoItems.contains(item) }
     var profilePaths: [UUID: String] = [:]
-    func profilePath(item: UUID) -> String? { profilePaths[item] }
+    var spaceProfiles: [UUID: String] = [:]
+    func profilePath(space sid: UUID) -> String? { spaceProfiles[sid] }
+    func profilePath(item: UUID) -> String? {
+        if let path = profilePaths[item] { return path }
+        return itemSpaces[item].flatMap { spaceProfiles[$0] }
+    }
     func profileDirectoryName(item: UUID) -> String { "Default" }
     func profileID(item: UUID) -> UUID? { nil }
-    func spaceID(ofItem: UUID) -> UUID? { nil }
+    var itemSpaces: [UUID: UUID] = [:]
+    func spaceID(ofItem id: UUID) -> UUID? { itemSpaces[id] }
+    var selectedTabPerSpace: [UUID: UUID] = [:]
     func splitContaining(_ id: UUID) -> TestItem? {
         guard let p = items[id]?.parentID, let parent = items[p], parent.isSplit else { return nil }
         return parent
@@ -123,18 +150,54 @@ enum TestRoot { case today }
     private(set) var selections: [UUID] = []
     private(set) var selectedSpaces: [UUID?] = []
     func selectTab(_ id: UUID, in space: UUID? = nil, window: UUID?) {
+        let sid = space ?? itemSpaces[id] ?? focusedSpace
+        focusedSpace = sid
+        selectedTabPerSpace[sid] = id
         selections.append(id)
         selectedSpaces.append(space)
     }
-    func markUnread(_ id: UUID, _ unread: Bool) {}
+    var unreadItems: Set<UUID> = []
+    func markUnread(_ id: UUID, _ unread: Bool) {
+        if unread { unreadItems.insert(id) } else { unreadItems.remove(id) }
+    }
+    var movedTabs: [(id: UUID, toSpace: UUID, followed: Bool)] = []
+    func moveTab(_ id: UUID, toSpace sid: UUID) {
+        guard items[id]?.isTab == true, space(sid) != nil else { return }
+        itemSpaces[id] = sid
+        movedTabs.append((id, sid, false))
+    }
+    func selectedTabID(window: UUID?) -> UUID? { selectedTabPerSpace[focusedSpace] }
+    /// As the app's: the window follows only the tab it has selected; any other tab moves on its own.
+    func rerouteTab(_ id: UUID, toSpace sid: UUID, window: UUID?) {
+        guard items[id]?.isTab == true, !isPinned(id), space(sid) != nil, !isStandalone(space: sid) else { return }
+        guard selectedTabID(window: window) == id else { return moveTab(id, toSpace: sid) }
+        let from = itemSpaces[id]
+        let previous = items[id]?.tab?.activeTabBeforeCreationID
+        itemSpaces[id] = sid
+        if let from, from != sid, selectedTabPerSpace[from] == id {
+            selectedTabPerSpace[from] = previous.flatMap { itemSpaces[$0] == from ? $0 : nil }
+        }
+        focusedSpace = sid
+        selectedTabPerSpace[sid] = id
+        movedTabs.append((id, sid, true))
+    }
     @discardableResult
     func createTab(url: String, in space: UUID? = nil, select: Bool = false,
                    parent: UUID? = nil, index: Int? = nil, window: UUID? = nil, referrer: UUID? = nil) -> TestItem {
-        let item = TestItem(id: UUID(), tab: TestTab(url: url))
+        let sid = space ?? focusedSpace
+        spaces.insert(sid)
+        let previous = selectedTabPerSpace[sid]
+        let item = TestItem(id: UUID(), tab: TestTab(url: url, activeTabBeforeCreationID: previous))
         items[item.id] = item
+        itemSpaces[item.id] = sid
+        if select {
+            focusedSpace = sid
+            selectedTabPerSpace[sid] = item.id
+        }
         return item
     }
 }
+typealias AppSettings = SidebarStore.Settings
 /// The extensions turned on in the Default profile.
 @MainActor final class ExtensionStore {
     struct Entry { let extensionID: String }

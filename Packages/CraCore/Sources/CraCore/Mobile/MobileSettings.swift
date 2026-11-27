@@ -9,7 +9,8 @@ public enum MobileSheetHeight {
 /// Change App Icon quick action open.
 public enum MobileSettingsSheet {
     /// On iPhone Arc Search's half sheet that drags up to full; on iPad the form sheet's full height only,
-    /// where half of it showed two rows and left the rest of the card empty (#674).
+    /// where half of it showed two rows and left the rest of the card empty (#674). `onPad` is any screen that opens
+    /// sheets full (MobileScreenClass.opensSheetsFull): the open iPhone Duo too, where half showed 4–6 rows (#866).
     public static func appSettingsHeights(onPad: Bool) -> [MobileSheetHeight] {
         onPad ? [.large] : [.medium, .large]
     }

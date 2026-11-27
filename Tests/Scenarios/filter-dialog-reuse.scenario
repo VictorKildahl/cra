@@ -1,0 +1,43 @@
+# A hidden consent dialog and an anti-adblock wall must release the page. The same
+# node can later display a legitimate login while the site holds its scroll lock.
+seed settings.json {"hasSeenImportPrompt":true,"blockCookieBanners":true,"customBlocklists":["https://easylist-downloads.adblockplus.org/antiadblockfilters.txt"]}
+arg --host-resolver-rules=MAP easylist-downloads.adblockplus.org ~NOTFOUND
+pace 0.5
+cra://open?url=${ORIGIN}/filter-dialog.html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[document.querySelector('dialog').open,getComputedStyle(notice).display,getComputedStyle(document.documentElement).overflowY,document.elementFromPoint(25,25).id].join(',')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"false,none,auto,next"
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mousePressed","button":"left","clickCount":1,"x":25,"y":25}
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseReleased","button":"left","clickCount":1,"x":25,"y":25}
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'link:'+location.hash"}
+expect-log Cra cdp Runtime.evaluate .*"value":"link:#story"
+cra://debug?cdp=Input.dispatchMouseEvent&params={"type":"mouseWheel","x":80,"y":80,"deltaX":0,"deltaY":400}
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'scrolled:'+(scrollY>0)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"scrolled:true"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"notice.firstChild.data='Sign in to continue';notice.setAttribute('aria-modal','true');notice.setAttribute('role','dialog')"}
+cra://debug?cdp=Runtime.evaluate&params={"expression":"[getComputedStyle(notice).display,getComputedStyle(document.documentElement).overflowY].join(',')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"block,hidden"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"notice.removeAttribute('aria-modal');notice.textContent='Please turn off your ad blocker'"}
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'hidden-again:'+getComputedStyle(notice).display"}
+expect-log Cra cdp Runtime.evaluate .*"value":"hidden-again:none"
+# Recycle the same node while detached in one JavaScript task.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(()=>{const recycled=notice;recycled.remove();recycled.textContent='Cookie preferences';document.body.append(recycled)})()"}
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'reused:'+getComputedStyle(notice).display"}
+expect-log Cra cdp Runtime.evaluate .*"value":"reused:block"
+# Native modal warning split by inline emphasis, then a genuine modal in its place.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"notice.remove();const wall=document.createElement('dialog');wall.id='wall';wall.innerHTML='<p>Please <b>disable the</b> ad blocker in your browser to continue reading.</p>';document.body.append(wall);wall.showModal()"}
+cra://debug?cdp=Runtime.evaluate&params={"expression":"['native',wall.open,getComputedStyle(document.documentElement).overflowY].join(',')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"native,false,auto"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"wall.innerHTML='<form><input aria-label=Login></form>';wall.showModal()"}
+cra://debug?cdp=Runtime.evaluate&params={"expression":"['login',wall.matches(':modal'),getComputedStyle(wall).display,getComputedStyle(document.documentElement).overflowY].join(',')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"login,true,block,hidden"
+# A cookie manager classifies an already open dialog after the initial inspection.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"wall.close();wall.remove();scrollTo(0,0);const late=document.createElement('dialog');late.textContent='Options';document.body.append(late);late.showModal()"}
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"['before',late.matches(':modal'),document.elementFromPoint(25,25)?.id==='next'].join(',')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"before,true,false"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"late.classList.add('cc-window')"}
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"['after',late.open,document.elementFromPoint(25,25)?.id].join(',')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"after,false,next"

@@ -104,6 +104,14 @@ class BrowserTestCase: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts[title].waitForExistence(timeout: 20), "page \(title) never showed", file: file, line: line)
     }
 
+    /// Waits until `element` reports `value`: a switch may move its look over a moment.
+    func waitForValue(_ value: String, of element: XCUIElement, timeout: TimeInterval = 5,
+                      file: StaticString = #filePath, line: UInt = #line) {
+        let met = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [met], timeout: timeout), .completed,
+                       "\(element) still says \(element.value ?? "nothing")", file: file, line: line)
+    }
+
     func closeShareSheet(openedFrom button: XCUIElement) {
         let activity = app.otherElements["ActivityListView"]
         let navigation = app.navigationBars["UIActivityContentView"]
@@ -1495,7 +1503,7 @@ final class IncognitoTests: BrowserTestCase {
         app.buttons["search-incognito"].tap()
         XCTAssertTrue(app.staticTexts["incognito-note"].waitForExistence(timeout: 3))
         XCTAssertEqual(app.staticTexts["incognito-note"].label, "You're browsing Incognito")
-        XCTAssertEqual(app.buttons["search-incognito"].value as? String, "On")
+        waitForValue("On", of: app.buttons["search-incognito"])
         sleep(1)
         keep("incognito")
         field.typeText(Self.page("Secret") + "\n")
@@ -1623,6 +1631,43 @@ final class SpacesTests: BrowserTestCase {
         app.buttons["space-icon-Personal"].tap()
         app.buttons["space-tab-Inbox"].tap()
         waitForPage("Inbox")
+    }
+
+    // promise: #885
+    /// Twelve Spaces' icons are wider than a phone: the bar scrolls and the sheet stays on screen,
+    /// its title at the 29 pt margin and its close button in the corner. The bar was a row that
+    /// didn't scroll, so on an iPhone 13 mini with eight Spaces the whole sheet grew past both edges,
+    /// cutting off the start of every row and the close button.
+    func testManySpacesKeepTheSheetOnScreen() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraSyncDir", "demo", "-CraDemoSpaces", "10"])
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["bar-spaces"].waitForExistence(timeout: 5))
+        app.buttons["bar-spaces"].tap()
+        let noThanks = app.buttons["share-prompt-no-thanks"]
+        XCTAssertTrue(noThanks.waitForExistence(timeout: 5))
+        noThanks.tap()
+        let title = app.staticTexts["space-title"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        sleep(1)
+        keep("many-spaces")
+        let window = app.windows.firstMatch.frame
+        XCTAssertEqual(title.frame.minX - window.minX, 29, accuracy: 2, "the title starts at the sheet's margin")
+        let close = app.buttons["spaces-close"]
+        XCTAssertTrue(close.exists)
+        XCTAssertLessThanOrEqual(close.frame.maxX, window.maxX + 0.5, "the close button is on screen")
+        XCTAssertGreaterThan(close.frame.minX, window.midX)
+        let first = app.buttons["space-icon-Personal"]
+        XCTAssertTrue(first.isHittable, "the open Space's icon is in view")
+        XCTAssertGreaterThanOrEqual(first.frame.minX, window.minX)
+        // The last Space, picked by swiping the pages, brings its icon into view.
+        for _ in 0..<11 { app.swipeLeft() }
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == 'Extra 10'")).firstMatch.waitForExistence(timeout: 3))
+        sleep(1)
+        let last = app.buttons["space-icon-Extra 10"]
+        XCTAssertTrue(last.isHittable, "the open Space's icon scrolls into view")
+        XCTAssertLessThanOrEqual(last.frame.maxX, window.maxX)
+        XCTAssertEqual(title.frame.minX - window.minX, 29, accuracy: 2)
     }
 
     // promise: #670
@@ -1764,7 +1809,8 @@ final class SpacesTests: BrowserTestCase {
     }
     """#
 
-    /// Without iCloud the Spaces view says where Spaces come from.
+    /// Without iCloud the Spaces view says where Spaces come from, and where the Mac's switch is.
+    // promise: #897
     func testWithoutSyncTheSpacesViewExplains() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
         waitForPage("First")
@@ -1782,6 +1828,10 @@ final class SpacesTests: BrowserTestCase {
         app.buttons["sync-have-mac"].tap()
         XCTAssertTrue(app.staticTexts["sync-detail-title"].waitForExistence(timeout: 3))
         XCTAssertEqual(app.staticTexts["sync-detail-title"].label, "Turn on Sync on your Mac")
+        // Sync is on the Mac's first Settings tab, not General (#897).
+        let steps = app.staticTexts["sync-detail-body"].label
+        XCTAssertTrue(steps.contains("on its first tab (the one with your name), turn on Sync with iCloud"), steps)
+        XCTAssertFalse(steps.contains("General"), steps)
         app.buttons["sync-go-back"].tap()
         app.buttons["sync-no-mac"].tap()
         XCTAssertTrue(app.staticTexts["Get Cra on your computer first"].waitForExistence(timeout: 3))

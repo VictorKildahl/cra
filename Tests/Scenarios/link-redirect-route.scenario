@@ -1,0 +1,56 @@
+# promise: #868
+# Air Traffic Control routes a page's new-tab links through their redirect chains (HTTP 302 and JS
+# location.replace) into the configured space and its profile (#868) while preserving the originating space's tab.
+# Home is on Default, Work on its own profile; a route sends n=routed to Work.
+budget rss=900 stalls50=20
+arg --host-resolver-rules=MAP nas.local 127.0.0.1
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "defaultLinkDestination": {"littleWindow": {}}, "linkRoutes": [{"id": "E0000000-0000-0000-0000-000000000001", "match": "contains", "text": "n=routed", "destination": {"space": {"_0": "A0000000-0000-0000-0000-000000000002"}}}]}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Home","emoji":"🏠","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Work","emoji":"💼","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000002"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000002","name":"Work"}]}
+pace 0.5
+
+# Open the originating sheet tab in Home (Default profile).
+cra://open?url=${LOCALNET}/page.html?n=sheet
+expect-log loaded nas\.local \(HTTP 200\)
+wait 1
+cra://debug?browserWindows=start
+expect-log Cra browser windows start: kind=normal space=Home .*open=\S*n=sheet
+
+# 1. Popup link with HTTP 302 redirect (unmatched initially via percent-encoded query) routes to Work's profile.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${ORIGIN}/redirect?to=%2Fpage.html%3Fn%3Drouted302'))","userGesture":true}
+expect-log "GET /page\.html\?n=routed302
+wait 2
+cra://debug?currentSpace=after-302
+expect-log current space after-302: Work profile=Work$
+cra://debug?browserWindows=after-302
+expect-log Cra browser windows after-302: kind=normal space=Work .*open=\S*n=routed302
+
+# Home still retains its originating sheet tab.
+cra://action/previousSpace
+wait 1
+cra://debug?browserWindows=back-home-1
+expect-log Cra browser windows back-home-1: kind=normal space=Home .*open=\S*n=sheet
+
+# 2. Popup link with JS location.replace (?go=) redirect within grace window routes to Work's profile.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"String(!!window.open('${PAGE}?go=%2Fredirect%3Fto%3D%252Fpage.html%253Fn%253Droutedjs'))","userGesture":true}
+expect-log "GET /page\.html\?n=routedjs
+wait 2
+cra://debug?currentSpace=after-js
+expect-log current space after-js: Work profile=Work$
+cra://debug?browserWindows=after-js
+expect-log Cra browser windows after-js: kind=normal space=Work .*open=\S*n=routedjs
+
+# Home still retains its originating sheet tab.
+cra://action/previousSpace
+wait 1
+cra://debug?browserWindows=back-home-2
+expect-log Cra browser windows back-home-2: kind=normal space=Home .*open=\S*n=sheet
+
+# 3. The settled sheet's own navigation to a routed address stays in its tab in Home, as in Arc: Air Traffic
+# Control moves only a tab a link has just opened.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(location.href='${PAGE}?n=routedsettled','navigated')","userGesture":true}
+expect-log "GET /page\.html\?n=routedsettled
+wait 2
+cra://debug?currentSpace=after-settled
+expect-log current space after-settled: Home profile=
+cra://debug?browserWindows=after-settled
+expect-log Cra browser windows after-settled: kind=normal space=Home .*tabs=\[\S*n=routedsettled\] open=\S*n=routedsettled

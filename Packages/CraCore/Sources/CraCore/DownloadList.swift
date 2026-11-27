@@ -89,6 +89,23 @@ public enum DownloadList {
         live.contains { $0.running && ($0.paused || now.timeIntervalSince($0.moved) < stuckAfter) }
     }
 
+    /// How a download that Chromium has gone quiet about ended, by its file on disk.
+    public enum Ending: Equatable, Sendable { case complete, cancelled }
+
+    /// What the file says about a running download Chromium hasn't reported on for a while
+    /// (MainWindowController's watchdog): nil while it may still be running. `partialBesideIt` is
+    /// `<path>.crdownload`, `size` the file at `path` (nil when there is none).
+    ///
+    /// No file means cancelled only on CEF, which cancels a download without a word when its tab
+    /// closes and writes straight to the file. The engine reports every cancel itself, and while a
+    /// download Safe Browsing may check runs it writes to "Unconfirmed <n>.crdownload" instead, so
+    /// neither file is there: a download that got no bytes for a few seconds read as Cancelled (#895).
+    public static func quietEnding(total: Int64, partialBesideIt: Bool, size: Int64?, chromiumEngine: Bool) -> Ending? {
+        if partialBesideIt { return nil }
+        guard let size else { return chromiumEngine ? nil : .cancelled }
+        return total > 0 && size >= total ? .complete : nil
+    }
+
     /// A row in either list.
     public enum Listed: Identifiable, Equatable, Sendable {
         case finished(Entry)

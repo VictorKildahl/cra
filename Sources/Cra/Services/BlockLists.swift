@@ -39,6 +39,8 @@ final class BlockLists {
 
     @ObservationIgnored var hidingChanged: (() -> Void)?
     @ObservationIgnored private var hiding = DesktopHidingRules(lines: [])
+    /// The lists' procedural hiding (#845), by host; their scriptlets go to FilterPageScripts.
+    @ObservationIgnored private var procedural = ProceduralTable()
     @ObservationIgnored private let styles = NSCache<NSString, NSString>()
     @ObservationIgnored private var personal = ""
     @ObservationIgnored private var bundledSources: [String] = []
@@ -95,7 +97,13 @@ final class BlockLists {
         return value
     }
 
-    static var folder: URL {
+    /// The procedural selectors a page on `host` runs (#845): none while the site is paused.
+    func procedural(for host: String) -> [String] {
+        if pausedHosts.contains(host.lowercased()) { return [] }
+        return procedural.selectors(for: host)
+    }
+
+    nonisolated static var folder: URL {
         let url = AppPaths.supportDir.appendingPathComponent("Blocklists", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
@@ -236,6 +244,10 @@ final class BlockLists {
             let candidate = AcceptedFilters(domains: CustomBlocklist.merged([base] + sources.map(\.domains)),
                                             hiding: adRegions + sources.flatMap(\.hidingRules),
                                             rules: useNetwork ? DesktopNetworkRules.compile(domains: hosts, lines: lines) : [])
+            // WebKit pages get the same network rules as content-blocker lists (WebKitContentBlocking). Chromium's
+            // limit of 30,000 isn't WebKit's, so they get the whole selection, on the CEF engine too.
+            let webKitLists = WebKitContentRules.build(from: useNetwork ? candidate.rules : DesktopNetworkRules.compile(
+                domains: lines.isEmpty ? candidate.domains : CustomBlocklist.merged([base] + sources.map(\.plainDomains)), lines: lines))
             var active = candidate
             var notice: String?
             let count = candidate.rules.count
@@ -254,11 +266,27 @@ final class BlockLists {
             let usage: (rules: Int, lists: Int)? = notice == nil ? (total, listsInUse) : nil
             let domains = active.domains
             let hiding = DesktopHidingRules(lines: active.hiding)
+            // Scriptlets and procedural hiding (#845), each list with its own trust (`trusted-` scriptlets and
+            // `:style()` only from uBlock Origin's lists and My filters).
+            var scriptlets = ScriptletTable()
+            var procedural = ProceduralTable()
+            for list in lists {
+                let trusted = Scriptlets.isTrusted(source: list.url)
+                scriptlets.add(lines: list.hidingRules, trusted: trusted)
+                procedural.add(lines: list.hidingRules, trusted: trusted)
+            }
+            scriptlets.add(lines: user.hidingRules, trusted: true)
+            procedural.add(lines: user.hidingRules, trusted: true)
+            let scriptletTable = scriptlets.json(paused: pauses)
+            let pageRuleCounts = (scriptlets.count, procedural.count)
             DispatchQueue.main.async { [self] in
                 guard publishedKey == key else { return }
                 inUse = usage
                 self.hiding = hiding
+                self.procedural = procedural
                 styles.removeAllObjects()
+                FilterPageScripts.install(table: scriptletTable)
+                WebKitContentBlocking.shared.set(webKitLists.lists, rules: webKitLists.rules)
                 hidingChanged?()
             }
             let rules = active.rules
@@ -284,7 +312,8 @@ final class BlockLists {
                 }
             }
             CraLog.note("block lists: \(domains.count) domains, \(lists.count) added \(lists.count == 1 ? "list" : "lists")"
-                + (usage.map { ", \($0.rules) rules in use from \($0.lists)" } ?? ""))
+                + (usage.map { ", \($0.rules) rules in use from \($0.lists)" } ?? "")
+                + ", \(pageRuleCounts.0) scriptlets, \(pageRuleCounts.1) procedural")
         }
     }
 

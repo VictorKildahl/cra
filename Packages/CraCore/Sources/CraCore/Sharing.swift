@@ -168,7 +168,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
     /// On/off, choice and number settings: the ones a report may name when they differ from the default.
     public static let reportedSettings: Set<String> = [
         "askOnPage", "autoArchive", "autoArchiveEnabled", "autoPictureInPicture", "backgroundTabsBelowCurrent", "adAwayEnabled", "anudeepEnabled", "personalFiltersEnabled", "blockCookieBanners",
-        "boostsEnabled", "calendarHoverPreview", "commandBarCurrentSpaceOnly", "calendarMeetingLink", "calendarTimeToNextMeeting", "chromeEngine",
+        "boostsEnabled", "calendarHoverPreview", "commandBarCurrentSpaceOnly", "calendarMeetingLink", "calendarTimeToNextMeeting", "chatGPTInCommandBar", "chromeEngine",
         "crashReports", "defaultLinkDestination", "edgeToEdgeContent", "editAddressInPlace", "favoriteLogoOutline", "favoritePreviews", "fingerprintingProtection", "fiveSecondPreviews",
         "folderPreviews", "hapticFeedbackOnReorder", "httpsOnly", "instantLinks", "keepInMenuBar", "littleWindowArchiveAfter",
         "littleWindowOnOptionCommandClick", "notionCalendarPreviews", "outlookCalendarPreviews", "outlookMailPreviews", "littleWindowShortcutEverywhere", "liveCalendar", "mediaLibraryEnabled", "newTabButtonAtTop", "newTabsAtTop",
@@ -182,12 +182,13 @@ public struct UsageStats: Codable, Equatable, Sendable {
 
     /// Lists, folders, sites and one-time marks: never in a report. Sharing itself is always on
     /// when a report goes out. `autoHideToolbar`, `autoHideLittleWindowToolbar`, `autoHidePeekToolbar`,
-    /// `commandBarSiteColor`, `sidebarSide`, `edgeToEdgeRoundedCorners`, `pageMargin`, `translucentSidebar` and `nowPlayingTint` are here because a feature Arc never had adds nothing to what a report says (CONTRIBUTING.md).
+    /// `commandBarSiteColor`, `sidebarSide`, `edgeToEdgeRoundedCorners`, `pageMargin`, `translucentSidebar`, `nowPlayingTint` and `nowPlayingStyle` are here because a feature Arc never had adds nothing to what a report says (CONTRIBUTING.md).
     public static let unreportedSettings: Set<String> = [
         "developerHosts", "disabledDefaultDeveloperHosts", "autoPictureInPictureSites", "keepActiveSites", "linkRoutes", "mediaFolders", "mediaHidden",
         "downloadLocations", "newDocumentApps", "profileAutoArchive", "hasSeenImportPrompt", "toolbarDefaultMigrated", "newTabButtonDefaultMigrated", "commandBarScopeMigrated",
         "autoArchiveDays", "shareUsageStats", "askedToShare", "autoHideToolbar", "autoHideLittleWindowToolbar", "autoHidePeekToolbar",
-        "commandBarSiteColor", "sidebarSide", "customBlocklists", "disabledCustomBlocklists", "edgeToEdgeRoundedCorners", "pageMargin", "translucentSidebar", "nowPlayingTint",
+        "commandBarSiteColor", "sidebarSide", "customBlocklists", "disabledCustomBlocklists", "strictListsVersion", "edgeToEdgeRoundedCorners", "pageMargin", "translucentSidebar", "nowPlayingTint",
+        "nowPlayingStyle",
     ]
 
     public static func changedSettings(_ settings: AppSettings) -> [String: String] {

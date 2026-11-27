@@ -49,7 +49,8 @@ or Arc-only service), per CONTRIBUTING.md.
 | GitHub live folders: pull request card | Hover a live PR row; Previews ▸ GitHub Pull Requests | done | Snapshot title, draft, labels, tasks, comments and updated time; checks fetched once per revision on hover through the space session. Arc binary has Checks/FailingCheck and pullRequestShowAllFailures (24 Nov 2026). No row glyph or review state. |
 | Join Meeting ⌃⌘J | Shortcuts | done | The call on now, else the next one today, from a Live Calendar favorite. |
 | Music notes on a playing favorite | A favorite on a music site, while it plays | done | Core Animation notes rise from the playing icon's top edge and stop when the sound pauses. As in Arc 1.172.2 (live, 11–12 Nov 2026) they keep floating on a muted tab and with Reduce Motion on. Compared side by side with Arc in full windows at 1x and 2x, light and dark spaces, top row and lower rows; light notes use 30% black, dark notes 80% white. |
-| Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | done | Export Diagnostics…, Open Task Manager (Chrome's), Reveal Cra Data, Copy Cra Info; Record Trace is Arc-internal. |
+| Troubleshooting menu | Help ▸ Troubleshooting: Record Trace, Open Task Manager, Reveal Arc Data, Copy Arc Info | done | Export Diagnostics…, Open Task Manager (Chrome's), Reveal Cra Data, Copy Cra Info; Record Trace is Arc-internal. Open Task Manager has no shortcut in Arc 1.174.3 (its MainMenu.nib; Chrome binds ⇧⎋ only off the Mac); in Cra it opens with no tab in front too, from any open page (#855), and Settings ▸ Shortcuts can give it one. |
+| Page zoom | View ▸ Zoom In / Zoom Out / Zoom to Actual Size (⌘+ ⌘− ⌘0): Chrome's steps (100 → 110 → 125 %), each one shown as a toast at the page's top right ("125%", "100%"), gone after about 4.9 s or a click | done | Measured in Arc 1.174.3 (26 Nov 2026): the same ShinyToast as every other toast; no lasting badge in the address bar or sidebar field. `PageZoomSteps` (CraCore), `page-zoom-toast` scenario (#856). |
 | Help menu | Getting Started, Release Notes, Contact the Team, Visit Help Center, Restore Data | done | Cra Help (Arc's Help Center and Getting Started guide), Release Notes, Report an Issue… (Contact the Team), Essential Keyboard Shortcuts, Troubleshooting ▸ Task Manager / Reveal Data / Copy Info. *skip*: Restore Data and Export Arc Notes (Arc's account and Notes), Record Trace (chrome://tracing is a developer tool). |
 | Ad blocker upsell card, Account, Sign Out, Send to Dia, Share Space | | *skip* | Account/cloud. |
 | Membership card, Gift Arc to a Friend | Settings ▸ Account | done (Cra's own) | Settings' first tab, named after the user like Arc's (GitHub #372): a member card made on the Mac (macOS name, a nickname, EARLY '26, a months stamp in the first year, then anniversaries, the day Cra first ran), its share, save and copy buttons, the default-browser banner, and "Share Cra with a Friend", whose sheet copies or shares crabrowser.app tagged `utm_campaign=share`. No account, server or gift unlocks. |
@@ -57,7 +58,7 @@ or Arc-only service), per CONTRIBUTING.md.
 | Max: 5-Second Previews | Settings ▸ Max | done | Arc's hover cards on the Mac's Apple Intelligence: Arc's links on Google, X and Hacker News, or Shift on any link (the small card within the site); Arc's prompt, card, timing and share menu (arc-reverse-engineering.md). |
 | Max: Ask on Page | ⌘F, Settings ▸ Max | done | Arc's find-or-ask card on the Mac's Apple Intelligence (#393): typing finds, Ask asks about the page with Arc's prompt, quotes with Find on Page, "This page was long, so I read the first N%." (arc-reverse-engineering.md). |
 | Max: Instant Links | ⌘T, Settings ▸ Max | done | Shift-Return on a search in ⌘T, on the Mac's Apple Intelligence (#407): the "Searching the web for you…" row with Arc's spinning flower, then the top Google results as tabs, a split or a folder, placed as Arc places them. Only the queries leave the Mac, to the search engine. Differences: counts the phrase states are honoured (Arc ignores them), only the top result opens otherwise (Arc often opens every result on the page), a split holds at most 4 panes, a model that fails falls back to searching the phrase as typed, and there is no Brave fallback: when Google's page can't be read Cra opens Google's results page for that search (one tab, whatever the count), and an incognito space or another engine opens that engine's results page, one per search (arc-reverse-engineering.md). |
-| Max: ChatGPT in the Command Bar, New ChatGPT Message ⌥⌘G | Settings ▸ Max | *skip* | Cloud AI partner. Instant Links, Ask on Page, Tidy Tabs/Titles/Downloads and 5-Second Previews on-device. |
+| Max: ChatGPT in the Command Bar, New ChatGPT Message ⌥⌘G | ⌘T, ⌥⌘G, Settings ▸ Max | done | Victor asked for it as in Arc (#828, 27 Nov 2026). Off by default; "chatg" + Tab scopes ⌘T to ChatGPT ("Ask ChatGPT  Tab", pill in Arc's #75A99C, "Send a Message…"), a question gets the "Ask ChatGPT" row third, ⌥⌘G opens the bar scoped (the plain bar when off). The message opens chatgpt.com/?q= as a new tab, as a site search does; Cra itself sends nothing to OpenAI. Measured live on Arc 1.174 (arc-reverse-engineering.md). Arc 1.174's own Return in that scope opened nothing in two tries (presumably a remote gate), so where it opens follows Arc's other site searches. |
 
 ## 2. Menu bar and shortcuts
 
@@ -114,7 +115,7 @@ Privacy and Extensions follow Advanced. Tabs, Plugins and Performance have no ta
 |---|---|
 | General | Previews Settings… lists all seven of Arc's previews in its order (#376). Outlook Mail and Calendar read with the page's own sign-in (a hidden Outlook page's own service requests), not Arc's Microsoft Graph sign-in; Notion Calendar shows the profile's Google calendar, as Arc's does. Live Calendar in the Calendar favorite's menu, as in Arc; Block Cookie Banners done, under Privacy |
 | Profiles | "New documents" app (GitHub #375); Search engine, Archive tabs after and Download location are on each profile's card (the engine and the archive time are one setting for all profiles); Privacy, Passwords, Credit Cards, Notifications and Clear Browsing Data done. Every profile can be renamed, Default too (GitHub #666), and Chromium calls it the same: Arc keeps its names in Local State's profile list (`profile.info_cache`), Cra writes each loaded profile's `profile.name` pref, which Chromium copies there (ChromiumProfileNames) |
-| Max | ChatGPT in the Command Bar is out of scope (a cloud AI partner); "Automatically enable future Arc Max features" has nothing to enable yet |
+| Max | "Automatically enable future Arc Max features" has nothing to enable yet |
 | Shortcuts | (The choice per shortcut of Cra or the website done, GitHub #374: Arc's pop-up and lines with Cra for Arc, saved as `priority` on the action's chords in keybindings.json. Each action starts where Cra had it: the formerly reserved ones Prefer Cra, the rest Prefer Websites, not Arc's own per-action defaults. The menu's order, Prefer Cra / Use Both / Prefer Websites, is Arc's `priority` declaration order from the binary, not seen in Arc's open menu. Use Both: a press the page doesn't hand back within 0.5 s counts as kept, Cra shows "Press ⌘W again to Close Tab" with Arc's "Edit the shortcut" and takes the next press while the toast shows; Arc's toast text is built in code, so that sentence is inferred from its comment "<do something> again to <do action>". A page never keeps Quit, Hide, Hide Others or Minimize (Arc measured for ⌘Q and ⌘M), and keeps ⌃⌘F only to enter full screen, as in Arc (GitHub #480, PR #485)) |
 | Links | ("Open Little Arc when clicking on links with ⌥⌘ held" done, GitHub #373, as "⌥⌘-click opens a Little Window". *Deviation, pending Victor:* off by default where Arc's is on, because since 0.1.38 a ⌘⌥-click opens Split View (#298, Chromium 156's split view click) and the switch takes that click over. The click itself isn't measured in Arc; see `LittleWindowTrigger`); Archive Little Windows after done. Cra's own, not in Arc: "⌘-click Expand opens in the tab" (GitHub #380, off by default as Victor asked, 12 Nov 2026), a ⌘-click on a Peek's Expand loads the page in the tab the Peek came from (`PeekExpand`); Split View's "Middle-click a link in a split to add a pane" and "More than four panes in a split" (GitHub #498, both off by default as Victor asked, 18 Nov 2026; `LinkSplitClick.middleClickAddsPane`, `SplitPaneLimit`) |
 | Advanced | Shared Quotes (arc.net); "Show full URL when Toolbar is enabled", "More Settings…" and "Reset Translated-site Prompts" done (GitHub #373); Export Data (Arc's Markdown of every space and tab) isn't in Cra |
@@ -446,11 +447,18 @@ the app's `SpaceCreationView`. Positions are from the sidebar card's top-left, i
   CraCore BoostWheel): the big handle goes where it is dragged, up to 56 pt from the middle of the 133 pt
   dotted square. Its direction is the hue, clockwise from 3 o'clock (red; yellow at 6, cyan at 9, purple
   at 12), its distance the strength (236/248/236 a few points out, 193/163/81 at 56 pt toward half past 4).
-  The small handle trails it by an eighth of a turn at the same distance in a dark shade of that hue
-  (71/88/46 against the colour above), a 2 pt line joins them, and a faint circle through both shows
-  the orbit. Untinted, both are grey (130 and 68) and rest 40 pt out at 3 o'clock, in the brushed grey
-  frame; once tinted, the frame is a ring of every hue in the same order, not one saturation all round
-  (226/104/81 red, 168/244/243 cyan, 141/90/239 purple, read every 15°).
+  The small handle sits an eighth of a turn clockwise at the same distance in a dark shade of that hue
+  (71/88/46 against the colour above) until dragged: either handle can be moved on its own and both
+  change the page, the small one setting the dark pixels' hue (Arc's `secondaryHueOffset`). A 2 pt line
+  joins them, and a faint circle through both shows the orbit.
+  Untinted, both are grey (130 and 68) and rest 40 pt out at 3 o'clock, in the brushed grey
+  frame; once tinted, the frame is a ring of every hue in the same order, not one saturation all round.
+  Matched again on 27 Nov 2026 (PR #889, Elia Orsini, side-by-side screenshots of Arc's editor sampled
+  pixel by pixel): the ring as 25 stops, one every 15° (`BoostWheel.ringGradient`: 235/76/57 at red,
+  209/252/93 at 6, 132/249/240 at 9, 129/55/245 at 12, pre-compensated so SwiftUI's gradient lands on
+  Arc's colours), a 7 pt frame with 16 pt corners over a 28 pt-cornered face, a 4 pt grid of 1 pt dots at 9.5 %
+  black, the ring's colours washed over the face at 6 %, and a hairline round each handle in its own hue,
+  nearly white, instead of a shadow.
 - Advanced color controls: a light popover under its button, arrow up, about 224 pt wide.
 - The Site Control Center's actions are Share, New Boost (a flat brush with a sparkle; tooltip "New
   Boost"), Capture and Capture Full Page. A site with boosts gets a "Boosts" section between Extensions and
@@ -459,8 +467,7 @@ the app's `SpaceCreationView`. Positions are from the sidebar card's top-left, i
   the popover open; on hover a chevron shows at the right end, which opens that boost in the editor. The
   More menu: Clear Cache, Clear Cookies, ─, Manage Boosts…, New Boost…, ─, Manage Extensions…, Add
   Extension…. Cra keeps Copy URL in the second slot where a page can't be boosted (Arc not measured there).
-- Not matched: the code editor's first click in Arc wasn't measured (Cra's now focuses it at once), and
-  the faint colour wash in the middle of Arc's wheel.
+- Not matched: the code editor's first click in Arc wasn't measured (Cra's now focuses it at once).
 
 ## Theme editor: the slider and the dial (Arc 1.173.1, 18 Nov 2026)
 

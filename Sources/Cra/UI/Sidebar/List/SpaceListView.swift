@@ -108,6 +108,8 @@ final class SpaceListView: NSView, NSDraggingSource {
     private var highlightPinned = false
     private var highlightToday = false
     private var dropLineSpec: SidebarListDrop.Line?
+    /// The place the drag was last offered, for its tick (#883).
+    var reorderHaptics = SidebarReorderHaptics<SidebarListDrop.Target>()
     private let topHairline = NSView()
     private let bottomHairline = NSView()
     private var hairlineState = (top: false, bottom: false)
@@ -900,6 +902,39 @@ final class SpaceListView: NSView, NSDraggingSource {
         return nil
     }
 
+    /// Scenarios (cra://debug?reorder=<label>&drag=<id>&path=<row id>:<f>,…, #883): `itemID` dragged over
+    /// each row in turn, `f` of the way down it, offered the place there as `dragUpdated` does. Returns the
+    /// ticks that played and each place ("none" over its own place), or nil when the row isn't shown.
+    static func debugReorder(_ itemID: UUID, path: [(row: UUID, f: CGFloat)], ui: SidebarUIState) -> (ticks: Int, places: [String])? {
+        for l in all.allObjects where l.ui === ui {
+            guard let dragged = l.views[.item(itemID)], dragged.window != nil, !dragged.isHiddenOrHasHiddenAncestor else { continue }
+            let before = SidebarReorderTick.count
+            ui.draggingID = itemID
+            l.reorderHaptics = .init()
+            var places: [String] = []
+            for step in path {
+                guard let row = l.views[.item(step.row)] else { places.append("no row"); continue }
+                let y = row.isFlipped ? row.bounds.height * step.f : row.bounds.height * (1 - step.f)
+                let drop = l.resolve(dragged: itemID, at: l.document.convert(NSPoint(x: row.bounds.midX, y: y), from: row))
+                l.offer(drop)
+                places.append(drop.target.map(debugPlace) ?? "none")
+            }
+            ui.listDrop = nil
+            ui.draggingID = nil
+            l.reorderHaptics = .init()
+            return (SidebarReorderTick.count - before, places)
+        }
+        return nil
+    }
+
+    private static func debugPlace(_ t: SidebarListDrop.Target) -> String {
+        switch t {
+        case .insert(_, let index): "insert \(index)"
+        case .split: "split"
+        case .into: "into"
+        }
+    }
+
     /// Tests without the pointer (cra://debug?folderPreview=<id>): the folder's preview as if hovered.
     static func debugFolderPreview(_ folderID: UUID, ui: SidebarUIState) {
         for l in all.allObjects where l.ui === ui {
@@ -1166,6 +1201,7 @@ final class SpaceListView: NSView, NSDraggingSource {
     func beginDrag(_ id: UUID, from row: SidebarRowView, event: NSEvent) {
         hoverAt(nil)
         ui.draggingID = id
+        reorderHaptics = .init()
         let pb = NSPasteboardItem()
         if let data = try? JSONEncoder().encode(SidebarDragItem(id: id)) { pb.setData(data, forType: .craSidebarItem) }
         let item = NSDraggingItem(pasteboardWriter: pb)
@@ -1299,24 +1335,26 @@ final class SpaceListView: NSView, NSDraggingSource {
             ui.draggingID = d.id
         }
         autoscroller.update()
+        if entered { reorderHaptics = .init() }
         guard let id = ui.draggingID, store.item(id) != nil else { return [] }
         let drop = resolve(dragged: id, at: document.convert(info.draggingLocation, from: nil))
-        if drop != ui.listDrop {
-            ui.listDrop = drop
-            // A tick when a row starts offering to combine, so the change of meaning is felt as well as seen.
-            switch drop.target {
-            case .split?:
-                if store.settings.hapticFeedbackOnReorder { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
-            default: break
-            }
-            // A closed folder stays closed under a drag: Arc 1.172 only highlights its row, however
-            // long the tab hovers (2.5 s, offline copy, 9 Nov 2026, #266).
-        }
+        offer(drop)
+        // A closed folder stays closed under a drag: Arc 1.172 only highlights its row, however
+        // long the tab hovers (2.5 s, offline copy, 9 Nov 2026, #266).
         return info.draggingSourceOperationMask.contains(.move) ? .move : .copy
+    }
+
+    /// The dragged row is offered `drop`: a tick each time that's a new place, for a tab, a folder
+    /// or a split alike, as in Arc (#883: only a tab offering to combine into a split ticked).
+    func offer(_ drop: SidebarListDrop) {
+        guard drop != ui.listDrop else { return }
+        ui.listDrop = drop
+        if reorderHaptics.offer(drop.target), store.settings.hapticFeedbackOnReorder { SidebarReorderTick.play() }
     }
 
     func dragExited() {
         autoscroller.stop()
+        _ = reorderHaptics.offer(nil)
         if ui.listDrop != nil { ui.listDrop = nil }
     }
 
@@ -1330,6 +1368,7 @@ final class SpaceListView: NSView, NSDraggingSource {
         let point = document.convert(info.draggingLocation, from: nil)
         let drop = ui.listDrop ?? resolve(dragged: id, at: point)
         ui.listDrop = nil
+        reorderHaptics = .init()
         applyDrop(drop)
         // From another window's space (a Blank Window's, or across windows and spaces): the tab
         // leaves the window that showed it and opens here; this window comes forward, so its page
@@ -1649,5 +1688,16 @@ extension SidebarStore {
     /// space, not a page the pager keeps to one side. Rows on screen ask for site icons first.
     func showsSpace(_ space: UUID, in view: NSView, window: UUID?) -> Bool {
         view.window != nil && focusedSpaceID(window: window) == space
+    }
+}
+
+/// The sidebar's reorder tick: a generic haptic, now (#883). It counts for scenarios, as `SpaceStyleTick` does.
+@MainActor
+enum SidebarReorderTick {
+    static var count = 0
+
+    static func play() {
+        count += 1
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
     }
 }

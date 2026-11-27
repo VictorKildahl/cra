@@ -3,6 +3,24 @@ import Foundation
 import Testing
 
 struct DesktopFilterListsTests {
+    @Test func catalogGroupsOrderAndCountOnlyKnownSubscriptions() throws {
+        let groups = DesktopFilterList.groups(selected: Set(DesktopFilterList.strictAddresses + ["https://custom.example/list"]))
+        #expect(groups.map(\.category) == [.ads, .tracking, .security, .mixed, .cookies, .social, .annoyances, .compatibility, .regional])
+        #expect(groups.map(\.selectedCount) == [1, 1, 0, 0, 0, 0, 0, 0, 0])
+        #expect(groups[0].entries.first?.name == "EasyList")
+        #expect(groups[1].entries.first?.name == "EasyPrivacy")
+        let entries = groups.flatMap(\.entries)
+        #expect(entries.count == DesktopFilterList.catalog.count)
+        // One row per subscription: two rows with one address would switch together.
+        #expect(Set(entries.map(\.address)).count == entries.count)
+        #expect(entries.allSatisfy { !$0.detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        let regional = try #require(groups.last).entries
+        for (lhs, rhs) in zip(regional, regional.dropFirst()) {
+            let order = lhs.name.localizedStandardCompare(rhs.name)
+            #expect(order == .orderedAscending || (order == .orderedSame && lhs.detail.localizedStandardCompare(rhs.detail) != .orderedDescending))
+        }
+    }
+
     @Test func catalogUsesUniqueHTTPSAddresses() {
         let addresses = DesktopFilterList.catalog.map(\.address)
         #expect(addresses.count == Set(addresses).count)
@@ -17,7 +35,8 @@ struct DesktopFilterListsTests {
             #expect(DesktopFilterList.catalog.contains { $0.address == address })
         }
         settings.adBlockingLevel = .strict
-        #expect(settings.customBlocklists == DesktopFilterList.strictAddresses)
+        // Strict also turns on the lists with YouTube's, X's and Instagram's page rules (#845).
+        #expect(settings.customBlocklists == DesktopFilterList.strictAddresses + DesktopFilterList.strictPageAddresses)
         settings = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
         #expect(settings.adBlockingLevel == .strict)
         settings.adBlockingLevel = .standard
@@ -30,7 +49,7 @@ struct DesktopFilterListsTests {
         settings.setFilterList(DesktopFilterList.strictAddresses[0], enabled: true)
         #expect(settings.adBlockingLevel == .standard)
         settings.adBlockingLevel = .strict
-        #expect(Set(settings.customBlocklists) == Set(DesktopFilterList.strictAddresses))
+        #expect(Set(settings.customBlocklists) == Set(DesktopFilterList.strictAddresses + DesktopFilterList.strictPageAddresses))
     }
 
     @Test func theMainSwitchTurnsEveryListOffAndComesBackStandard() throws {
@@ -73,6 +92,18 @@ struct DesktopFilterListsTests {
         #expect(settings.customFilterAddresses.isEmpty)
         settings.setFilterList(custom, enabled: true)
         #expect(settings.customFilterAddresses == [custom])
+    }
+
+    @Test func warningRecoveryFollowsItsSubscription() throws {
+        var settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        let address = DesktopFilterList.warningListAddress
+        #expect(!settings.removesAdblockWarnings)
+        settings.setFilterList(address, enabled: true)
+        #expect(settings.removesAdblockWarnings)
+        settings.disabledCustomBlocklists.append(address)
+        #expect(!settings.removesAdblockWarnings)
+        settings.setFilterList(address, enabled: false)
+        #expect(!settings.removesAdblockWarnings)
     }
 
     @Test func subscriptionSwitchesAreIndependent() throws {
@@ -185,14 +216,16 @@ struct DesktopFilterListsTests {
         let rule = "20min.ch##" + selector
         let list = DesktopHidingRules.read([rule, "reader.20min.ch#@#" + selector,
             rule + "{color:red}", rule + ":style(color:red)", rule + "("].joined(separator: "\n"), address: "", fetched: .now)
-        #expect(list.hidingRules.count == 2)
+        // The `:style()` rule is kept for the procedural runner since #845; from a list Cra doesn't trust it doesn't run.
+        #expect(list.hidingRules.count == 3)
         let hiding = DesktopHidingRules(lines: list.hidingRules)
         #expect(hiding.css(host: "www.20min.ch") == selector + "{display:none!important}")
         #expect(hiding.css(host: "reader.20min.ch").isEmpty)
         #expect(hiding.css(host: "other.ch").isEmpty)
-        // Copies written by Cra up to 0.1.58 say format 1: they read as having no network source, so the
-        // next launch fetches them again and their newly supported hiding rules are kept.
-        let previous = list.text.replacingOccurrences(of: "# network-format: 3", with: "# network-format: 1")
+        // Copies written by older Cra say an older format (1 up to 0.1.58, 3 until scriptlets came, #845): they
+        // read as having no network source, so the next launch fetches them again and newly kept rules arrive.
+        #expect(list.text.contains("# network-format: 4"))
+        let previous = list.text.replacingOccurrences(of: "# network-format: 4", with: "# network-format: 3")
         #expect(CachedBlocklist(text: previous)?.hasNetworkSource == false)
     }
 
@@ -239,8 +272,10 @@ struct DesktopFilterListsTests {
         ##.unsafe{color:red}
         """, address: "https://lists.example/list", fetched: Date(timeIntervalSince1970: 10))
         #expect(list.domains == ["tracker.example"])
-        #expect(list.hidingRules.count == 4)
-        #expect(list.skippedRules == 2)
+        // `##+js(script)` is a scriptlet line, kept since #845; Cra implements no "script", so it counts as unused.
+        #expect(list.hidingRules.count == 5)
+        #expect(list.skippedRules == 1)
+        #expect(BlockListCount(list, networkRules: false) == BlockListCount(applied: 5, skipped: 2))
         #expect(CachedBlocklist(text: list.text) == list)
         let hides = DesktopHidingRules(lines: list.hidingRules)
         #expect(hides.css(host: "badhost.example").contains(".sponsor{"))

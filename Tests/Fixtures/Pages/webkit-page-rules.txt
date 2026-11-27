@@ -1,0 +1,15 @@
+! Title: WebKit page rules fixture
+! A third party's fetch, and only its fetch: an image from the same address loads.
+||127.0.0.1^*/icon-blue.png?wk=fetch$xmlhttprequest,third-party
+! A block and the exception that undoes it.
+/icon-blue.png?wk=excepted
+@@||127.0.0.1^*/icon-blue.png?wk=excepted
+! Third party only: the page's own server is first party.
+/icon-blue.png?wk=third$third-party
+! Scriptlets, as on Chromium pages (filter-page-scripts.scenario).
+localhost##+js(set, ytInitialPlayerResponse.adPlacements, undefined)
+localhost##+js(json-prune, playerResponse.adPlacements playerResponse.playerAds adPlacements adSlots)
+localhost##+js(json-prune-fetch-response, adPlacements adSlots, , propsToMatch, /player-response/)
+! Procedural hiding.
+localhost#?#div[data-testid="cellInnerDiv"]:has(span:has-text(/^Ad$/))
+localhost##article:has-text(Sponsored):upward(1)

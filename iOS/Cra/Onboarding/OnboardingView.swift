@@ -103,10 +103,11 @@ struct OnboardingView: View {
                 .opacity(MobileOnboarding.showsNext(model.step, tried: tried) && model.progress != .working ? 1 : 0)
                 .disabled(!MobileOnboarding.showsNext(model.step, tried: tried) || (model.step == .blocking && tried))
                 .accessibilityIdentifier("onboarding-next")
+                // No wider than SheetHost's content on a wide screen (the open iPhone Duo, #866); a phone is narrower anyway.
                 if mock.shape == .phone {
-                    next
+                    next.frame(maxWidth: MobileScreenClass.contentCap)
                 } else {
-                    next.frame(maxWidth: mock.size.width)
+                    next.frame(maxWidth: min(mock.size.width, MobileScreenClass.contentCap))
                 }
                 if model.step == .defaultBrowser {
                     Button(MobileOnboarding.defaultBrowserSkip) { model.later() }

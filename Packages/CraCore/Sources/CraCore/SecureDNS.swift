@@ -49,7 +49,7 @@ extension SecureDNS {
             return "Hostnames are looked up over an encrypted connection to \(to). If it can’t be reached, pages don’t load."
         default:
             if servers.isEmpty {
-                return "Automatic uses the network’s own resolver, encrypted when it supports it. Names only a work network knows keep working."
+                return "System DNS uses the network’s own resolver, encrypted when it supports it. Names only a work network knows keep working."
             }
             return "Hostnames are looked up over an encrypted connection to \(to) when it answers, else by the network’s own resolver."
         }
@@ -68,9 +68,10 @@ public struct SecureDNSProvider: Hashable, Sendable, Identifiable {
     /// than Chrome's "DNS4EU Public Service (Protective)", which set the menu's width). NextDNS
     /// needs the user's own profile id in the path, so it goes through Custom.
     public static let all: [SecureDNSProvider] = [
-        SecureDNSProvider(name: "Google (Public DNS)", template: "https://dns.google/dns-query{?dns}"),
-        SecureDNSProvider(name: "Cloudflare (1.1.1.1)", template: "https://chrome.cloudflare-dns.com/dns-query"),
-        SecureDNSProvider(name: "Quad9 (9.9.9.9)", template: "https://dns.quad9.net/dns-query"),
+        SecureDNSProvider(name: "Google Public DNS", template: "https://dns.google/dns-query{?dns}"),
+        SecureDNSProvider(name: "Cloudflare", template: "https://chrome.cloudflare-dns.com/dns-query"),
+        SecureDNSProvider(name: "Cloudflare (Malware Filter)", template: "https://security.cloudflare-dns.com/dns-query"),
+        SecureDNSProvider(name: "Quad9 (Threat Blocking)", template: "https://dns.quad9.net/dns-query"),
         SecureDNSProvider(name: "OpenDNS", template: "https://doh.opendns.com/dns-query{?dns}"),
         SecureDNSProvider(name: "CleanBrowsing (Family Filter)", template: "https://doh.cleanbrowsing.org/doh/family-filter{?dns}"),
         SecureDNSProvider(name: "DNS4EU (Protective)", template: "https://protective.joindns4.eu/dns-query{?dns}"),

@@ -569,6 +569,8 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             // is the one read and nothing of it is left frozen over the page.
             flick.end?()
             flick.end = nil
+            // And a page swipe's picture still over the page: the page is in hand again.
+            endPageSwipe()
             let at = pan.location(in: bar), moved = pan.translation(in: bar)
             let startedAt = barSwipeStart ?? CGPoint(x: at.x - moved.x, y: at.y - moved.y)
             barSwipeStart = nil
@@ -667,6 +669,11 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         let up = max(0, -pan.translation(in: view).y)
         switch pan.state {
         case .began:
+            // The drawer belongs to the bar: its material takes the drawer's colour at once, and
+            // the plus waits in the bar's top edge until the finger lets go.
+            drawer.growsFromBar = true
+            drawer.fieldHold = .closed
+            setDrawerMaterial(true)
             prepareSearchSheet(incognito: store.selected?.isIncognito ?? false)
             searchPull = 0
             UIView.performWithoutAnimation {
@@ -678,95 +685,21 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         case .changed:
             searchPull = up
             layoutChrome()
+            bar.layoutIfNeeded()
             sheet.layoutIfNeeded()
+            // The drag's last frame, for `-CraTraceNewTabDrawer`.
+            traceNewTabDrawerDrag()
         case .ended, .cancelled:
             barSwipePullsSearch = false
             if pan.state == .ended, MobileSwipe.searchPullOpens(dragUp: up, velocityUp: -pan.velocity(in: view).y) {
                 setSearching(true)
             } else {
+                drawer.fieldHold = .none
+                setDrawerMaterial(false)
                 searchPull = nil
-                animateChrome(duration: 0.3, options: .curveEaseOut)
+                animateChrome(duration: MobileSearchMotion.settleDuration, options: .curveEaseInOut)
             }
         default: break
-        }
-    }
-
-    // MARK: Across the page: back, forward, and the tab itself
-
-    private var canReopenSwipedTab: Bool {
-        tabArchivedBySwipe.map { id in store.archived.contains { $0.id == id } } ?? false
-    }
-
-    @objc func pageSwiped(_ pan: UIPanGestureRecognizer) {
-        guard let page = shownPage else { return }
-        let width = view.bounds.width
-        let x = pan.translation(in: view).x
-        func outcome(_ translation: CGFloat, _ velocity: CGFloat) -> MobileSwipe.Navigation {
-            MobileSwipe.navigation(translation: translation, velocity: velocity, width: width, canGoBack: page.webView.canGoBack,
-                                   canGoForward: page.webView.canGoForward, hasOtherTab: store.tabs.count > 1,
-                                   canReopenTab: canReopenSwipedTab)
-        }
-        switch pan.state {
-        case .changed:
-            // Follows the finger where the swipe leads somewhere, and drags its feet where it doesn't.
-            let leads = outcome(x > 0 ? width : -width, 0) != .none
-            pageContainer.transform = CGAffineTransform(translationX: leads ? x : x / 4, y: 0)
-            if pageContainer.transform != .identity { showSwapBackdrop(for: page) }
-        case .ended, .cancelled:
-            let decided = pan.state == .ended ? outcome(x, pan.velocity(in: view).x) : .none
-            guard decided != .none else {
-                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0, options: []) {
-                    self.pageContainer.transform = .identity
-                } completion: { _ in
-                    self.hideSwapBackdrop()
-                }
-                return
-            }
-            let away: CGFloat = x > 0 ? width : -width
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut]) {
-                self.pageContainer.transform = CGAffineTransform(translationX: away, y: 0)
-            } completion: { _ in
-                self.finishPageSwipe(decided, from: away)
-            }
-        default: break
-        }
-    }
-
-    private func finishPageSwipe(_ navigation: MobileSwipe.Navigation, from away: CGFloat) {
-        guard let page = shownPage else { return }
-        switch navigation {
-        case .back: page.webView.goBack()
-        case .forward: page.webView.goForward()
-        case .archiveTab:
-            let id = page.tabID
-            page.webView.removeFromSuperview()
-            page.delegate = nil
-            shownPage = nil
-            store.archive(id)
-            tabArchivedBySwipe = id
-            if let tab = store.selected { show(tab) }
-            refreshTabStack()
-        case .reopenTab:
-            if let id = tabArchivedBySwipe {
-                captureSnapshot()
-                store.restore(id)
-                tabArchivedBySwipe = nil
-                if let tab = store.selected { show(tab) }
-                refreshTabStack()
-            }
-        case .none: break
-        }
-        // What comes next arrives from the side the old page left to. The floor under it takes
-        // the arriving page's colour, if it is another tab.
-        showSwapBackdrop(for: shownPage)
-        pageContainer.transform = CGAffineTransform(translationX: -away * 0.3, y: 0)
-        pageContainer.alpha = 0
-        UIView.animate(withDuration: 0.28, delay: 0, options: [.curveEaseOut]) {
-            self.pageContainer.transform = .identity
-            self.pageContainer.alpha = 1
-        } completion: { _ in
-            self.hideSwapBackdrop()
         }
     }
 
@@ -782,22 +715,37 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             sheetDragTrace = (0, 0)
             let start = max(0, bar.frame.minY - sheet.frame.minY)
             sheetDragStartPull = start
-            setSearching(false, keepingPull: MobileSwipe.sheetDragDownPull(startPull: start, dragDown: down))
+            // The field stays open, full size, while the drawer is dragged down; it only shrinks
+            // into the pill once the finger lets go and the close starts.
+            drawer.fieldHold = .open
+            setSearching(false, keepingPull: MobileSwipe.sheetDragDownPull(startPull: start, dragDown: down),
+                          deferDrawerMaterial: true)
         case .changed:
             guard let start = sheetDragStartPull else { return }
             searchPull = MobileSwipe.sheetDragDownPull(startPull: start, dragDown: down)
             layoutChrome()
+            bar.layoutIfNeeded()
             sheet.layoutIfNeeded()
+            traceNewTabDrawerDrag()
             traceSheetDrag()
         case .ended, .cancelled:
             sheetDragTraceView.accessibilityValue = "under the keyboard \(sheetDragTrace.hidden) of \(sheetDragTrace.frames)"
             guard sheetDragStartPull != nil else { return }
             sheetDragStartPull = nil
+            drawer.fieldHold = .none
             if pan.state == .ended, !MobileSwipe.sheetDragDownCloses(dragDown: down, velocityDown: pan.velocity(in: view).y) {
                 setSearching(true)
             } else {
+                // Let go: the word and the drawer's incognito fade together.
+                sheet.hideIncognitoLabel()
+                restoreBarIncognito()
+                // The colour only goes back to the bar's material once the finger is off and the
+                // drawer is closing.
+                if drawer.growsFromBar { setDrawerMaterial(false) }
                 searchPull = nil
-                animateChrome(duration: 0.3, options: .curveEaseOut)
+                // Let go of a drag down, the drawer falls the rest of the way on a short spring
+                // with a small overshoot as it settles into the bar.
+                animateChrome(spring: MobileNewTabDrawer.bounce)
             }
         default: break
         }

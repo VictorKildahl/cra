@@ -30,8 +30,7 @@ extension Shortcut {
     static func from(event e: NSEvent) -> Shortcut? {
         guard let chars = press(e)?.recordedKey else { return nil }
         let flags = e.modifierFlags.intersection([.command, .shift, .option, .control])
-        let special = [tab, left, right, up, down].contains(chars) || (chars.unicodeScalars.first.map { $0.value >= 0xF704 && $0.value <= 0xF71F } ?? false)
-        guard special || !flags.intersection([.command, .control, .option]).isEmpty else { return nil }
+        guard isRecordable(key: chars, modifiers: flags.rawValue) else { return nil }
         return Shortcut(chars, flags)
     }
 }
@@ -188,6 +187,9 @@ final class KeyBindingRegistry {
             // Arc: File ▸ Share…, the system's share list for the page (#279).
             KeyAction(id: "share", name: "Share…", section: .file, shortcuts: [], triggers: ["share", "airdrop"]),
             KeyAction(id: "capturePage", name: "Capture…", section: .file, shortcuts: [Shortcut("2", cmdShift)], triggers: ["capture", "screenshot"]),
+            // Arc's gptMessage (#828): no menu item, a shortcut and a command; Settings ▸ Max ▸ ChatGPT in the Command Bar.
+            KeyAction(id: ChatGPTCommandBar.actionID, name: ChatGPTCommandBar.actionName, section: .none, shortcuts: [Shortcut("g", cmdOpt)],
+                      triggers: ["chatgpt", "ask chatgpt", "gpt"]),
             // Arc: File ▸ Capture Full Page, Save Page As ⇧⌘S.
             KeyAction(id: "captureFullPage", name: "Capture Full Page", section: .file, shortcuts: [], triggers: ["full page", "screenshot"]),
             KeyAction(id: "capturePortrait", name: "Capture in Portrait Mode", section: .file, shortcuts: [], triggers: ["portrait", "mobile screenshot"]),
@@ -226,6 +228,10 @@ final class KeyBindingRegistry {
             // Arc's command bar (1.171): "clear" lists both, cache first, with a trash glyph.
             KeyAction(id: "clearCache", name: "Clear Cache and Refresh", section: .view, shortcuts: [], symbol: "trash"),
             KeyAction(id: "clearCookies", name: "Clear Cookies and Refresh", section: .view, shortcuts: [], symbol: "trash"),
+            // Cra's (#853): everything this site keeps (storage, IndexedDB, service workers, cookies), then a reload
+            // past the cache. After Arc's two, so "clear" still lists Clear Cache first.
+            KeyAction(id: "clearSiteData", name: "Clear Site Data and Refresh", section: .view, shortcuts: [],
+                      triggers: ["clear storage", "clear local storage", "reset site", "site data"], symbol: "trash"),
             // Arc: View ▸ Developer ▸ "Turn on/off Developer Mode for this site" (⌃D).
             KeyAction(id: "toggleDeveloperMode", name: "Toggle Developer Mode for this Site", section: .view, shortcuts: [Shortcut("d", .control)], triggers: ["developer mode", "dev mode"]),
             KeyAction(id: "resetZoom", name: "Zoom to Actual Size", section: .view, shortcuts: [Shortcut("0", cmd)], triggers: ["reset zoom"]),

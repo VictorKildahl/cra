@@ -13,6 +13,7 @@ enum PerfCEF {
             switch kind {
             case "terminated":
                 Perf.count(.rendererTerminated, detail, site: site)
+                CraLog.note("page process ended (\(detail))")
                 // A page process that can't start ("launch failed", or a crash in its first moments, ICU's data
                 // gone) is how a Cra.app replaced under this copy shows first; the check is one Info.plist read.
                 SoftwareUpdater.shared.checkInstalledBundle()

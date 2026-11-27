@@ -1,0 +1,37 @@
+# promise: #848
+# A Little Window opened by a link from another app shows its page. On the reporter's macOS 27.2.1 it came up
+# white and stayed white until the window was resized or the page reloaded: Chromium didn't draw a page left
+# hidden, or laid out for another size, as the window arrived. Now Cra looks at the page once the window is up
+# (LittlePageHealth): a page in sight that doesn't draw is shown again and resized once, as the reporter's resize
+# did. littleBreakNextShow leaves the page as it was found: its view hidden, or laid out at the grow-in's 48 x 30
+# start. Needs the screen: only a window nothing covers is judged.
+requires screen
+env CRA_TEST_BACKGROUND=0
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "defaultLinkDestination": {"littleWindow": {}}}
+pace 0.5
+
+# A link as usual: the page draws, and the check says so.
+cra://debug?externalURL=${PAGE}?n=plain
+expect-log little window page drawing \(came up\): window in sight
+cra://debug?littlePage=plain
+expect-log little page plain: drawing
+
+# The page left hidden as the window came up: shown again, and drawing.
+cra://debug?littleBreakNextShow=hide
+cra://debug?externalURL=${PAGE}?n=hidden
+expect-log little window page broken for the test: hide
+expect-log little window page not drawing \(came up: its view is hidden[^)]*\): shown again
+expect-log little window page drawing again
+cra://debug?littlePage=hidden
+expect-log little page hidden: drawing
+
+# Laid out at the grow-in's start in the full-size window: resized, and drawing at its size.
+cra://debug?littleBreakNextShow=size
+cra://debug?externalURL=${PAGE}?n=size
+expect-log little window page broken for the test: size
+expect-log little window page not drawing \(came up: laid out at 48x30 in a [0-9]+x[0-9]+ view\): shown again
+expect-log little window page drawing again
+cra://debug?littlePage=size
+expect-log little page size: drawing
+reject-log still not drawing, left alone

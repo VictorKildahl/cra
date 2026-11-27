@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><title>video fixture</title>
+<body>
+<div id="player">player</div>
+<script>
+// As YouTube's watch page: the player data, ads and all, in an inline script.
+var ytInitialPlayerResponse = {"adPlacements": [{"ad": 1}, {"ad": 2}], "videoDetails": {"videoId": "v"}};
+window.inlineAds = (ytInitialPlayerResponse.adPlacements || []).length;
+window.parsedAds = (JSON.parse('{"playerResponse":{"adPlacements":[1,2,3]},"adSlots":[1]}').playerResponse.adPlacements || []).length;
+window.fetchedAds = -1;
+fetch('/player-response.json?n=1').then(r => r.json()).then(j => { window.fetchedAds = (j.adPlacements || []).length + (j.adSlots || []).length; });
+window.untrusted = typeof window.untrustedValue;
+</script>

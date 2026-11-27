@@ -1,0 +1,41 @@
+# A boost's CSS filter needs the page background inside the filtered subtree, but only when the page
+# has no background of its own (#846). Five pages: none, html only, body only, explicit transparent, and a
+# dark html background from a stylesheet that arrives after the page commits.
+budget rss=700 stalls50=10
+seed boosts.json [{"id":"0E5B6E0A-5C3B-4F8D-9C55-4A7C5F2B9E11","host":"127.0.0.1","name":"Invert","enabled":true,"hue":0,"strength":0,"invert":true,"contrast":50,"brightness":50,"saturation":50,"textScale":1,"textCase":"none","zapped":[],"css":"","js":""}]
+
+cra://open?url=${PAGE}?n=none
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'none:'+getComputedStyle(document.documentElement).backgroundColor+'|'+getComputedStyle(document.documentElement).filter"}
+expect-log Cra cdp Runtime.evaluate .*"value":"none:rgb\(255, 255, 255\)\|invert\(1\) hue-rotate\(180deg\)"
+
+cra://open?url=${PAGE}?htmlbg=111111%26n=html-dark
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'html-dark:'+getComputedStyle(document.documentElement).backgroundColor+'|'+getComputedStyle(document.documentElement).filter"}
+expect-log Cra cdp Runtime.evaluate .*"value":"html-dark:rgb\(17, 17, 17\)\|invert\(1\) hue-rotate\(180deg\)"
+
+cra://open?url=${PAGE}?bodybg=f6f6ef%26n=body-only
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'body-only:'+getComputedStyle(document.documentElement).backgroundColor+'|'+getComputedStyle(document.body).backgroundColor+'|'+getComputedStyle(document.documentElement).filter"}
+expect-log Cra cdp Runtime.evaluate .*"value":"body-only:rgba\(0, 0, 0, 0\)\|rgb\(246, 246, 239\)\|invert\(1\) hue-rotate\(180deg\)"
+
+cra://open?url=${PAGE}?htmlbg=transparent%26n=transparent-html
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'transparent-html:'+getComputedStyle(document.documentElement).backgroundColor+'|'+getComputedStyle(document.body).backgroundColor"}
+expect-log Cra cdp Runtime.evaluate .*"value":"transparent-html:rgb\(255, 255, 255\)\|rgba\(0, 0, 0, 0\)"
+
+cra://open?url=${PAGE}?latecss=2%26n=late-dark
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 4
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'late-dark:'+getComputedStyle(document.documentElement).backgroundColor+'|'+getComputedStyle(document.documentElement).filter"}
+expect-log Cra cdp Runtime.evaluate .*"value":"late-dark:rgb\(17, 17, 17\)\|invert\(1\) hue-rotate\(180deg\)"
+
+cra://open?url=${ORIGIN}/boost-dark-head.html?n=head-dark
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 4
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'head-dark:'+getComputedStyle(document.documentElement).backgroundColor+'|'+getComputedStyle(document.documentElement).filter"}
+expect-log Cra cdp Runtime.evaluate .*"value":"head-dark:rgb\(17, 17, 17\)\|invert\(1\) hue-rotate\(180deg\)"
