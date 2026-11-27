@@ -5059,6 +5059,8 @@ enum StoreTests {
             for (easel, pictures) in easels { StoreTests.saveEasel(easel, pictures: pictures, in: easelsA) }
             syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio", easels: easelsA)
             syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook", easels: easelsB)
+            syncA.runPictures = StoreTests.picturesInPlace
+            syncB.runPictures = StoreTests.picturesInPlace
             StoreTests.expect(syncA.enable(folder: root) == .synced, "the first Mac syncs through a folder")
             let written = manifest
             if olderSecond, var unknown = written {
@@ -5089,6 +5091,29 @@ enum StoreTests {
         func done() {
             syncA.disable(); syncB.disable()
             try? FileManager.default.removeItem(at: dir)
+        }
+    }
+
+    /// Runs a picture task where it is handed over: a look is done when `poll()` returns.
+    @MainActor
+    private static func picturesInPlace(_ work: SettingsSyncService.PictureWork,
+                                        _ done: @escaping @MainActor @Sendable (SettingsSyncService.PictureWork.Result) -> Void) {
+        done(work.run())
+    }
+
+    /// Picture tasks handed over and not run yet: a test runs them when it chooses, as the thread they go to would.
+    @MainActor
+    private final class HeldPictures {
+        var tasks: [() -> Void] = []
+
+        func hold(_ sync: SettingsSyncService) {
+            sync.runPictures = { [unowned self] work, done in tasks.append { done(work.run()) } }
+        }
+
+        func runAll() {
+            let run = tasks
+            tasks = []
+            for task in run { task() }
         }
     }
 
@@ -5139,6 +5164,270 @@ enum StoreTests {
         syncNeverFollowsALinkedEaselsFolder()
         syncWritesNoPictureThroughALinkedEaselFolder()
         syncNeverCopiesInALinkedPicture()
+        syncNeverSendsAnEaselFolderItCannotListAsEmpty()
+        syncSaysWhenItCannotListTheEaselFolder()
+        syncWritesWithNoEaselFolder()
+        syncClosesAnOpenEaselDeletedThereAfterAFailedTry()
+        syncCopiesAPictureTheOtherMacGotBack()
+        syncRewritesADamagedPictureInTheFolder()
+        syncTakesNoBundleWhileItCannotListTheEaselFolder()
+        syncStartsNoPictureTaskAgainForAPictureItCannotRead()
+        flushWritesASaveThatWaitsOutItsDelay()
+        easelFolderWatcherReportsASave()
+        syncWritesNoEaselBeforeItsPicturesAreInTheFolder()
+        syncAppliesNothingBeforeThePicturesItLacksAreCopied()
+        syncStartsNoSecondPictureTaskWhileOneRuns()
+        syncAppliesNothingWhenAPictureCopyFails()
+        syncLooksWithoutReadingAPictureOnTheMainThread()
+    }
+
+    // MARK: Picture work off the main thread (#4)
+
+    /// A write copies its pictures on a picture task: the easels, the files and the manifest wait for it.
+    @MainActor
+    private static func syncWritesNoEaselBeforeItsPicturesAreInTheFolder() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let held = HeldPictures()
+        held.hold(macs.syncA)
+        let (easel, pictures) = pictured("Its picture copied first")
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        expect(!held.tasks.isEmpty && macs.manifest?.easels?["Easels/\(easel.id.uuidString).json"] == nil,
+               "the bundle doesn't name the easel while its picture is being copied")
+        held.runAll()
+        expect(macs.manifest?.easels?["Easels/\(easel.id.uuidString)/\(pictures.keys.first!)"] != nil,
+               "once the copy is done, the write names the easel and its picture")
+    }
+
+    /// An apply copies the pictures this Mac lacks on a picture task: the easels and the sidebar wait for it.
+    @MainActor
+    private static func syncAppliesNothingBeforeThePicturesItLacksAreCopied() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let (easel, pictures) = pictured("Copied in first")
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        let tab = macs.a.createTab(url: "https://example.com/beside-the-easel")
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        let held = HeldPictures()
+        held.hold(macs.syncB)
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        // The look hashes the folder's picture first; the apply then copies it.
+        held.runAll()
+        expect(!held.tasks.isEmpty && !macs.b.document.items.contains { $0.id == tab.id } && loadEasel(easel.id, in: macs.easelsB) == nil,
+               "neither the sidebar nor the easel is applied while the picture is being copied")
+        held.runAll()
+        expect(macs.b.document.items.contains { $0.id == tab.id } && loadEasel(easel.id, in: macs.easelsB) == easel,
+               "once it is here, both are")
+    }
+
+    @MainActor
+    private static func syncStartsNoSecondPictureTaskWhileOneRuns() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let (easel, pictures) = pictured("Being copied")
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        let held = HeldPictures()
+        held.hold(macs.syncA)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        macs.syncA.poll()
+        macs.clockA.advance(by: 30)
+        expect(held.tasks.count == 1, "a look while a picture task runs waits for it (\(held.tasks.count) tasks)")
+    }
+
+    /// A picture copy that fails leaves the sidebar and the easels as they were, and Settings says why.
+    @MainActor
+    private static func syncAppliesNothingWhenAPictureCopyFails() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let (easel, pictures) = pictured("Its copy fails")
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        let tab = macs.a.createTab(url: "https://example.com/beside-a-failed-copy")
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        let held = HeldPictures()
+        held.hold(macs.syncB)
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        held.runAll()
+        // Between the look and the copy, the folder's picture changes.
+        try? Data("other bytes".utf8).write(to: macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(easel.id.uuidString)/\(pictures.keys.first!)"))
+        held.runAll()
+        expect(!macs.b.document.items.contains { $0.id == tab.id } && loadEasel(easel.id, in: macs.easelsB) == nil && macs.syncB.error != nil,
+               "nothing else is applied, and Settings says the easels couldn't be saved")
+    }
+
+    /// A look hashes a picture it hasn't seen on a picture task, not on the main thread.
+    @MainActor
+    private static func syncLooksWithoutReadingAPictureOnTheMainThread() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let (easel, pictures) = pictured("Hashed off the main thread")
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        let held = HeldPictures()
+        held.hold(macs.syncB)
+        let reads = macs.syncB.easelReads
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        expect(held.tasks.count == 1 && macs.syncB.easelReads == reads + 1,
+               "the look reads only the easel's JSON, and hands the picture to a task (\(macs.syncB.easelReads - reads) reads)")
+    }
+
+    /// A test that reads a saved file next (a relaunch) flushes the save instead of sleeping past its delay.
+    @MainActor
+    private static func flushWritesASaveThatWaitsOutItsDelay() {
+        let file = JSONStore<[String]>("flush-\(UUID().uuidString).json")
+        defer { for url in [file.url, file.url.appendingPathExtension("bak")] { try? FileManager.default.removeItem(at: url) } }
+        file.save(["waiting"])
+        file.flush()
+        expect((try? Data(contentsOf: file.url)).flatMap { try? JSONDecoder().decode([String].self, from: $0) } == ["waiting"],
+               "a flushed save is on disk when flush returns")
+    }
+
+    /// An easel folder, unlisted since (a later date, as after a relaunch) and no longer listable.
+    private static func makeEaselFolderUnlistable(_ folder: URL) {
+        let fm = FileManager.default
+        try? fm.setAttributes([.modificationDate: Date(timeIntervalSinceReferenceDate: 0)], ofItemAtPath: folder.path)
+        try? fm.setAttributes([.posixPermissions: 0o311], ofItemAtPath: folder.path)
+    }
+
+    /// The easel folder couldn't be listed after a relaunch, and the bundle went up with no easels: the other
+    /// Mac deleted every one.
+    @MainActor
+    private static func syncNeverSendsAnEaselFolderItCannotListAsEmpty() {
+        let (easel, pictures) = pictured("In a folder this Mac can't list")
+        let macs = EaselMacs([(easel, pictures)])
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: macs.easelsA.path)
+            macs.done()
+        }
+        makeEaselFolderUnlistable(macs.easelsA)
+        _ = macs.a.createTab(url: "https://example.com/a-change-to-write")
+        macs.syncAToB()
+        expect(loadEasel(easel.id, in: macs.easelsB) == easel, "the other Mac keeps the easel")
+    }
+
+    @MainActor
+    private static func syncSaysWhenItCannotListTheEaselFolder() {
+        let macs = EaselMacs([pictured("In a folder this Mac can't list")])
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: macs.easelsA.path)
+            macs.done()
+        }
+        makeEaselFolderUnlistable(macs.easelsA)
+        _ = macs.a.createTab(url: "https://example.com/a-change-to-write")
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        expect(macs.syncA.error?.contains(SettingsSync.easelsName) == true, "Settings says this Mac can't read its Easels folder")
+    }
+
+    /// A bundle applied while this Mac's easel folder couldn't be listed skipped the other Mac's edits, and was
+    /// remembered: the next write sent the old copies back as the newer ones.
+    @MainActor
+    private static func syncTakesNoBundleWhileItCannotListTheEaselFolder() {
+        let (easel, pictures) = pictured("Edited while the other folder can't be listed")
+        let macs = EaselMacs([(easel, pictures)])
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: macs.easelsB.path)
+            macs.done()
+        }
+        var renamed = easel
+        renamed.title = "Renamed on the first Mac"
+        saveEasel(renamed, in: macs.easelsA)
+        makeEaselFolderUnlistable(macs.easelsB)
+        macs.syncAToB()
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: macs.easelsB.path)
+        macs.clockB.advance(by: 30)
+        expect(loadEasel(easel.id, in: macs.easelsB)?.title == renamed.title, "once the folder lists again, the second Mac takes the edit")
+    }
+
+    /// A picture this Mac hashed that turns unreadable at the same size and date (its permissions changed) started
+    /// picture tasks without end, and no look ran meanwhile.
+    @MainActor
+    private static func syncStartsNoPictureTaskAgainForAPictureItCannotRead() {
+        let (easel, pictures) = pictured("Unreadable at the same size and date")
+        let macs = EaselMacs([(easel, pictures)])
+        let name = pictures.keys.first!
+        let picture = macs.easelsA.appendingPathComponent("\(easel.id.uuidString)/\(name)")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: picture.path)
+            macs.done()
+        }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: picture.path)
+        try? FileManager.default.removeItem(at: macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(easel.id.uuidString)/\(name)"))
+        let held = HeldPictures()
+        held.hold(macs.syncA)
+        // The writing Mac finds the picture gone from its bundle and writes it again after a minute.
+        _ = macs.a.createTab(url: "https://example.com/a-change-to-write")
+        for _ in 0..<4 { macs.clockA.advance(by: 30) }
+        held.runAll()
+        expect(held.tasks.isEmpty, "the task that couldn't read the picture is not handed over again (\(held.tasks.count) waiting)")
+    }
+
+    /// No easel made yet, so no folder: that is no easels, and the bundle still goes up.
+    @MainActor
+    private static func syncWritesWithNoEaselFolder() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        try? FileManager.default.removeItem(at: macs.easelsA)
+        let tab = macs.a.createTab(url: "https://example.com/written-without-an-easel-folder")
+        macs.syncAToB()
+        expect(macs.b.document.items.contains { $0.id == tab.id }, "the other Mac takes the bundle")
+    }
+
+    /// The other Mac deleted an easel open here, and a later easel failed to save: the try that followed
+    /// found the easel already gone and never closed its windows.
+    @MainActor
+    private static func syncClosesAnOpenEaselDeletedThereAfterAFailedTry() {
+        let open = Easel(id: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!, title: "Open here, deleted there")
+        let macs = EaselMacs([(open, [:])])
+        defer { macs.done() }
+        var canvas: Easel? = open
+        macs.syncB.changeOpenEasel = { id, change in
+            guard id == open.id, let here = canvas else { return false }
+            canvas = change(here)
+            if canvas == nil { EaselFolder.remove(id, in: macs.easelsB) }
+            return true
+        }
+        var removed: Set<UUID> = []
+        macs.syncB.easelsChanged = { removed.formUnion($0) }
+        // An easel sorted after it that the second Mac can't save: a folder has its file's name.
+        let blocked = Easel(id: UUID(uuidString: "FFFFFFFF-FFFF-4FFF-8FFF-FFFFFFFFFFFF")!, title: "Can't be saved")
+        try? FileManager.default.createDirectory(at: macs.easelsB.appendingPathComponent(blocked.id.uuidString + ".json/taken"),
+                                                 withIntermediateDirectories: true)
+        EaselFolder.remove(open.id, in: macs.easelsA)
+        saveEasel(blocked, in: macs.easelsA)
+        macs.syncAToB()
+        EaselFolder.remove(blocked.id, in: macs.easelsB)
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        expect(removed.contains(open.id), "the try after the failed one still closes the deleted easel's windows")
+    }
+
+    /// The first Mac lacked a picture, then got it back without its easel changing: the second never copied it.
+    @MainActor
+    private static func syncCopiesAPictureTheOtherMacGotBack() {
+        let (easel, pictures) = pictured("Its picture back")
+        let macs = EaselMacs([(easel, [:])])
+        defer { macs.done() }
+        let (name, bytes) = pictures.first!
+        try? bytes.write(to: macs.easelsA.appendingPathComponent("\(easel.id.uuidString)/\(name)"))
+        // The same easel saved again, as its canvas does.
+        saveEasel(easel, in: macs.easelsA)
+        macs.syncAToB()
+        expect((try? Data(contentsOf: macs.easelsB.appendingPathComponent("\(easel.id.uuidString)/\(name)"))) == bytes,
+               "the second Mac copies the picture the first one got back")
+    }
+
+    /// A damaged copy of a picture in the sync folder was kept by every later write, so no Mac could take the bundle.
+    @MainActor
+    private static func syncRewritesADamagedPictureInTheFolder() {
+        let (easel, pictures) = pictured("Its picture damaged in the folder")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        let (name, bytes) = pictures.first!
+        let inFolder = macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(easel.id.uuidString)/\(name)")
+        try? Data("half a pic".utf8).write(to: inFolder)
+        // The writing Mac finds its bundle damaged and writes it again after a minute.
+        _ = macs.a.createTab(url: "https://example.com/a-change-to-write")
+        for _ in 0..<4 { macs.clockA.advance(by: 30) }
+        expect((try? Data(contentsOf: inFolder)) == bytes, "the write puts the picture's own bytes back")
     }
 
     /// Sync carried an easel's sidebar row but not the easel: on the other Mac it opened empty.
@@ -5476,6 +5765,8 @@ enum StoreTests {
         let a = SidebarStore(clock: clockA)
         let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio", easels: easelsA)
         let syncB = SettingsSyncService(store: SidebarStore(clock: clockB), clock: clockB, device: "MacBook", deviceID: "macbook", easels: easelsB)
+        syncA.runPictures = picturesInPlace
+        syncB.runPictures = picturesInPlace
         defer { syncA.disable(); syncB.disable() }
         expect(syncA.enable(folder: root) == .synced, "the first Mac syncs through a folder")
         guard case .bundleFound = syncB.enable(folder: root) else { return expect(false, "the second Mac is asked once") }
@@ -5494,9 +5785,9 @@ enum StoreTests {
     @MainActor
     private static func relaunchWithAnUnreadableEasel(_ easel: Easel, _ macs: EaselMacs, keepFolderCopy: Bool = true) -> SettingsSyncService {
         _ = macs.a.createTab(url: "https://example.com/one"); macs.syncAToB()
-        Thread.sleep(forTimeInterval: 1)
+        macs.syncB.flushSaves()
         _ = macs.a.createTab(url: "https://example.com/two"); macs.clockA.advance(by: 10); macs.syncA.poll()
-        Thread.sleep(forTimeInterval: 1)
+        macs.syncA.flushSaves()
         try? Data("{ not an easel".utf8).write(to: macs.easelsA.appendingPathComponent(easel.id.uuidString + ".json"), options: .atomic)
         if !keepFolderCopy { try? FileManager.default.removeItem(at: macs.bundle.appendingPathComponent("Easels/\(easel.id.uuidString).json")) }
         // Quit: the first Mac's service stops, and its sync.json and history stay as it saved them.
@@ -5504,6 +5795,7 @@ enum StoreTests {
         macs.syncA.disable()
         for (url, data) in saved { try? data?.write(to: url) }
         let relaunched = SettingsSyncService(store: macs.a, clock: macs.clockA, device: "Studio", deviceID: "studio", easels: macs.easelsA)
+        relaunched.runPictures = picturesInPlace
         relaunched.start()
         _ = macs.a.createTab(url: "https://example.com/three")
         macs.clockA.advance(by: 30)
@@ -5553,18 +5845,31 @@ enum StoreTests {
         expect((try? Data(contentsOf: target)) == planted, "and leaves the file the bad path named as it was")
     }
 
-    /// An easel saved here goes up a few seconds later, like a sidebar change: no easel code calls sync.
+    /// An easel saved here goes up a few seconds later, like a sidebar change: no easel code calls sync. The
+    /// watcher on the easel folder reports the save (`easelFolderWatcherReportsASave`).
     @MainActor
     private static func syncWritesSoonAfterAnEaselChange() {
         let macs = EaselMacs()
         defer { macs.done() }
-        let pending = macs.clockA.pendingCount
         let (easel, pictures) = pictured("Made after sync was on")
         saveEasel(easel, pictures: pictures, in: macs.easelsA)
-        let deadline = Date().addingTimeInterval(5)
-        while macs.clockA.pendingCount == pending && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+        macs.syncA.changedHere()
         macs.clockA.advance(by: SettingsSync.writeSoonDelay)
         expect(macs.manifest?.easels?["Easels/\(easel.id.uuidString).json"] != nil, "an easel saved here goes up 3 s later, before the next look")
+    }
+
+    /// The watcher sync puts on the easel folder reports a save in it. It waits on the kernel's event, not on the
+    /// app's clock; the bound only ends a run in which the event never comes.
+    @MainActor
+    private static func easelFolderWatcherReportsASave() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-easel-watch-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let reported = DispatchSemaphore(value: 0)
+        let watcher = SettingsSyncService.watch(folder, on: DispatchQueue(label: "easel-watch-test")) { reported.signal() }
+        defer { watcher?.cancel() }
+        saveEasel(Easel(title: "Saved while watched"), in: folder)
+        expect(reported.wait(timeout: .now() + 30) == .success, "a save in the easel folder is reported")
     }
 
     /// An idle look reads, hashes and decodes no easel or picture, on the Mac that wrote and on the one that applied.

@@ -81,13 +81,17 @@ closed, a tab opened on either is on both, an item both changed takes the other 
 the merge back. A bundle from an older Cra, or from one too far back, is applied whole. Easels go in
 the bundle's `Easels/` as in the data folder: `<id>.json` and the pictures its cards show in `<id>/`,
 each with its hash under the manifest's `easels` (not `files`, so an older Cra still finds the bundle
-whole). A picture the writing Mac lacks is left out. A bundle applies whole, pictures first, then the
-easels, then the sidebar; each easel merges three ways (`Easel.merge`) against the newest bundle the
+whole). A picture the writing Mac lacks is left out, and one already in the folder stays only when its hash
+matches. A bundle applies whole, pictures first, then the easels, then the sidebar; a picture the bundle
+carries that this Mac lacks is copied whether or not its easel changed. Picture reads, hashes and copies run
+off the main thread before the rest of a write or an apply, one task at a time. Each easel merges three ways (`Easel.merge`) against the newest bundle the
 writer names under `easelParentIDs`, the parents it had easels for, and one deleted on either Mac
 goes. With none of them here, easels are added and overwritten and none is deleted, and a blank
-`Easel(id:)` (what any Cra saves when a tab opens a row it has no file for) never replaces a real one. Import… and Use That Sidebar add and overwrite easels and delete none. A
+`Easel(id:)` (what an older Cra saves when a tab opens a row it has no file for) never replaces a real one. Import… and Use That Sidebar add and overwrite easels and delete none. A
 manifest without `easels` (an older Cra's) changes no easel, and the next write puts this Mac's back.
-After writing its manifest a Mac removes what `Easels/` holds that the manifest doesn't name. A
+After writing its manifest a Mac removes what `Easels/` holds that the manifest doesn't name. A Mac that
+can't list its data folder's `Easels/`, or can't read an easel file it has no other copy of, writes no bundle, and
+Settings names what it can't read. A
 watcher on the data folder's `Easels/` writes a change within seconds, as for the sidebar.
 `cra://debug?sync=<label>` logs what the last look found. `sync.json` in the data
 folder holds the location and the last bundle written or applied. To try it on one Mac, run a second instance on another

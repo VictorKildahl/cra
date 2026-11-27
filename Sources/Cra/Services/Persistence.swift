@@ -95,6 +95,18 @@ final class JSONStore<T: Codable> {
         persistenceQueue.sync { write(value) }
     }
 
+    /// Writes a save still waiting out its delay now, after any write in flight, as saveNow does: a test that reads the
+    /// file next, as a relaunch would, waits for nothing.
+    func flush() {
+        guard let item = pending else { return }
+        pending = nil
+        // On the queue the timer can't run it in between, and cancelled it never runs again.
+        persistenceQueue.sync {
+            item.perform()
+            item.cancel()
+        }
+    }
+
     /// Writes `data` over the file at `url` atomically, the copy it replaces kept as `<name>.bak`. Every save does,
     /// and sync when it writes an easel's file.
     static func replace(_ url: URL, with data: Data) throws {

@@ -428,6 +428,16 @@ struct SettingsSyncTests {
         #expect(SettingsSync.easelChoice(readable: false, lastCopy: false, remembered: false) == .leaveOut)
     }
 
+    /// A listing that failed is not proof that every easel was deleted: the other Mac would delete its copies.
+    @Test func anEaselFolderThatCannotBeListedHoldsTheWrite() {
+        #expect(SettingsSync.unlistedEaselsChoice(missing: false) == .hold)
+    }
+
+    /// No easel made yet: the folder isn't there, and that is no easels.
+    @Test func aMissingEaselFolderListsAsNoEasels() {
+        #expect(SettingsSync.unlistedEaselsChoice(missing: true) == .leaveOut)
+    }
+
     @Test func theHistoryKnowsTheEaselsItsBundlesHeld() {
         var history = SyncHistory()
         let held = Easel(title: "Held"), other = UUID()

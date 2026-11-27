@@ -87,6 +87,10 @@ public enum SettingsSync {
         return remembered ? .hold : .leaveOut
     }
 
+    /// What a write does when this Mac's `Easels` folder can't be listed: `missing`, no easel was made yet and the folder
+    /// lists as none. Else no bundle goes up: one without easels would delete every easel on the other Mac.
+    public static func unlistedEaselsChoice(missing: Bool) -> SyncEaselChoice { missing ? .leaveOut : .hold }
+
     /// The easel a path in `SyncManifest.easels` names, and its picture when it names one:
     /// `Easels/<id>.json` or `Easels/<id>/<plain name>`. Nil for any other path, which is never read or written.
     public static func easelPath(_ path: String) -> (id: UUID, picture: String?)? {
