@@ -72,6 +72,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         CraCEFRuntime.setChromeHosting(store.settings.chromeEngine)
         // PageScript's scripts, with the filter lists' scriptlets as the last run left them (#845).
         FilterPageScripts.install(table: nil)
+        // WebKit pages' ad blocking, as the last run compiled it, until the lists are read again.
+        WebKitContentBlocking.shared.restore()
         startContentBlocking()
         observeGlobalShortcut()
         observeMenuBarMode()
@@ -535,6 +537,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         observeChanges(of: { [store] in store.settings.hasActiveBlockFilters }) {
             CraCEFRuntime.setContentBlockingEnabled($0)
+            WebKitContentBlocking.shared.enabled = $0
         }
         observeChanges(of: { [store] in
             (store.settings.adAwayEnabled ? ["adaway"] : []) + (store.settings.anudeepEnabled ? ["anudeep"] : [])

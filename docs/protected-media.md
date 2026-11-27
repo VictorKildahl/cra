@@ -250,13 +250,33 @@ services pick their DRM by browser.
 - **The Site Control Center**: on a WebKit page, a Protected Media card takes the Extensions
   grid's place. It names the service, says why, and lists what that means here: you sign in once,
   extensions don't run, and Web Inspector opens instead of DevTools. Learn more opens
-  crabrowser.app/help/protected-media. The Block Ads & Trackers switch is left out there,
-  because Chromium's blocker doesn't see the page.
+  crabrowser.app/help/protected-media. Its Ad Blocking switch pauses the site as on a Chromium
+  page (see "Ad blocking" below).
 - **Extension buttons**: pinned extensions in the toolbar, the sidebar's URL field and the
   sidebar's grid dim, and their tooltip says "Extensions don't run on Spotify".
 
 All three follow the page's real engine (`TabNavState.protectedMedia`, from the page), not its
 address. A WebKit page signing in on accounts.spotify.com still counts as Spotify's.
+
+## Ad blocking
+
+A WebKit page blocks with the lists Settings ▸ Privacy has on, as a Chromium page does
+(`WebKitContentBlocking`). WebKit has no per-request callback, so the network rules Chromium's
+blocker gets (`DesktopNetworkRules.compile`) are written as WebKit content-blocker lists
+(`WebKitContentRules`, CraCore) and compiled by WebKit into the data folder's `Blocklists/WebKit`
+store. A list's name is its rules' digest, so an unchanged selection compiles nothing, at launch
+either. WebKit reads a list's rules in order, so they go out by Chromium's priority (blocks,
+exceptions, `$important` blocks, `$important` exceptions), and every list ends by letting the
+tab's own page and a popup's page load (Chromium's rules leave `main_frame` alone). WebKit refuses
+a list over 150,000 rules: a bigger selection is split into lists of 70,000, each repeating every
+exception. Chromium's limit of 30,000 rules isn't WebKit's, so WebKit pages get the whole selection.
+
+A page takes the lists before each main-frame load and leaves them off on a paused site. The
+lists' scriptlets run in the page's own world before its scripts (`FilterPageScripts.mainWorld`
+as a user script), and element hiding and procedural hiding come from BrowserManager as on a
+Chromium page. A list update reaches open pages from their next load. Not on WebKit: `$redirect`
+(WebKit can't replace a response) and the AdShield and page-recovery helpers, which are Chromium's.
+Tested by `WebKitContentRulesTests` and `webkit-ad-blocking.scenario`.
 
 ## What a WebKit page doesn't have
 
@@ -264,7 +284,7 @@ address. A WebKit page signing in on accounts.spotify.com still counts as Spotif
   once, by hand or from the password manager's own app.
 - **Chromium's logins and cookies**: the first visit to a service signs in again. The exception
   is a page moved for a protected video on a mixed site, whose sign-in cookies are copied.
-- **Chromium's site settings, content blocking, HTTPS-Only and fingerprinting protection**
+- **Chromium's site settings, HTTPS-Only and fingerprinting protection**
   (fingerprinting-protection.patch is in Cra's Chromium): camera and microphone ask
   through Cra's prompt on every visit.
 - **Chrome's DevTools**: Develop ▸ Developer Tools opens WebKit's Web Inspector in its own window.

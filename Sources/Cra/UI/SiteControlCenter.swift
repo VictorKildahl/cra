@@ -65,8 +65,7 @@ final class SiteControlCenterView: NSView {
     private let incognito: Bool
     /// The page's tab, whose extension icons the tiles show.
     private let tab: UUID?
-    /// A WebKit page's service ("Spotify"): the card that says why takes the extensions' place,
-    /// and the ad blocker's switch goes (it is Chromium's).
+    /// A WebKit page's service ("Spotify"): the card that says why takes the extensions' place.
     private let protectedMedia: String?
     /// The Safari's Engine row, nil without it (a page that uses no DRM).
     private let safariEngine: SafariEngineRow?
@@ -254,8 +253,8 @@ final class SiteControlCenterView: NSView {
             ("gearshape.fill", "Automatic Picture-In-Picture", autoPiP ? "Allowed" : "Disabled",
              autoPiP, { store.settings.toggleAutoPictureInPicture(url: url) }),
         ]
-        // Chromium's blocker doesn't see a WebKit page: no switch that does nothing there.
-        if protectedMedia == nil, let host = AppSettings.filterHost(url) {
+        // WebKit pages block with the same lists (WebKitContentBlocking), so the switch is on both engines.
+        if let host = AppSettings.filterHost(url) {
             let active = store.settings.pausedFilterHosts?.contains(host) != true
             rowsSpec.insert(("shield.fill", "Ad Blocking", active ? "On" : "Off · Reload page",
                              active, { store.settings.toggleFilters(on: host) }), at: 1)

@@ -5,7 +5,8 @@ import Foundation
 /// scripts (Resources/blocklist/scriptlets.js, given the ScriptletTable of the lists in use), and their procedural
 /// hiding runs in Cra's world once a page commits (Resources/blocklist/procedural.js, BrowserManager). The scriptlets
 /// go in with PageScript's own document-start script, so the Chromium engine installs them in a page before its first
-/// load, and installs them again in open pages when the lists or the paused sites change.
+/// load, and installs them again in open pages when the lists or the paused sites change. WebKit pages run the same
+/// script as a user script (`mainWorld`, WebKitBrowser), installed again in open pages the same way.
 @MainActor
 enum FilterPageScripts {
     static let scriptlets = bundled("scriptlets")
@@ -22,6 +23,9 @@ enum FilterPageScripts {
 
     private static var installed: String?
 
+    /// PageScript's page-world script with the scriptlets in use: what WebKit pages run (WebKitBrowser).
+    private(set) static var mainWorld = PageScript.mainWorld
+
     /// PageScript's scripts, with the scriptlets of `table` (ScriptletTable.json; nil: the copy kept from the last
     /// run). Unchanged scripts aren't installed again.
     static func install(table json: String?) {
@@ -34,7 +38,9 @@ enum FilterPageScripts {
         }
         guard main != installed else { return }
         installed = main
+        mainWorld = main
         CraCEFRuntime.setDocumentStartScript(main, isolatedScript: PageScript.isolatedWorld, world: PageScript.world)
+        WebKitContentBlocking.shared.scriptsChanged()
         if json != nil { CraLog.note("filter page scripts: scriptlets \(runs ? "on" : "off"), \(table.utf8.count / 1024) KB") }
     }
 
