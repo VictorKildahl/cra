@@ -350,8 +350,24 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
             if done.frame.insetBy(dx: -6, dy: -6).contains(p) { commitRename() }
             return
         }
-        store.togglePinnedCollapsed(spaceID)
+        // The pair's first click toggled here only if it came within the double-click interval (the
+        // first could have been the •••'s, which keeps its clicks).
+        let firstToggled = toggledAt.map { event.timestamp - $0 <= NSEvent.doubleClickInterval } ?? false
+        switch SpaceHeaderClick.action(clickCount: event.clickCount, onName: p.x >= iconRect.maxX, firstClickToggled: firstToggled) {
+        case .togglePinned:
+            store.togglePinnedCollapsed(spaceID)
+            toggledAt = event.timestamp
+        case .rename(let undoToggle):
+            toggledAt = nil
+            if undoToggle { store.togglePinnedCollapsed(spaceID) }
+            CraLog.note("space header double-click: rename\(undoToggle ? ", pinned tabs put back" : "")")
+            beginRename()
+        }
     }
+
+    /// When this header's last click collapsed or expanded the pinned tabs, for a double-click's
+    /// second click to put them back.
+    private var toggledAt: TimeInterval?
 
     override func menu(for event: NSEvent) -> NSMenu? {
         renameField == nil ? makeSpaceMenu() : nil

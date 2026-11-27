@@ -1177,7 +1177,9 @@ Duplicate pressed over AX, StorableSidebar.json read after each.
   Share Space…, Export “<name>” into Folder ▸ (every space, its own disabled) | Manage Spaces… | Delete Space.
   The header keeps its hover look while the menu is open. Cra leaves out Share Space… (Arc's servers).
 - [O] Rename Space…: the name turns into a selected text field and the ••• into a grey "Done" (10 pt semibold,
-  `Sidebar space header done button`, 32×26). Export … into Folder deletes the space afterwards
+  `Sidebar space header done button`, 32×26). Cra addition (X request, 27 Nov): a double-click on the name
+  (past the icon box) opens the same field; its first click has already toggled the pinned tabs, so the second
+  puts them back (SpaceHeaderClick). Export … into Folder deletes the space afterwards
   (`completeDeleteSpace`, "Space turned into folder"). Delete alert: "Delete your <name> Space?" / "This will
   archive all the tabs and folders inside it."
 - [O] Change Space Icon…: an NSPopover (298 × 298 window, 272 pt content) under the icon, arrow up: Emoji | Icon

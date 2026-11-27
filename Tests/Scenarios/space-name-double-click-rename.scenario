@@ -1,0 +1,41 @@
+# A double-click on a space's name in the sidebar renames the space, as a double-click on a tab
+# renames the tab (asked on X, 27 Nov 2026). A click on the header still collapses or expands the
+# pinned tabs at once, as in Arc; the double-click's first click has done that by the time the
+# second arrives, so the second puts the pinned tabs back and opens the name field. The clicks go
+# through the event queue to the header, as the pointer's would.
+budget rss=800 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=pinned
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+cra://action/pinTab
+wait 1
+# The header row is 8,195, 312x36: its icon box (and the chevron) to x 39, the name from x 44.
+cra://debug?snapshot=SpaceHeaderView&out=/dev/null
+expect-log snapshot: SpaceHeaderView at 8,195 size 312x36
+
+# One click on the name collapses the pinned tabs straight away.
+cra://debug?clickAt=80,213
+wait 1
+cra://debug?browserWindows=click
+expect-log Cra browser windows click: .* pinnedCollapsed=1
+
+# A double-click on the name opens the field and leaves the pinned tabs collapsed, as they were.
+cra://debug?clickAt=80,213&clicks=2
+expect-log space header double-click: rename, pinned tabs put back
+wait 0.5
+cra://debug?browserWindows=field
+expect-log Cra browser windows field: .* pinnedCollapsed=1
+cra://debug?key=Q,12,0
+cra://debug?key=x,7,0
+cra://debug?key=%0D,36,0
+wait 1
+cra://debug?browserWindows=renamed
+expect-log Cra browser windows renamed: kind=normal space=Qx .* pinnedCollapsed=1
+
+# On the icon box a double-click is the chevron's: it collapses and expands, and renames nothing.
+cra://debug?clickAt=26,213&clicks=2
+wait 1
+cra://debug?browserWindows=chevron
+expect-log Cra browser windows chevron: kind=normal space=Qx .* pinnedCollapsed=1
+cra://debug?checkStore=1
