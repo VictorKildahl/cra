@@ -162,12 +162,22 @@ final class AppDialog {
 
 private struct AppDialogView: View {
     @Bindable var dialog: AppDialog
-    @FocusState private var inputFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             DialogScrollContent(width: dialog.width - 2 * dialog.inset, maximumHeight: max(140, (NSScreen.main?.visibleFrame.height ?? 800) - 250)) {
                 details
+            }
+            if dialog.input != nil {
+                DialogInputField(
+                    text: Binding(get: { dialog.input ?? "" }, set: { dialog.input = $0 }),
+                    placeholder: dialog.placeholder,
+                    width: dialog.width - 2 * dialog.inset
+                )
+                .frame(height: 37)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color(hex: "#383E4F")))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(hex: "#737884"), lineWidth: 1))
+                .padding(.top, 18)
             }
             // Arc's extra choice ("Quit, and don’t ask again") sits at the card's left edge, the rest at its right.
             HStack(spacing: 7) {
@@ -185,7 +195,6 @@ private struct AppDialogView: View {
         .frame(width: dialog.width)
         .fixedSize(horizontal: false, vertical: true)
         .modifier(DialogSurface(cornerRadius: 16))
-        .onAppear { inputFocused = dialog.input != nil }
     }
 
     private var details: some View {
@@ -222,18 +231,6 @@ private struct AppDialogView: View {
                     .foregroundStyle(DialogTheme.body)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, dialog.older ? 8 : 16)
-            }
-            if dialog.input != nil {
-                TextField(dialog.placeholder, text: Binding(get: { dialog.input ?? "" }, set: { dialog.input = $0 }))
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14))
-                    .foregroundStyle(.white)
-                    .focused($inputFocused)
-                    .padding(.horizontal, 12)
-                    .frame(height: 37)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color(hex: "#383E4F")))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(hex: "#737884"), lineWidth: 1))
-                    .padding(.top, 18)
             }
             if let title = dialog.suppressionTitle, dialog.older {
                 DialogCheckbox(title: title, isOn: $dialog.isSuppressed)
@@ -329,5 +326,91 @@ struct DialogCheckbox: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isOn ? [.isSelected] : [])
+    }
+}
+
+/// Native AppKit text input for `AppDialog` so typing, clicking anywhere in the box,
+/// and Edit-menu shortcuts (`⌘V`, `⌘A`, `⌘C`, `⌘Z`) work reliably inside sheet `NSPanel`s.
+private struct DialogInputField: NSViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let width: CGFloat
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    func makeNSView(context: Context) -> DialogInputContainer {
+        let container = DialogInputContainer(placeholder: placeholder, width: width)
+        container.field.delegate = context.coordinator
+        container.field.stringValue = text
+        return container
+    }
+
+    func updateNSView(_ container: DialogInputContainer, context: Context) {
+        context.coordinator.text = $text
+        if container.field.stringValue != text {
+            container.field.stringValue = text
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var text: Binding<String>
+        init(text: Binding<String>) { self.text = text }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field = obj.object as? NSTextField else { return }
+            if text.wrappedValue != field.stringValue {
+                text.wrappedValue = field.stringValue
+            }
+        }
+    }
+}
+
+@MainActor
+final class DialogInputContainer: NSView {
+    let field = NSTextField()
+    private var didAutoFocus = false
+
+    init(placeholder: String, width: CGFloat) {
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 37))
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: 14)
+        field.textColor = .white
+        field.usesSingleLineMode = true
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.placeholderAttributedString = NSAttributedString(
+            string: placeholder,
+            attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor(white: 1, alpha: 0.45)]
+        )
+        addSubview(field)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        let lineHeight = ceil(field.fittingSize.height)
+        let insetX: CGFloat = 12
+        field.frame = NSRect(x: insetX, y: floor((bounds.height - lineHeight) / 2),
+                             width: max(0, bounds.width - insetX * 2), height: lineHeight)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window, !didAutoFocus else { return }
+        didAutoFocus = true
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, let window, window.isVisible else { return }
+            window.makeFirstResponder(self.field)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(field)
+        field.currentEditor()?.mouseDown(with: event)
     }
 }

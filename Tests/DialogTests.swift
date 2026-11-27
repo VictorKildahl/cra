@@ -71,6 +71,16 @@ enum DialogTests {
         var renamed: NSApplication.ModalResponse?
         rename.present(over: parent) { renamed = $0 }
         let renameWindow = sheet(over: parent)
+        let inputContainer = findInputContainer(in: renameWindow.contentView)
+        expect(inputContainer != nil, "input dialogs host a native AppKit input field outside the scroll view")
+        if let inputContainer {
+            renameWindow.makeFirstResponder(inputContainer.field)
+            expect(inputContainer.field.currentEditor() != nil, "focusing the input field opens its text editor for typing and paste")
+            inputContainer.field.currentEditor()?.insertText("https://example.com/feed.xml")
+            NotificationCenter.default.post(name: NSControl.textDidChangeNotification, object: inputContainer.field)
+            expect(rename.input == "https://example.com/feed.xml", "typing or pasting into the field updates dialog.input")
+            rename.input = ""
+        }
         renameWindow.sendEvent(key(36, window: renameWindow))
         expect(renamed == nil && renameWindow.isVisible, "empty names cannot submit")
         rename.input = "Work"
@@ -266,5 +276,15 @@ enum DialogTests {
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
         guard condition() else { fatalError(message) }
         checks += 1
+    }
+
+    @MainActor
+    private static func findInputContainer(in view: NSView?) -> DialogInputContainer? {
+        guard let view else { return nil }
+        if let container = view as? DialogInputContainer { return container }
+        for subview in view.subviews {
+            if let found = findInputContainer(in: subview) { return found }
+        }
+        return nil
     }
 }
