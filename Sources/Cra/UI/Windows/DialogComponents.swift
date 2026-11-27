@@ -63,10 +63,15 @@ struct DialogButton: View {
                 Text(title).font(.system(size: 13, weight: .medium))
                     .foregroundStyle(accent || destructive ? .white : enabled ? Color(hex: "#EBEBEF") : Color(hex: "#5B5C7F"))
                 if !key.isEmpty {
-                    Text(key).font(.system(size: key == "↩" ? 13 : 11, weight: .bold))
+                    // Arc's Quit sheet (#876): ESC 35 × 20 pt, ↩ 28 × 20 pt with the return glyph in its middle. The
+                    // text arrow sat 1.25 pt high, on its font's line rather than in the badge.
+                    let size = badge ?? (key == "↩" ? CGSize(width: 28, height: 20) : CGSize(width: 35, height: 20))
+                    Group {
+                        if key == "↩" { Image(systemName: "return") } else { Text(key) }
+                    }
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(destructive ? .white : accent ? Color(hex: "#EDEDFF") : enabled ? Color(hex: "#B7B7DD") : Color(hex: "#5F6193"))
-                        .frame(minWidth: badge?.width ?? 27, maxWidth: badge?.width, minHeight: badge?.height ?? 19, maxHeight: badge?.height)
-                        .padding(.horizontal, badge != nil || key == "↩" ? 0 : 2)
+                        .frame(minWidth: size.width, maxWidth: badge?.width, minHeight: size.height, maxHeight: size.height)
                         .background(RoundedRectangle(cornerRadius: badge == nil ? 5 : 3, style: .continuous)
                             .fill(destructive ? Color(hex: "#F74C31") : accent ? Color(hex: "#464DFB") : primary ? Color(hex: enabled ? "#4E4C9A" : "#222469") : Color(hex: "#4E4C77")))
                         .overlay(RoundedRectangle(cornerRadius: badge == nil ? 5 : 3, style: .continuous)
