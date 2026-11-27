@@ -125,6 +125,14 @@ final class TabStore {
         changed()
     }
 
+    /// The tab that would be on screen once `id` went to the archive: what a swipe back on its first page shows
+    /// coming out of the tab button before it lets go.
+    func tabShownAfterArchiving(_ id: UUID) -> MobileTab? {
+        var after = document
+        after.archive(id, returningTo: liveOpener(of: id)?.tabID)
+        return after.selectedTab
+    }
+
     func restore(_ id: UUID) {
         document.restore(id, now: now())
         changed()

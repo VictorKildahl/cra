@@ -537,6 +537,17 @@ built release app with a test profile. Note anything that fails in the release's
   growing past its size (it puffed up to 106 %). `PillPressTests` covers a held press; a quick tap's way
   back needs an eye.
 
+- **The swipe across the page (`MobilePageSwipe`):** on a TestFlight build on a real iPhone with System
+  Haptics on, beside Arc Search. Tap a link, then drag the page right slowly: it holds back, a quarter of the
+  finger's way, then lets go with one tick about 75 pt in and catches up; the page it goes back to is under it,
+  a third of the way along, with a soft shadow on the page's edge, and nothing jumps when its picture gives way
+  to the live page. On a tab's first page the hold is harder: still for the first 16 pt, an eighth of the
+  finger's way after, the tick about 185 pt in, and from it the page shrinks into a card while the tab before
+  it lifts off the tab button's front card and flies in beside it. Let go before the tick, both go back; after
+  it, the tab closes and the next page shows without a black frame. Everything moves at 120 Hz, the cards'
+  flight included, and the release never stutters. `PageGestureTests` pins the geometry, the hold and where it
+  lets go; the tick, the frame rate and the feel need a phone.
+
 - **The bar's settle:** on a TestFlight build on a real iPhone, flick the page up and down quickly,
   each flick landing while the bar is still moving, and flick from near the bottom where the
   home-indicator swipe can take the touch: the bar always comes to rest fully open or closed, never
