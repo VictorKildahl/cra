@@ -1892,7 +1892,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     private func appSettingsDetents() -> [UISheetPresentationController.Detent] {
-        MobileSettingsSheet.appSettingsHeights(onPad: traitCollection.userInterfaceIdiom == .pad).map { ($0 == .medium ? UISheetPresentationController.Detent.medium : UISheetPresentationController.Detent.large)() }
+        // Full height on iPad and on the open iPhone Duo, which is treated like a small iPad (#866).
+        let screen = MobileScreenClass.of(size: view.window?.bounds.size ?? view.bounds.size, isPad: traitCollection.userInterfaceIdiom == .pad)
+        return MobileSettingsSheet.appSettingsHeights(onPad: screen.opensSheetsFull).map { ($0 == .medium ? UISheetPresentationController.Detent.medium : UISheetPresentationController.Detent.large)() }
     }
 
     // MARK: Handoff

@@ -273,9 +273,11 @@ public enum MobileBottomBar {
     }
 
     /// The bar and its three controls in a view of `size` whose bottom safe area is `safeBottom`.
-    public static func frames(in size: CGSize, safeBottom: CGFloat) -> Frames {
+    /// `band`: how far across the side buttons may sit, centred (MobileScreenClass.barBand: 540 pt on the open Duo, #866).
+    public static func frames(in size: CGSize, safeBottom: CGFloat, band: CGFloat = .infinity) -> Frames {
         let barHeight = height + safeBottom
         let bar = CGRect(x: 0, y: size.height - barHeight, width: size.width, height: barHeight)
+        let across = min(size.width, band), left = (size.width - across) / 2
         let centerY = bar.minY + controlsCenterY
         func circle(_ centerX: CGFloat) -> CGRect {
             CGRect(x: centerX - sideButtonDiameter / 2, y: centerY - sideButtonDiameter / 2,
@@ -283,8 +285,8 @@ public enum MobileBottomBar {
         }
         let pill = CGRect(x: (size.width - pillSize.width) / 2, y: centerY - pillSize.height / 2,
                           width: pillSize.width, height: pillSize.height)
-        return Frames(bar: bar, tabs: circle(sideButtonCenterInset), pill: pill,
-                      menu: circle(size.width - sideButtonCenterInset))
+        return Frames(bar: bar, tabs: circle(left + sideButtonCenterInset), pill: pill,
+                      menu: circle(left + across - sideButtonCenterInset))
     }
 
     /// The bar's top edge with the bar `progress` of the way down its travel: at its open place,

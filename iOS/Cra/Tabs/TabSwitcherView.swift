@@ -40,7 +40,9 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     private var rowMoves: Bool { settle != nil || (draggedCard == nil && [.began, .changed].contains(pan.state)) }
 
     private var sideInsets: (left: CGFloat, right: CGFloat) {
-        MobileSideInsets.applied(size: bounds.size, safeLeft: safeAreaInsets.left, safeRight: safeAreaInsets.right)
+        // On the open iPhone Duo the row is laid out as on the widest iPhone, in the middle (#866).
+        let screen = MobileScreenClass.of(size: bounds.size, isPad: traitCollection.userInterfaceIdiom == .pad)
+        return screen.carouselInsets(size: bounds.size, insets: MobileSideInsets.applied(size: bounds.size, safeLeft: safeAreaInsets.left, safeRight: safeAreaInsets.right))
     }
     var expansion: CGFloat = 0 { didSet { setNeedsLayout() } }
     /// The card that fills the screen at `expansion` 1.

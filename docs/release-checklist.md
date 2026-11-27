@@ -521,6 +521,10 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### iPhone
 
+- **#866, the open iPhone Duo:** on a TestFlight build on an iPhone Duo (or the Duo simulator, which needs Xcode 27),
+  unfolded: App Settings from the tab switcher's gear opens at full height; the bottom bar's tab and menu buttons sit
+  within 540 pt in the middle; the onboarding Next button and the Spaces sync intro's buttons are no wider than 540 pt;
+  the tab switcher shows a phone-sized card in the middle with its neighbours. Folded, everything is as on an iPhone.
 - **#504:** on a TestFlight build with the default-browser entitlement, Settings ▸ Set Cra as
   Default Browser opens Cra's page in iOS Settings with a "Default Browser App" row; picking Cra
   there makes a link tapped in Messages open in Cra. Settings ▸ Apps ▸ Default Apps ▸ Browser App
