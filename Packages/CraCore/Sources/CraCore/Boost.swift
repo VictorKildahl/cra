@@ -14,6 +14,9 @@ public struct Boost: Codable, Equatable, Identifiable, Sendable {
     /// The tint: hue 0–1 round the wheel, strength 0–1 out from the middle (0: no tint).
     public var hue: Double
     public var strength: Double
+    /// The small handle's place, in turns clockwise from the big one: the hue dark pixels take.
+    /// Arc's `secondaryHueOffset`, an eighth of a turn until that handle is moved (#478).
+    public var darkHue: Double
     public var invert: Bool
     public var contrast: Double
     public var brightness: Double
@@ -45,10 +48,37 @@ public struct Boost: Codable, Equatable, Identifiable, Sendable {
         self.host = Self.siteHost(host)
         self.name = name
         enabled = true
-        hue = 0; strength = 0; invert = false
+        hue = 0; strength = 0; darkHue = BoostWheel.accentOffset; invert = false
         contrast = 50; brightness = 50; saturation = 50
         font = nil; textScale = 1; textCase = .none
         zapped = []; css = ""; js = ""
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, host, name, enabled, hue, strength, darkHue, invert, contrast, brightness, saturation,
+             font, textScale, textCase, zapped, css, js
+    }
+
+    /// Boosts saved before the small handle was movable have no `darkHue`: they keep Arc's eighth turn.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        host = try c.decode(String.self, forKey: .host)
+        name = try c.decode(String.self, forKey: .name)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        hue = try c.decode(Double.self, forKey: .hue)
+        strength = try c.decode(Double.self, forKey: .strength)
+        darkHue = try c.decodeIfPresent(Double.self, forKey: .darkHue) ?? BoostWheel.accentOffset
+        invert = try c.decode(Bool.self, forKey: .invert)
+        contrast = try c.decode(Double.self, forKey: .contrast)
+        brightness = try c.decode(Double.self, forKey: .brightness)
+        saturation = try c.decode(Double.self, forKey: .saturation)
+        font = try c.decodeIfPresent(Int.self, forKey: .font)
+        textScale = try c.decode(Double.self, forKey: .textScale)
+        textCase = try c.decode(TextCase.self, forKey: .textCase)
+        zapped = try c.decode([String].self, forKey: .zapped)
+        css = try c.decode(String.self, forKey: .css)
+        js = try c.decode(String.self, forKey: .js)
     }
 
     /// The 20 fonts of the editor's grid (Arc ships its own; these are the Mac's), 5 to a row.
@@ -77,7 +107,9 @@ public struct Boost: Codable, Equatable, Identifiable, Sendable {
     }
 
     /// Whether the editor's colour controls are at the site's own colours.
-    public var colorsUntouched: Bool { strength == 0 && !invert && contrast == 50 && brightness == 50 && saturation == 50 }
+    public var colorsUntouched: Bool {
+        strength == 0 && darkHue == BoostWheel.accentOffset && !invert && contrast == 50 && brightness == 50 && saturation == 50
+    }
 
     /// The stylesheet the page gets.
     public var stylesheet: String { stylesheet(engineTints: false) }
@@ -91,7 +123,7 @@ public struct Boost: Codable, Equatable, Identifiable, Sendable {
     public var tint: Colorize? {
         guard strength > 0 else { return nil }
         let added = 0.5 * pow(min(1, strength), 1.2)
-        return Colorize(hue: hue, darkHue: BoostWheel.accentOffset, saturationAdded: added, saturationKept: 0.5,
+        return Colorize(hue: hue, darkHue: darkHue, saturationAdded: added, saturationKept: 0.5,
                         lightnessAtBlack: 0.4 * added, lightnessScale: 1 - 0.6 * added)
     }
 
