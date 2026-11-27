@@ -1179,7 +1179,7 @@ Duplicate pressed over AX, StorableSidebar.json read after each.
 - [O] Rename Space…: the name turns into a selected text field and the ••• into a grey "Done" (10 pt semibold,
   `Sidebar space header done button`, 32×26). Cra addition (X request, 27 Nov): a double-click on the name
   (past the icon box) opens the same field; its first click has already toggled the pinned tabs, so the second
-  puts them back (SpaceHeaderClick). Export … into Folder deletes the space afterwards
+  puts them back (ToggleRowClick). Export … into Folder deletes the space afterwards
   (`completeDeleteSpace`, "Space turned into folder"). Delete alert: "Delete your <name> Space?" / "This will
   archive all the tabs and folders inside it."
 - [O] Change Space Icon…: an NSPopover (298 × 298 window, 272 pt content) under the icon, arrow up: Emoji | Icon
@@ -2686,6 +2686,8 @@ GitHub issue #4: opening in window B a tab that window A shows left A with no ta
   test bundle with two windows on the same tab: page and blur swap each time the other window becomes main.
 
 ### Folder icon picker (7 Nov 2026, user-supplied Arc captures)
+- Cra addition (X request, 27 Nov): a double-click on a folder's name renames it as the space header's does
+  (ToggleRowClick): the second click puts the folder back open or closed. Clicks on the glyph only toggle.
 - [O] A regular folder's context menu has Change Icon… before Rename…. Its popover points to the
   folder glyph and shows the title Icon, a trash button, and 24 glyphs in three rows of eight.
   There are no Emoji tab, search field or category bar. The current glyph has a rounded highlight.

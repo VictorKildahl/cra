@@ -353,8 +353,8 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
         // The pair's first click toggled here only if it came within the double-click interval (the
         // first could have been the •••'s, which keeps its clicks).
         let firstToggled = toggledAt.map { event.timestamp - $0 <= NSEvent.doubleClickInterval } ?? false
-        switch SpaceHeaderClick.action(clickCount: event.clickCount, onName: p.x >= iconRect.maxX, firstClickToggled: firstToggled) {
-        case .togglePinned:
+        switch ToggleRowClick.action(clickCount: event.clickCount, onName: p.x >= iconRect.maxX, firstClickToggled: firstToggled) {
+        case .toggle:
             store.togglePinnedCollapsed(spaceID)
             toggledAt = event.timestamp
         case .rename(let undoToggle):

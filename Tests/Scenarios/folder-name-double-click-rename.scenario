@@ -1,0 +1,49 @@
+# A double-click on a folder's name renames the folder, as one on a space's name renames the space
+# (asked on X, 27 Nov 2026). A click still opens or closes the folder at once, as in Arc; the
+# double-click's first click has done that by the time the second arrives, so the second puts the
+# folder back and opens the name field. On the folder's glyph every click opens or closes, however
+# fast they come: 0.1.18 dropped a whole-row double-click rename because fast open/close clicks
+# started renames. The clicks go through the event queue to the row, as the pointer's would.
+budget rss=800 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+cra://debug?windowSize=1280x800
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+# A new folder opens its name field; Escape keeps "Folder". It starts open.
+cra://action/newFolder
+wait 1
+cra://debug?key=%1B,53,0
+wait 0.5
+cra://debug?browserWindows=made
+expect-log Cra browser windows made: .* openFolders=1/1
+# The folder's row is 8,234, 312x40: its glyph centred at x 26, the name from about x 63.
+cra://debug?snapshot=FolderRowView&out=/dev/null
+expect-log snapshot: FolderRowView at 8,234 size 312x40
+
+# On the glyph a double-click closes and opens the folder and renames nothing.
+cra://debug?clickAt=26,254&clicks=2
+wait 1
+reject-log folder double-click: rename
+cra://debug?browserWindows=glyph
+expect-log Cra browser windows glyph: .* openFolders=1/1
+
+# One click on the name closes it straight away.
+cra://debug?clickAt=100,254
+wait 1
+cra://debug?browserWindows=click
+expect-log Cra browser windows click: .* openFolders=0/1
+
+# A double-click on the name opens the field and leaves the folder closed, as it was.
+cra://debug?clickAt=100,254&clicks=2
+expect-log folder double-click: rename, put back closed
+wait 0.5
+cra://debug?browserWindows=field
+expect-log Cra browser windows field: .* openFolders=0/1
+cra://debug?key=Q,12,0
+cra://debug?key=x,7,0
+cra://debug?key=%0D,36,0
+wait 1
+expect-log folder rename: new name, 2 characters
+cra://debug?browserWindows=renamed
+expect-log Cra browser windows renamed: .* openFolders=0/1
+cra://debug?checkStore=1
