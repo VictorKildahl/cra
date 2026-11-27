@@ -23,9 +23,9 @@ public struct NowPlayingMedia: Equatable, Sendable {
             self.sizes = sizes
         }
 
-        /// The widest size it lists ("96x96 192x192"), 0 for none or "any".
+        /// The widest size it lists ("96x96 192x192", SoundCloud's "t500x500"), 0 for none or "any".
         var width: Int {
-            sizes.split(separator: " ").compactMap { Int($0.lowercased().split(separator: "x").first ?? "") }.max() ?? 0
+            sizes.split(separator: " ").compactMap { Int(String(($0.lowercased().split(separator: "x").first ?? "").drop { !$0.isNumber })) }.max() ?? 0
         }
     }
 
@@ -54,7 +54,8 @@ public struct NowPlayingMedia: Equatable, Sendable {
 
     /// Run in the page's isolated world: the media session's metadata (DOM objects are shared between worlds)
     /// and the element that plays, else the one that played, else the first. A page whose media session names no
-    /// artwork (Bandcamp sets none) offers its og:image, an album's cover there. A JSON string, or "" when there is
+    /// artwork (Bandcamp sets none) offers its og:image, an album's cover there. A YouTube live stream, whose
+    /// element says a finite length, is reported live while YouTube's player shows its Live badge. A JSON string, or "" when there is
     /// neither metadata nor an element. `duration` is -1 for a live stream (Infinity has no JSON).
     public static let script = """
     (() => {
@@ -65,7 +66,9 @@ public struct NowPlayingMedia: Equatable, Sendable {
       let art = md && md.artwork ? [...md.artwork].map(a => ({ src: String(a.src || ''), sizes: String(a.sizes || '') })) : [];
       const og = document.querySelector('meta[property="og:image"]');
       if (!art.length && og && og.content) art = [{ src: new URL(og.content, location.href).href, sizes: '' }];
-      const d = m ? m.duration : NaN;
+      // YouTube gives a live stream a finite length (its rewind window, hours long); its player's Live badge shows.
+      const badge = document.querySelector('.ytp-live-badge');
+      const d = m ? (badge && badge.getClientRects().length ? Infinity : m.duration) : NaN;
       return JSON.stringify({
         title: md ? String(md.title || '') : '', artist: md ? String(md.artist || '') : '', album: md ? String(md.album || '') : '',
         artwork: art.slice(0, 16),

@@ -4,7 +4,8 @@
 # network, Arc's card colour, and 15-second skips (the page has no tracks). Skipping and seeking move the
 # page's media; switching back to Arc's player makes Arc's 33 pt card again, and the island comes back. A second
 # track on a page like Bandcamp's (no media session) stacks a second island over it, its line the tab's title without
-# the "▶︎" the page puts in front and its artwork the page's og:image; opening the stack opens both.
+# the "▶︎" the page puts in front and its artwork the page's og:image; opening the stack opens both. A YouTube-like
+# live stream (a finite rewind window under YouTube's shown Live badge) says Live, with no bar and no skips.
 budget rss=800 stalls50=30
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "nowPlayingStyle": "island"}
 pace 0.5
@@ -60,3 +61,16 @@ wait 1
 cra://debug?nowPlaying=state&label=opentwo
 expect-log Cra nowPlaying\[opentwo\] card island h=144 open=1 line="Plain Song"
 expect-log Cra nowPlaying\[opentwo\] card island h=144 open=1 line="Slow Tides
+
+cra://debug?nowPlaying=fold&label=fold
+cra://open?url=${ORIGIN}/now-playing.html?n=live
+expect-log GET /now-playing\.html\?n=live
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"userGesture":true,"awaitPromise":true,"returnByValue":true,"expression":"playLive()"}
+expect-log "value":"live:playing"
+cra://open?url=${PAGE}?n=fourth
+expect-log GET /page\.html\?n=fourth
+wait 3
+cra://debug?nowPlaying=state&label=live
+expect-log Cra nowPlaying\[live\] media 127\.0\.0\.1 title="Night Radio" artist="Harbour Lights" pos=[0-9] dur=live
+expect-log Cra nowPlaying\[live\] card island h=30 open=0 line="Night Radio.{2}Harbour Lights" .* times=Live/- buttons=previousTrack/nextTrack

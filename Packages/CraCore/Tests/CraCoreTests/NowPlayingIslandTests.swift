@@ -70,6 +70,14 @@ import Testing
         #expect(NowPlayingMedia(artwork: [.init(src: "a", sizes: "48x48 192x192")]).artwork[0].width == 192)
     }
 
+    /// SoundCloud lists its covers as "t500x500" … "t80x80": read as sizes, so the island loads the 120 px one,
+    /// not the first.
+    @Test func readsSoundCloudsSizes() {
+        let sc = NowPlayingMedia(artwork: ["t500x500", "t300x300", "t250x250", "t120x120", "t80x80"].map { .init(src: $0, sizes: $0) })
+        #expect(sc.artwork.map(\.width) == [500, 300, 250, 120, 80])
+        #expect(sc.artworkURL(forPixels: 112) == "t120x120")
+    }
+
     // MARK: The clock
 
     /// Between reads the position moves on at the media's rate while it plays, stays put while paused, and
