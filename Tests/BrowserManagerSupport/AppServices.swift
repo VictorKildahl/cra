@@ -166,8 +166,11 @@ enum TestRoot { case today }
         itemSpaces[id] = sid
         movedTabs.append((id, sid, false))
     }
+    func selectedTabID(window: UUID?) -> UUID? { selectedTabPerSpace[focusedSpace] }
+    /// As the app's: the window follows only the tab it has selected; any other tab moves on its own.
     func rerouteTab(_ id: UUID, toSpace sid: UUID, window: UUID?) {
         guard items[id]?.isTab == true, !isPinned(id), space(sid) != nil, !isStandalone(space: sid) else { return }
+        guard selectedTabID(window: window) == id else { return moveTab(id, toSpace: sid) }
         let from = itemSpaces[id]
         let previous = items[id]?.tab?.activeTabBeforeCreationID
         itemSpaces[id] = sid

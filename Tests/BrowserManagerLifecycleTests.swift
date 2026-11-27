@@ -287,6 +287,7 @@ enum BrowserManagerLifecycleTests {
         await askOnPageSnapshotCase()
         findCorrelationCase()
         await linkAndRedirectSpaceRoutingCase()
+        await linkTabLeftBehindCase()
         print("Browser manager lifecycle: \(checks) checks passed")
     }
 
@@ -3161,10 +3162,10 @@ enum BrowserManagerLifecycleTests {
     }
 
     // promise: #868
-    /// Air Traffic Control routes in-tab links and redirect chains (google.com/url?q=…, HTTP 30x,
-    /// <meta refresh>, JS location.replace) into the configured target space (#868) without pairing
-    /// cross-profile popup hosts, leaving source selection blank, moving settled/pinned/favorite/split
-    /// tabs, or looping across spaces.
+    /// Air Traffic Control routes a page's new-tab links and their redirect chains (google.com/url?q=…, HTTP
+    /// 30x, <meta refresh>, JS location.replace) into the configured target space (#868) without pairing
+    /// cross-profile popup hosts, leaving the source space's selection blank or looping across spaces.
+    /// Navigations inside settled, pinned, favorite and split tabs stay in their tab and space, as in Arc.
     @MainActor
     private static func linkAndRedirectSpaceRoutingCase() async {
         let clock = ManualScheduler()
@@ -3231,9 +3232,9 @@ enum BrowserManagerLifecycleTests {
         let redirectTab = store.items.values.first { $0.tab?.url == "https://www.google.com/url?q=encoded" }!.id
         expect(redirectHost != nil && store.spaceID(ofItem: redirectTab) == pro,
                "unmatched redirector initially starts in Pro")
-        // Simulate 200 OK redirector page finishing load, then JS/meta redirect within 2s grace window.
+        // The 200 OK redirector page finishes loading, then a JS/meta redirect within the 2 s grace.
+        redirectHost!.navigate(to: "https://www.google.com/url?q=encoded")
         redirectHost!.setLoading(true)
-        redirectHost!.hasCommittedLoad = true
         redirectHost!.setLoading(false)
         clock.advance(by: 1.0)
         redirectHost!.navigate(to: "https://www.scaler.com/problems/js-redirect")
@@ -3265,75 +3266,52 @@ enum BrowserManagerLifecycleTests {
                && manager.runtime(for: bgRedirTab)?.browser.profilePath == "/tmp/profile-personal",
                "background redirect moves to Personal quietly, keeps Pro focused, and loads behind in Personal's profile")
 
-        // 6. Settled tab after grace window + pinned/favorite/split tabs never move; cross-host opens new tab.
+        // 6. A settled tab (past the grace) and pinned, favorite and split tabs: a navigation to a routed address
+        // stays in the tab and its space, and opens nothing elsewhere (Arc never routes in-tab navigation).
+        func staysInItsTab(_ id: UUID, _ url: String, _ what: String) async {
+            let count = store.items.count
+            manager.runtime(for: id)!.browser.navigate(to: url)
+            await drainMainQueue()
+            expect(store.spaceID(ofItem: id) == pro && store.item(id)?.tab?.url == url && store.items.count == count
+                   && store.focusedSpace == pro, "\(what): the navigation stays in its tab in Pro and opens no tab in Personal")
+        }
         store.focusedSpace = pro
         let settled = store.createTab(url: "https://short.example/settled", in: pro, select: true).id
-        manager.beginRedirectRouting(for: settled, space: pro, alreadyRouted: false)
+        manager.beginRedirectRouting(for: settled, space: pro)
         manager.show(settled, focus: false)
         let settledBrowser = manager.runtime(for: settled)!.browser
+        settledBrowser.navigate(to: "https://short.example/settled")
         settledBrowser.setLoading(true)
-        settledBrowser.hasCommittedLoad = true
         settledBrowser.setLoading(false)
-        clock.advance(by: 3.0) // past 2.0s clientRedirectGrace
-        settledBrowser.navigate(to: "https://www.scaler.com/problems/after-grace")
-        await drainMainQueue()
-        let spawnedFromSettled = store.items.values.first { $0.tab?.url == "https://www.scaler.com/problems/after-grace" }
-        expect(store.spaceID(ofItem: settled) == pro && spawnedFromSettled != nil
-               && store.spaceID(ofItem: spawnedFromSettled!.id) == personal,
-               "settled tab past grace window stays in Pro and opens new tab in Personal")
-        expect(store.item(settled)?.tab?.url == "https://short.example/settled"
-               && settledBrowser.loads.last == "https://short.example/settled",
-               "settled tab keeps and restores its own URL")
+        clock.advance(by: LinkRedirectState.clientRedirectGrace + 1)
+        await staysInItsTab(settled, "https://www.scaler.com/problems/after-grace", "a settled tab")
 
-        // Pinned DSA Sheet: cross-host navigation opens new tab in Personal and restores DSA Sheet (twice, hops == 0).
-        store.focusedSpace = pro
         manager.show(sheet, focus: false)
-        sheetBrowser.hasCommittedLoad = false
-        sheetBrowser.setLoading(true)
-        sheetBrowser.navigate(to: "https://www.scaler.com/problems/p1")
-        await drainMainQueue()
-        let p1 = store.items.values.first { $0.tab?.url == "https://www.scaler.com/problems/p1" }
-        expect(store.spaceID(ofItem: sheet) == pro && p1 != nil && store.spaceID(ofItem: p1!.id) == personal
-               && sheetBrowser.stopLoadingRequests >= 1 && store.item(sheet)?.tab?.url == "https://docs.google.com/spreadsheets/d/1",
-               "pinned DSA Sheet is never moved, aborts uncommitted navigation, and spawns problem 1 in Personal")
-        sheetBrowser.hasCommittedLoad = true
-        sheetBrowser.setLoading(false)
-        sheetBrowser.navigate(to: "https://www.scaler.com/problems/p2")
-        await drainMainQueue()
-        let p2 = store.items.values.first { $0.tab?.url == "https://www.scaler.com/problems/p2" }
-        expect(p2 != nil && store.spaceID(ofItem: p2!.id) == personal,
-               "subsequent link click from pinned DSA Sheet still routes to Personal (hops == 0 preserved)")
+        await staysInItsTab(sheet, "https://www.scaler.com/problems/p1", "the pinned DSA Sheet")
+        await staysInItsTab(sheet, "https://www.scaler.com/problems/p2", "the pinned DSA Sheet, again")
 
-        // Favorite and split tabs never move either.
         let fav = store.createTab(url: "https://news.example/", in: pro, select: false).id
         store.favoriteItems.insert(fav)
         manager.show(fav, focus: false)
-        manager.runtime(for: fav)!.browser.navigate(to: "https://www.scaler.com/problems/fav")
-        await drainMainQueue()
-        expect(store.spaceID(ofItem: fav) == pro && store.items.values.contains { $0.tab?.url == "https://www.scaler.com/problems/fav" && store.spaceID(ofItem: $0.id) == personal },
-               "favorite tab never moves and spawns in Personal")
+        await staysInItsTab(fav, "https://www.scaler.com/problems/fav", "a favorite")
 
         let splitID = UUID(), pane = store.createTab(url: "https://notes.example/", in: pro, select: false).id
         store.items[splitID] = TestItem(id: splitID, tab: nil, parentID: nil, children: [pane], isSplit: true)
         store.items[pane]?.parentID = splitID
         manager.show(pane, focus: false)
-        manager.runtime(for: pane)!.browser.navigate(to: "https://www.scaler.com/problems/split")
-        await drainMainQueue()
-        expect(store.spaceID(ofItem: pane) == pro && store.items.values.contains { $0.tab?.url == "https://www.scaler.com/problems/split" && store.spaceID(ofItem: $0.id) == personal },
-               "split pane tab never moves and spawns in Personal")
+        await staysInItsTab(pane, "https://www.scaler.com/problems/split", "a split's pane")
 
-        // Same-host Google search under `contains "scaler"` stays put.
-        let searchTab = store.createTab(url: "https://www.google.com/", in: pro, select: true).id
-        manager.show(searchTab, focus: false)
-        manager.runtime(for: searchTab)!.browser.navigate(to: "https://www.google.com/search?q=scaler")
-        await drainMainQueue()
-        expect(store.spaceID(ofItem: searchTab) == pro && !store.items.values.contains { $0.tab?.url == "https://www.google.com/search?q=scaler" && store.spaceID(ofItem: $0.id) == personal },
-               "same-host google.com/search?q=scaler stays in Pro")
+        // A tab whose address the user typed (⌘L) is done with Air Traffic Control too.
+        let typed = store.createTab(url: "https://www.google.com/url?q=typed", in: pro, select: true).id
+        manager.beginRedirectRouting(for: typed, space: pro)
+        manager.noteExplicitNavigation(typed)
+        manager.show(typed, focus: false)
+        await staysInItsTab(typed, "https://www.scaler.com/problems/typed", "a tab given an address with ⌘L")
 
         // 7. beginRedirectRouting for ⌘T / external redirects.
         store.focusedSpace = pro
         let cmdT = store.createTab(url: "https://www.google.com/url?q=cmdt", in: pro, select: true).id
-        manager.beginRedirectRouting(for: cmdT, space: pro, alreadyRouted: false)
+        manager.beginRedirectRouting(for: cmdT, space: pro)
         manager.show(cmdT, focus: false)
         manager.runtime(for: cmdT)!.browser.navigate(to: "https://www.scaler.com/problems/cmdt")
         await drainMainQueue()
@@ -3351,7 +3329,7 @@ enum BrowserManagerLifecycleTests {
         expect(store.spaceID(ofItem: secret) == pro, "incognito tab never moves spaces")
 
         let blankTab = store.createTab(url: "https://docs.google.com/", in: standalone, select: false).id
-        manager.beginRedirectRouting(for: blankTab, space: standalone, alreadyRouted: false)
+        manager.beginRedirectRouting(for: blankTab, space: standalone)
         manager.show(blankTab, focus: false)
         manager.runtime(for: blankTab)!.browser.navigate(to: "https://www.scaler.com/blank")
         await drainMainQueue()
@@ -3372,6 +3350,43 @@ enum BrowserManagerLifecycleTests {
         let dataURLTab = store.items.values.first { $0.tab?.url == "data:text/html,scaler" }!
         expect(store.spaceID(ofItem: dataURLTab.id) == pro, "non-http(s) data: stays in source space")
 
+        manager.closeAll()
+    }
+
+    // promise: #868
+    /// A link's tab opened in front whose redirect lands after the user went back to another tab: it moves to
+    /// the route's space on its own, marked unread as one opened behind is, and the window stays on the tab the
+    /// user picked instead of showing a page from another space under it (#868).
+    @MainActor
+    private static func linkTabLeftBehindCase() async {
+        let clock = ManualScheduler()
+        let store = SidebarStore()
+        let pro = UUID(), personal = UUID()
+        store.spaces = [pro, personal]
+        store.focusedSpace = pro
+        store.settings.linkRoutes = [LinkRoute(match: .contains, text: "scaler", destination: .space(personal))]
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView(), clock: clock)
+        let sheet = store.createTab(url: "https://docs.google.com/spreadsheets/d/1", in: pro, select: true).id
+        manager.show(sheet, focus: false)
+        let page = manager.runtime(for: sheet)!.browser
+
+        let host = manager.browser(page, popupHostForURL: "https://www.google.com/url?q=left", inBackground: false)!
+        let opened = manager.tabID(of: host)!
+        host.navigate(to: "https://www.google.com/url?q=left")
+        host.setLoading(true)
+        host.setLoading(false)
+        expect(store.selectedTabPerSpace[pro] == opened && manager.visibleTabID == opened, "the link's tab opens in front")
+
+        // The user goes back to the sheet before the redirector's script moves on, inside the grace.
+        store.selectTab(sheet, in: pro, window: nil)
+        manager.show(sheet, focus: true)
+        clock.advance(by: 1)
+        host.navigate(to: "https://www.scaler.com/problems/left")
+        await drainMainQueue()
+        expect(store.spaceID(ofItem: opened) == personal, "the redirect still takes the link's tab to Personal")
+        expect(store.focusedSpace == pro && store.selectedTabPerSpace[pro] == sheet && manager.visibleTabID == sheet,
+               "the window stays on the sheet the user went back to, not on the tab that moved away")
+        expect(store.unreadItems.contains(opened), "the tab that moved on its own is marked unread")
         manager.closeAll()
     }
 

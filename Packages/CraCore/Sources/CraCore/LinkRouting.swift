@@ -118,133 +118,53 @@ public enum SiteKey {
     }
 }
 
-// MARK: - In-app link & redirect routing (#868)
+// MARK: - Link tabs and redirects (#868)
 
-/// Per-tab redirect-routing state tracked while a tab is open in a session.
+/// Air Traffic Control for a tab a page's link, ⌘T or another app has just opened (#868, past Arc):
+/// until its first page has loaded, and for `clientRedirectGrace` after that, an address that matches a
+/// route to another space moves the tab there, once. The grace lets a redirector that answers 200 and
+/// moves on by script or `<meta refresh>` (google.com/url?q=…) still land in the routed space.
+/// Every other navigation stays in its tab and space, as in Arc, whose Air Traffic Control never
+/// routes a navigation inside a tab.
 public struct LinkRedirectState: Equatable, Sendable {
-    /// Time after the initial load finishes during which a client-side redirect
-    /// (<meta refresh>, location.replace) may still move a freshly opened tab.
+    /// How long after its first page loads a new tab may still be routed by a client-side redirect.
     public static let clientRedirectGrace: TimeInterval = 2.0
 
-    /// True only for tabs created in-session (link click, ⌘T, external link) before settling.
-    /// Restored, woken, pinned, favorite, and split tabs start non-transient.
-    public private(set) var isTransient: Bool
-    /// Spaces already visited in this tab's initial route chain (loop guard).
-    public private(set) var visitedSpaces: Set<UUID>
-    /// Number of ATC space moves applied to this tab's chain (max 1).
-    public private(set) var hops: Int
-    /// When the initial load finished (`nil` while loading).
+    /// False once the tab has moved, or its first page has loaded and the grace has passed.
+    public private(set) var isTransient = true
+    /// When its first page finished loading (`nil` while it loads).
     public private(set) var settledAt: Date?
-    /// Whether a transient tab was opened in the background.
-    public var openedInBackground: Bool
-    /// Last stable URL on the tab, used to restore settled/pinned tabs
-    /// or avoid re-triggering on same-host navigation.
-    public var stableURL: String
-    /// Recently loaded URL waiting out `clientRedirectGrace` before replacing `stableURL`,
-    /// so a 200 OK JS/meta redirector doesn't overwrite `restoreURL` on a source tab.
-    public private(set) var pendingURL: String?
-    public private(set) var pendingAt: Date?
-    /// Suppresses one navigation when an explicit in-tab load (⌘L) or restore runs.
-    public var suppressNextRoute: Bool
 
-    public init(isTransient: Bool = false,
-                originSpaceID: UUID? = nil,
-                routedToSpaceID: UUID? = nil,
-                openedInBackground: Bool = false,
-                stableURL: String = "",
-                suppressNextRoute: Bool = false) {
-        self.isTransient = isTransient && routedToSpaceID == nil
-        var visited: Set<UUID> = []
-        if let originSpaceID { visited.insert(originSpaceID) }
-        if let routedToSpaceID { visited.insert(routedToSpaceID) }
-        self.visitedSpaces = visited
-        self.hops = routedToSpaceID == nil ? 0 : 1
-        self.settledAt = nil
-        self.openedInBackground = openedInBackground
-        self.stableURL = stableURL
-        self.pendingURL = nil
-        self.pendingAt = nil
-        self.suppressNextRoute = suppressNextRoute
-    }
+    public init() {}
 
-    /// Marks the tab settled once its initial load finishes (starting the brief grace window
-    /// for `<meta refresh>` / `location.replace` redirects).
+    /// Starts the grace once the first page has loaded.
     public mutating func noteLoadFinished(at now: Date) {
         if isTransient, settledAt == nil { settledAt = now }
     }
 
-    /// Records a committed/loaded HTTP(S) URL so normal browsing updates `stableURL` once settled
-    /// without letting a short-lived JS/meta redirector overwrite the source tab's restore URL.
-    public mutating func noteLoaded(url: String, at now: Date) {
-        guard LinkRedirectRouting.normalizedHost(of: url) != nil else { return }
-        if stableURL.isEmpty {
-            stableURL = url
-            pendingURL = nil
-            pendingAt = nil
-        } else if url != stableURL {
-            pendingURL = url
-            pendingAt = now
-        }
-    }
-
-    /// Promotes `pendingURL` to `stableURL` once `clientRedirectGrace` has elapsed.
-    public mutating func promotePendingIfSettled(at now: Date) {
-        guard let pending = pendingURL, let at = pendingAt,
-              now.timeIntervalSince(at) > Self.clientRedirectGrace else { return }
-        stableURL = pending
-        pendingURL = nil
-        pendingAt = nil
-    }
-
-    /// True while a freshly opened tab has not yet settled past the client-redirect grace window.
+    /// True while the tab is still on its way to its first page, or inside the grace after it.
     public func isWithinTransientWindow(at now: Date) -> Bool {
         guard isTransient else { return false }
         guard let settledAt else { return true }
         return now.timeIntervalSince(settledAt) <= Self.clientRedirectGrace
     }
 
-    /// Records a space visited during an unmatched redirect hop.
-    public mutating func noteVisited(_ spaceID: UUID?) {
-        if let spaceID { visitedSpaces.insert(spaceID) }
-    }
-
-    /// Records a space move on this transient tab, retiring future moves.
-    public mutating func recordMove(to spaceID: UUID, from originSpaceID: UUID? = nil) {
-        if let originSpaceID { visitedSpaces.insert(originSpaceID) }
-        visitedSpaces.insert(spaceID)
-        hops += 1
-        isTransient = false
-        settledAt = nil
-        openedInBackground = false
-        pendingURL = nil
-        pendingAt = nil
-    }
-
-    /// Retires transient eligibility (e.g. after explicit navigation or window elapsed).
+    /// The tab is done with Air Traffic Control: it moved, or the user took over its address (⌘L).
     public mutating func retireTransient() {
         isTransient = false
         settledAt = nil
-    }
-
-    /// Clears any unpromoted redirector URL when restoring `stableURL`.
-    public mutating func clearPending() {
-        pendingURL = nil
-        pendingAt = nil
     }
 }
 
 public enum LinkRedirectDecision: Equatable, Sendable {
     case none
-    /// Move the freshly opened transient tab to `spaceID`, switching the window if `follow` is true.
+    /// Move the new tab to `spaceID`; the window follows it when `follow` (the tab is the one in front).
     case moveTab(toSpace: UUID, follow: Bool)
-    /// Keep the settled/pinned/favorite/split source tab in place (restoring `restoreURL` if non-empty)
-    /// and open a new Today tab for the navigated URL in `spaceID`.
-    case openNewTab(inSpace: UUID, restoreURL: String)
 }
 
 public enum LinkRedirectRouting {
-    /// Resolves an ATC space route for an http(s) URL.
-    /// First match wins; `.mostRecentSpace`, `.littleWindow`, missing, standalone, or same-space return `nil`.
+    /// The space an http(s) URL's first matching route sends it to, or nil: no match, Most Recent
+    /// Space, a Little Window, a space that's gone or standalone, or the space it is already in.
     public static func targetSpace(for url: String,
                                    currentSpaceID: UUID?,
                                    isStandalone: Bool,
@@ -256,64 +176,29 @@ public enum LinkRedirectRouting {
         return target
     }
 
-    /// Evaluates an in-tab URL change (`didChangeURL`) for ATC routing.
+    /// What a tab's address change (`didChangeURL`) does under Air Traffic Control. Only a new tab
+    /// inside its window moves; pinned, favorite and split tabs never do. `isInFront`: the tab is the one
+    /// the window shows, so the window follows it; otherwise it moves on its own, as one opened behind.
     public static func decision(for url: String,
                                 currentSpaceID: UUID?,
                                 isStandalone: Bool,
                                 isPinnedOrFavorite: Bool,
                                 inSplit: Bool,
+                                isInFront: Bool,
                                 state: inout LinkRedirectState,
                                 routes: [LinkRoute],
                                 spaceAvailable: (UUID) -> Bool,
                                 now: Date) -> LinkRedirectDecision {
-        if state.suppressNextRoute {
-            state.suppressNextRoute = false
+        guard state.isWithinTransientWindow(at: now) else {
+            state.retireTransient()
             return .none
         }
-        state.promotePendingIfSettled(at: now)
-        guard let nextHost = normalizedHost(of: url) else { return .none }
-        guard !isStandalone else { return .none }
-
-        guard let target = targetSpace(for: url,
-                                       currentSpaceID: currentSpaceID,
-                                       isStandalone: isStandalone,
-                                       routes: routes,
-                                       spaceAvailable: spaceAvailable) else {
-            if state.isWithinTransientWindow(at: now) {
-                state.noteVisited(currentSpaceID)
-            }
-            return .none
-        }
-
-        // Loop guard: never bounce back into an already-visited space or reroute more than once.
-        guard state.hops == 0, !state.visitedSpaces.contains(target) else { return .none }
-
-        // Transient new Today tab: move the tab itself.
-        if !isPinnedOrFavorite, !inSplit, state.isWithinTransientWindow(at: now) {
-            let follow = !state.openedInBackground
-            state.recordMove(to: target, from: currentSpaceID)
-            return .moveTab(toSpace: target, follow: follow)
-        }
-
-        // Settled, pinned, favorite, or split tab: never move it.
-        // Guard against same-host browsing (`google.com -> google.com/search?q=scaler`) and
-        // subdomains of a site intentionally kept in the current space (`a.scaler.com -> b.scaler.com`).
-        if let pending = state.pendingURL, normalizedHost(of: pending) == nextHost {
-            return .none
-        }
-        guard let stableHost = normalizedHost(of: state.stableURL), stableHost != nextHost else {
-            return .none
-        }
-        let stableTarget = targetSpace(for: state.stableURL,
-                                       currentSpaceID: currentSpaceID,
-                                       isStandalone: isStandalone,
-                                       routes: routes,
-                                       spaceAvailable: spaceAvailable)
-        guard stableTarget != target else { return .none }
-
+        guard !isPinnedOrFavorite, !inSplit,
+              let target = targetSpace(for: url, currentSpaceID: currentSpaceID, isStandalone: isStandalone,
+                                       routes: routes, spaceAvailable: spaceAvailable) else { return .none }
+        // One move per tab: a redirect back from the routed space doesn't bounce it again.
         state.retireTransient()
-        state.clearPending()
-        return .openNewTab(inSpace: target, restoreURL: state.stableURL)
+        return .moveTab(toSpace: target, follow: isInFront)
     }
 
     /// Lowercased host for http(s) URLs with leading `www.` stripped; `nil` for non-web schemes

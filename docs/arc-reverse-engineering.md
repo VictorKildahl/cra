@@ -2307,6 +2307,11 @@ the arm64 slice. [O] = observed, [I] = inferred.
   open tab, the sidebar address pill, a typed URL whose first match is a Little Arc route. Cra
   (`AppSettings.space(forTypedURL:)`, `MainWindowController.handleCommit`) routes the ⌘T new-tab case only, and only
   to a space; scenario `command-bar-route`.
+- Cra, past Arc (#868): a link a page opens in a new tab goes through the routes too, also through redirects: until
+  the new tab's first page has loaded, and for 2 s after it so a client redirect (google.com/url?q=…, `<meta
+  refresh>`, `location.replace`) still counts, an address matching a route to a space moves the tab there once
+  (`LinkRedirectRouting` in CraCore; scenarios `link-route`, `link-redirect-route`). A navigation inside a tab that
+  is already open stays in that tab and space, as in Arc.
 
 ## Extension popups and extension windows (Arc 1.170, 26 Oct 2026, static)
 

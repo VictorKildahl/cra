@@ -1,6 +1,6 @@
 # promise: #868
-# Air Traffic Control routes in-tab link popups and redirect chains (HTTP 302 and JS location.replace)
-# into the configured space and its profile (#868) while preserving the originating space's tab.
+# Air Traffic Control routes a page's new-tab links through their redirect chains (HTTP 302 and JS
+# location.replace) into the configured space and its profile (#868) while preserving the originating space's tab.
 # Home is on Default, Work on its own profile; a route sends n=routed to Work.
 budget rss=900 stalls50=20
 arg --host-resolver-rules=MAP nas.local 127.0.0.1
@@ -45,13 +45,12 @@ wait 1
 cra://debug?browserWindows=back-home-2
 expect-log Cra browser windows back-home-2: kind=normal space=Home .*open=\S*n=sheet
 
-# 3. Same-tab navigation on settled sheet tab opens target in Work while keeping sheet in Home.
+# 3. The settled sheet's own navigation to a routed address stays in its tab in Home, as in Arc: Air Traffic
+# Control moves only a tab a link has just opened.
 cra://debug?cdp=Runtime.evaluate&params={"expression":"(location.href='${PAGE}?n=routedsettled','navigated')","userGesture":true}
 expect-log "GET /page\.html\?n=routedsettled
 wait 2
 cra://debug?currentSpace=after-settled
-expect-log current space after-settled: Work profile=Work$
-cra://action/previousSpace
-wait 1
-cra://debug?browserWindows=back-home-3
-expect-log Cra browser windows back-home-3: kind=normal space=Home .*tabs=\[\S*n=sheet\] open=\S*n=sheet
+expect-log current space after-settled: Home profile=
+cra://debug?browserWindows=after-settled
+expect-log Cra browser windows after-settled: kind=normal space=Home .*tabs=\[\S*n=routedsettled\] open=\S*n=routedsettled
