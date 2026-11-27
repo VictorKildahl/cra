@@ -17,6 +17,10 @@ Runs every harness (scripts/test-*.sh, Tests/test-*.sh) compiled with coverage, 
 It is also CI's one run of those tests: a failing test fails it, with that suite's output, after
 every suite has run. Lint is separate (scripts/lint.py).
 
+Suites run CRA_TEST_JOBS at a time (default: one per core), CraCore's `swift test` among them;
+most of a harness's time is waiting, not computing. The ones in SERIAL (on screen, sheets, git)
+run alone afterwards.
+
 The summary goes to stdout and, in CI, to the job summary (GITHUB_STEP_SUMMARY). Progress and
 test failures go to stderr.
 """
@@ -27,11 +31,20 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHANGED_MIN = 70.0
 CORE_MIN = 85.0
 NOT_HARNESSES = {"scripts/test-update.sh", "scripts/test.sh"}
+JOBS = max(1, int(os.environ.get("CRA_TEST_JOBS") or os.cpu_count() or 1))
+# Run alone, after the others: windows ordered on screen or sheets that need the key window,
+# and the two that failed while another run of every suite shared the Mac.
+SERIAL = ["scripts/test-dialogs.sh", "scripts/test-display.sh", "scripts/test-pager-mask.sh",
+          "scripts/test-pip-overlay.sh", "scripts/test-chromium-window-corners.sh", "scripts/test-feed-counts.sh"]
+PRINT = threading.Lock()
 
 
 def run(cmd, **kw):
@@ -39,26 +52,34 @@ def run(cmd, **kw):
 
 
 def suite(name, cmd, failures, **kw):
-    """Runs one test suite; a failure is kept with its output and the next suite still runs."""
-    print(f"==> {name}", file=sys.stderr, flush=True)
+    """Runs one test suite; a failure is kept with its output and the next suite still runs.
+    Safe from several threads: a suite's lines print together, when it ends."""
+    start = time.monotonic()
     r = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, **kw)
-    if r.returncode != 0:
-        failures.append(name)
-        print(f"{r.stdout}{r.stderr}\n{name} failed", file=sys.stderr, flush=True)
+    with PRINT:
+        print(f"==> {name} ({time.monotonic() - start:.0f} s)", file=sys.stderr, flush=True)
+        if r.returncode != 0:
+            failures.append(name)
+            print(f"{r.stdout}{r.stderr}\n{name} failed", file=sys.stderr, flush=True)
 
 
-def harness_coverage(work, failures):
+def harness_coverage(work, failures, pool):
     """{file: {line: count}} over every harness binary."""
     keep = os.path.join(work, "bin")
     os.makedirs(keep)
     env = dict(os.environ, CRA_TEST_SWIFTC_FLAGS="-profile-generate -profile-coverage-mapping",
                CRA_TEST_KEEP=keep, LLVM_PROFILE_FILE=os.path.join(work, "%p-%m.profraw"))
     scripts = sorted(glob.glob(os.path.join(ROOT, "scripts/test-*.sh")) + glob.glob(os.path.join(ROOT, "Tests/test-*.sh")))
-    for s in scripts:
-        rel = os.path.relpath(s, ROOT)
-        if rel in NOT_HARNESSES:
-            continue
-        suite(rel, ["bash", s], failures, env=env)
+    harnesses = [os.path.relpath(s, ROOT) for s in scripts]
+    harnesses = [h for h in harnesses if h not in NOT_HARNESSES]
+    # CraCore's library first, so the harnesses that link it don't all build it at once.
+    suite("CraCore library for the harnesses", ["bash", "-c", "source scripts/harness-cracore.sh"], failures, env=env)
+    runs = [pool.submit(suite, h, ["bash", h], failures, env=env) for h in harnesses if h not in SERIAL]
+    for r in runs:
+        r.result()
+    for h in harnesses:
+        if h in SERIAL:
+            suite(h, ["bash", h], failures, env=env)
     raws = glob.glob(os.path.join(work, "*.profraw"))
     binaries = sorted(glob.glob(os.path.join(keep, "*")))
     if not raws or not binaries:
@@ -123,8 +144,10 @@ def main():
     work = tempfile.mkdtemp(prefix="cra-coverage.")
     failures = []
     try:
-        cov = harness_coverage(work, failures)
-        core = core_coverage(failures)
+        with ThreadPoolExecutor(JOBS) as pool:
+            core_run = pool.submit(core_coverage, failures)
+            cov = harness_coverage(work, failures, pool)
+            core = core_run.result()
     finally:
         shutil.rmtree(work, ignore_errors=True)
     if failures:
