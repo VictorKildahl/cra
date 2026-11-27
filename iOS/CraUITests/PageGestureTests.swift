@@ -129,6 +129,14 @@ final class PageGestureTests: BrowserTestCase {
         return (trace.value as? String ?? "").split(separator: "\n").map(String.init)
     }
 
+    /// Waits for the swipe's trace to have a line starting with `start`: the swipe has got that far.
+    private func waitForTrace(_ start: String, file: StaticString = #filePath, line: UInt = #line) {
+        let trace = app.descendants(matching: .any)["page-swipe-trace"]
+        let shown = expectation(for: NSPredicate(format: "value CONTAINS %@", "\n" + start), evaluatedWith: trace)
+        XCTAssertEqual(XCTWaiter.wait(for: [shown], timeout: 5), .completed, "the trace never showed \(start)",
+                       file: file, line: line)
+    }
+
     /// The numbers on a trace line, after its words.
     private func numbers(_ line: String) -> [CGFloat] {
         line.split(separator: " ").compactMap { Double($0) }.map { CGFloat($0) }
@@ -140,11 +148,9 @@ final class PageGestureTests: BrowserTestCase {
     func testSwipingBackShowsThePageItGoesBackToUnderneath() {
         launch(["-CraOpenURL", base + "/swipe-first", "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
         waitForPage("Swipe First")
-        sleep(1)
         let heading = app.webViews.staticTexts["Swipe First"].frame.minY
         app.webViews.links["Next page"].tap()
         waitForPage("Swipe Second")
-        sleep(1)
         drag(fromX: 0.3, toX: 0.8, y: 0.5, settle: true)
         waitForPage("Swipe First")
         let lines = swipeTrace()
@@ -164,8 +170,7 @@ final class PageGestureTests: BrowserTestCase {
         let letGo = lines.first { $0.hasPrefix("let go with the finger at ") }.map(numbers)?.first
         XCTAssertEqual(letGo ?? 0, 75, accuracy: 15, "the magnet let go with the finger about 75 pt in: \(lines)")
         XCTAssertTrue(lines.contains("went back"))
-        sleep(2)
-        XCTAssertTrue(swipeTrace().contains { $0.hasPrefix("lifted after ") }, "the picture came off once the page drew")
+        waitForTrace("lifted after ")
         // The page is back where it was, as its picture showed it, so nothing jumps as the picture gives way. (Before
         // the page began under the status band, WebKit put it back a status bar higher than that.)
         XCTAssertEqual(app.webViews.staticTexts["Swipe First"].frame.minY, heading, accuracy: 2,
@@ -179,7 +184,6 @@ final class PageGestureTests: BrowserTestCase {
         launch(["-CraOpenURL", Self.page("First", color: "gold"), "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
         waitForPage("First")
         openTab(Self.page("Second"), title: "Second")
-        sleep(1)
         let button = app.buttons["bar-tabs"].frame
         // Past where the magnet lets go of a closing tab, the finger 185 pt in.
         drag(fromX: 0.15, toX: 0.85, y: 0.5, settle: true)
@@ -209,7 +213,6 @@ final class PageGestureTests: BrowserTestCase {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
         waitForPage("First")
         openTab(Self.page("Second"), title: "Second")
-        sleep(1)
         // From the edge, where a swipe always starts, held still well short of where the magnet lets go (the finger
         // 160 pt in), so it lets go with no speed. (From mid-page, XCUITest's drags of a sixth of the screen never started a swipe.)
         drag(fromX: 0.03, toX: 0.12, y: 0.5, settle: true)

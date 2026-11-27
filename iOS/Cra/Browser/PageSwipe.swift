@@ -28,6 +28,8 @@ final class PageSwipeStage: NSObject {
     /// The page the swipe leads to, as its picture: the page Back or Forward goes to, or the tab's card.
     let arriving = UIView()
     let picture = UIImageView()
+    /// A closing tab's band under the status bar, over a picture of its web view only (`layOutCardPicture`).
+    let band = UIView()
     let shadow = PageEdgeShadow()
     /// The page on screen as a picture: from the start when the tab closes (it shrinks into its card), from letting
     /// go otherwise, so the live page underneath can already go where the swipe leads.
@@ -55,10 +57,11 @@ final class PageSwipeStage: NSObject {
     private var link: CADisplayLink?
     private var onFrame: ((CFTimeInterval) -> Void)?
     var animators: [UIViewPropertyAnimator] = []
-    /// Let go: when the page it leads to was asked for, the page's address then, the page whose drawing is awaited,
-    /// and when it said it had drawn.
+    /// Let go: when the page it leads to was asked for, the page's address then and the history item Back or Forward
+    /// goes to, the page whose drawing is awaited, and when it said it had drawn.
     var navigatedAt: CFTimeInterval?
     var addressAtRelease: URL?
+    weak var targetItem: WKBackForwardListItem?
     weak var awaited: WebPage?
     var drawnAt: CFTimeInterval?
     var settled = false
@@ -73,6 +76,8 @@ final class PageSwipeStage: NSObject {
         picture.contentMode = .scaleAspectFill
         picture.clipsToBounds = true
         arriving.addSubview(picture)
+        band.isHidden = true
+        arriving.addSubview(band)
     }
 
     /// 1 when the swipe leads by dragging right (Back, a tab closing), -1 when it leads by dragging left (Forward).
@@ -249,13 +254,11 @@ extension BrowserViewController {
         stage.buttonCard = bar.tabsButton.frontCard(in: view)
         stage.arriving.layer.borderWidth = 1 / max(1, view.traitCollection.displayScale)
         stage.arriving.layer.borderColor = UIColor(white: 0, alpha: 0.12).cgColor
-        // Its band under the status bar, as the tab will look on screen, scaled with the picture.
-        if let tab = stage.tab, let colour = bandColour(for: tab) {
-            let band = UIView()
-            band.backgroundColor = colour
-            band.frame = CGRect(x: 0, y: 0, width: bounds.width, height: view.safeAreaInsets.top)
-            band.autoresizingMask = [.flexibleWidth, .flexibleHeight, .flexibleBottomMargin]
-            stage.picture.addSubview(band)
+        // Its band under the status bar, as the tab will look on screen, and its page's own background under a
+        // picture shorter than the card.
+        if let tab = stage.tab {
+            stage.band.backgroundColor = bandColour(for: tab)
+            stage.arriving.backgroundColor = pageBackground(for: tab.id)
         }
         // Lifted off the button, so over the bar while it is there; the slot it left is empty while it is out.
         view.insertSubview(stage.arriving, aboveSubview: bar)
@@ -314,13 +317,22 @@ extension BrowserViewController {
         layOutCardPicture(stage, progress: progress)
     }
 
-    /// The tab's picture in its card: the whole page across, its middle showing in the button's little card as the
-    /// button shows it, its top at the card's top once the card is a page.
+    /// The tab's picture in its card, the whole page across: its middle showing in the button's little card as the
+    /// button shows it, its top at the card's top once the card is a page. A tab's picture is either the whole page,
+    /// band and all (`capturePageSnapshot`), or its web view only, which begins under the band (`WebPage.takeSnapshot`):
+    /// that one gets the tab's band over it, as the tab row draws it, so either lands on the page as it is on screen.
     private func layOutCardPicture(_ stage: PageSwipeStage, progress: CGFloat) {
         let size = stage.arriving.bounds.size, screen = view.bounds.size
-        let height = size.width * screen.height / max(screen.width, 1)
-        let centred = (size.height - height) / 2
-        stage.picture.frame = CGRect(x: 0, y: centred * (1 - min(1, max(0, progress))), width: size.width, height: height)
+        let screenAspect = screen.height / max(screen.width, 1)
+        let aspect = stage.picture.image.map { $0.size.height / max($0.size.width, 1) } ?? screenAspect
+        let whole = aspect >= screenAspect - 0.02
+        let band = whole ? 0 : view.safeAreaInsets.top * size.width / max(screen.width, 1)
+        let pictureHeight = size.width * aspect
+        let centred = (size.height - band - pictureHeight) / 2
+        let top = centred * (1 - min(1, max(0, progress)))
+        stage.band.isHidden = whole || stage.band.backgroundColor == nil
+        stage.band.frame = CGRect(x: 0, y: top, width: size.width, height: band)
+        stage.picture.frame = CGRect(x: 0, y: top + band, width: size.width, height: pictureHeight)
     }
 
     // MARK: Letting go
@@ -369,6 +381,11 @@ extension BrowserViewController {
         }
         CATransaction.flush()
         stage.addressAtRelease = page.webView.url
+        switch stage.reveal {
+        case .back: stage.targetItem = page.webView.backForwardList.backItem
+        case .forward: stage.targetItem = page.webView.backForwardList.forwardItem
+        case .closingTab, .reopeningTab: break
+        }
         stage.navigatedAt = CACurrentMediaTime()
         DispatchQueue.main.async { [weak self, weak stage, weak page] in
             guard let self, let stage, let page, self.pageSwipe === stage, self.shownPage === page else { return }
@@ -510,8 +527,9 @@ extension BrowserViewController {
         let drawn = { [weak self, weak stage, weak page] in
             guard let self, let stage, self.pageSwipe === stage, stage.drawnAt == nil else { return }
             // Going Back or Forward, the page being left may still say it has drawn, if it was loading: only the
-            // page gone to counts, once the address has moved to it.
-            if stage.reveal == .back || stage.reveal == .forward, page?.webView.url == stage.addressAtRelease { return }
+            // page gone to counts, once the address or the history item has moved to it (two entries can share an
+            // address, a page's own pushState).
+            if stage.reveal == .back || stage.reveal == .forward, let page, !self.reachedTarget(stage, page) { return }
             stage.drawnAt = CACurrentMediaTime()
             DispatchQueue.main.asyncAfter(deadline: .now() + MobilePageSwipe.drawnSettle + 0.01) { [weak self] in
                 self?.liftPageSwipePictureIfDue()
@@ -527,13 +545,21 @@ extension BrowserViewController {
         }
     }
 
+    /// Whether Back or Forward has reached the page it went to: its address has moved, or the history's current entry
+    /// is the one it went to.
+    private func reachedTarget(_ stage: PageSwipeStage, _ page: WebPage) -> Bool {
+        if page.webView.url != stage.addressAtRelease { return true }
+        guard let target = stage.targetItem else { return false }
+        return page.webView.backForwardList.currentItem === target
+    }
+
     /// Takes the arriving page's picture off the live page once the pages have settled and the page has drawn.
     func liftPageSwipePictureIfDue() {
         guard let stage = pageSwipe, let navigatedAt = stage.navigatedAt else { return }
         let now = CACurrentMediaTime()
-        // Back within one document draws no new page: once the address has moved and nothing loads, it is there.
+        // Back within one document draws no new page: once it has moved to the entry and nothing loads, it is there.
         if stage.drawnAt == nil, stage.reveal == .back || stage.reveal == .forward, let page = shownPage,
-           page.webView.url != stage.addressAtRelease, !page.webView.isLoading {
+           reachedTarget(stage, page), !page.webView.isLoading {
             stage.drawnAt = now - MobilePageSwipe.drawnSettle
         }
         guard MobilePageSwipe.liftsPicture(settled: stage.settled, sinceNavigated: now - navigatedAt,
