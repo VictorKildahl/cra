@@ -4,8 +4,7 @@ import AppKit
 struct BackForwardMenuItem {
     let title: String
     let icon: NSImage?
-    /// A one-colour glyph (GitHub's) drawn white, as on the sidebar's dark fills. No icon: Arc's
-    /// grey square.
+    /// A one-colour dark glyph (GitHub's), drawn white on the dark menu. No icon: Arc's grey square.
     let flip: Bool
 }
 
@@ -56,7 +55,7 @@ final class BackForwardMenuView: NSView, ArcMenuContent {
             icon.layer?.cornerCurve = .continuous
             if let image = item.icon {
                 icon.imageScaling = .scaleProportionallyUpOrDown
-                if item.flip {
+                if item.flip, colors.isDark {
                     let t = image.copy() as! NSImage
                     t.isTemplate = true
                     icon.image = t
@@ -67,11 +66,11 @@ final class BackForwardMenuView: NSView, ArcMenuContent {
                 icon.layer?.cornerRadius = L.faviconSize * 0.22
                 icon.layer?.masksToBounds = true
             } else {
-                // Arc's stand-in for a page with no favicon: a 14 pt rounded square, white at 35 %.
+                // Arc's stand-in for a page with no favicon: a 14 pt rounded square, the titles' colour at 35 %.
                 let inset = (L.faviconSize - L.placeholderSize) / 2
                 let square = NSView(frame: NSRect(x: inset, y: inset, width: L.placeholderSize, height: L.placeholderSize))
                 square.wantsLayer = true
-                square.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.35).cgColor
+                square.layer?.backgroundColor = colors.ink.withAlphaComponent(0.35).cgColor
                 square.layer?.cornerRadius = 3
                 square.layer?.cornerCurve = .continuous
                 icon.addSubview(square)
@@ -105,7 +104,7 @@ final class BackForwardMenuView: NSView, ArcMenuContent {
             colors.hover.setFill()
             NSBezierPath(roundedRect: L.rowRect(selected), xRadius: L.rowCornerRadius, yRadius: L.rowCornerRadius).fill()
         }
-        let attributes: [NSAttributedString.Key: Any] = [.font: Self.titleFont, .foregroundColor: NSColor.white]
+        let attributes: [NSAttributedString.Key: Any] = [.font: Self.titleFont, .foregroundColor: colors.ink]
         for (index, item) in items.enumerated() {
             let rect = L.rowRect(index)
             let text = Self.fitted(item.title) as NSString

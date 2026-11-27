@@ -96,3 +96,28 @@ struct CaptureMenuLayoutTests {
         #expect(CaptureMenuLayout.defaultRow(CaptureMenuLayout.sections(easels: [test]), filter: "") == nil)
     }
 }
+
+/// The capture menu's colours are ARC_Capture.bundle's named colours (Arc 1.174.3 Assets.car, read with
+/// `assetutil --info`), which have a light value and a dark one: Arc's menu follows the Mac's appearance.
+struct CaptureMenuTonesTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/822")) func inLightModeTheCaptureMenuIsLight() {
+        let t = CaptureMenuTones(dark: false)
+        #expect(t.fill == .init(.white), "Background: white")
+        #expect(t.text == .init(.black), "TextColor: black")
+        #expect(t.field == .init(.black, 0.07), "TextFieldBackground: black 7 %")
+        #expect(t.prompt == .init(.black, 0.45), "SeeMoreEaselTextColor: black 45 %")
+        #expect(t.icon == .init(.black, 0.3), "ButtonText: black 30 %")
+        #expect(t.divider == .init(.black, 0.07))
+        // The picked row is the same blue in both, its title white.
+        #expect(t.hover == CaptureMenuTones(dark: true).hover)
+        #expect(t.hoverText.rgb == .white)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/822")) func inDarkModeTheCaptureMenuKeepsArcsDarkColours() {
+        let t = CaptureMenuTones(dark: true)
+        #expect(t.fill == .init(RGB(0.071, 0.059, 0.18)), "Background (dark): (18,15,46)")
+        #expect(t.text == .init(.white, 0.9), "TextColor (dark): white 90 %")
+        #expect(t.field == .init(.white, 0.07) && t.prompt == .init(.white, 0.45))
+        #expect(t.hover == .init(RGB(0.161, 0.18, 0.757)))
+    }
+}

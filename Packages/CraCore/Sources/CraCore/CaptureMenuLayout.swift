@@ -72,3 +72,42 @@ public enum CaptureMenuLayout {
         filter.trimmingCharacters(in: .whitespaces).isEmpty ? nil : sections.first?.first
     }
 }
+
+/// The capture menu's colours: ARC_Capture.bundle's named colours (Arc 1.174.3 Assets.car), each with a light value and
+/// a dark one, so Arc's CapturedImageActionsView follows the Mac's appearance (#822; the 17 Nov measurement of the dark
+/// menu ran in Dark mode). Background, TextColor, ButtonText (the glyphs, at Cra's measured 30 %), TextFieldBackground
+/// and SeeMoreEaselTextColor (the field's prompt); the picked row is HoveredAndKeyboardSelectedBackground, the same blue in
+/// both, under TextColorForSelectedCells. The dividers have no asset: white 7 % on the dark menu, black 7 % on the light.
+public struct CaptureMenuTones: Equatable, Sendable {
+    public struct Ink: Equatable, Sendable {
+        public var rgb: RGB
+        public var alpha: Double
+        public init(_ rgb: RGB, _ alpha: Double = 1) { (self.rgb, self.alpha) = (rgb, alpha) }
+    }
+
+    public var fill: Ink
+    /// Row titles and the field's typed text.
+    public var text: Ink
+    public var icon: Ink
+    public var divider: Ink
+    /// The "Send To…" field's box.
+    public var field: Ink
+    /// Its "Send To…" prompt.
+    public var prompt: Ink
+    /// The row the pointer or the arrow keys are on, and its title.
+    public var hover: Ink
+    public var hoverText: Ink
+
+    /// `dark`: the Mac's appearance where the menu shows.
+    public init(dark: Bool) {
+        let ink: RGB = dark ? .white : .black
+        fill = dark ? Ink(RGB(0.071, 0.059, 0.18)) : Ink(.white)
+        text = Ink(ink, dark ? 0.9 : 1)
+        icon = Ink(ink, 0.3)
+        divider = Ink(ink, 0.07)
+        field = Ink(ink, 0.07)
+        prompt = Ink(ink, 0.45)
+        hover = Ink(RGB(0.161, 0.18, 0.757))
+        hoverText = Ink(.white, 0.95)
+    }
+}

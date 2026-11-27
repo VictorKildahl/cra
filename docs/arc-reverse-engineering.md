@@ -2616,6 +2616,15 @@ strings "Opens the tab switcher, where you can cycle through recent tabs like Co
   Light: fill light.backgroundExtra (254,253,253), separators light.hover (226,220,198), shortcuts light.subtitle, titles and
   glyphs black, disabled rows ARC_ArcMenu.bundle's MenuDisabledText light value (171,171,171) (dark (121,120,129)).
   Cra: ArcMenuTones(theme:dark:) from SystemAppearance, scenario plus-menu-appearance.
+- [S, 27 Nov 2026, Arc 1.174.3, #822 follow-up] The other menus follow the appearance too. ARC_Capture.bundle's Assets.car
+  (`assetutil --info`) gives every capture-menu colour a light and a dark value: Background white / (18,15,46), TextColor
+  black / white 90 %, TextFieldBackground black / white 7 %, SeeMoreEaselTextColor black / white 45 %, ButtonText black 30 %
+  / white, HoveredAndKeyboardSelectedBackground (41,46,193) in both, TextColorForSelectedCells white 95 % / white. The
+  17 Nov "dark whatever the theme" ran in Dark mode only, as the + menu's had. Back and Forward's history menu
+  (BackForwardListMenuManager) and the narrow header's ••• are ArcMenu too (the ••• measured the + menu's own dark fill and
+  hover on both spaces), so they take the light palette in Light mode. Not measured live in Light mode.
+  Cra: CraCore CaptureMenuTones, SidebarMoreMenu.tones(theme:dark:), ArcMenuTones for the history menu; scenario
+  arc-menus-appearance.
 - [O capture, Victor's screenshot] pressed cell: 34×32, ~6 pt circular corners, fill 39,33,51 over 21,14,34, i.e. white
   at ~7.8%.
 - [U] Arc's hover fill could not be recorded (live pointer runs were cut short while Victor was at the Mac); the pressed

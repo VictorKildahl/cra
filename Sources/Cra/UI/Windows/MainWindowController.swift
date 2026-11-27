@@ -3169,11 +3169,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     let key = FaviconKey.key(for: row.url)
                     return BackForwardMenuItem(title: row.title, icon: favicons.image(forKey: key), flip: favicons.glyphIsDark(forKey: key) == true)
                 }
-                let tones = ArcMenuTones(theme: self.store.focusedSpace(window: self.windowID).theme.shown)
-                func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
-                let colors = SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
-                                                       shortcut: ink(tones.shortcut), disabled: ink(tones.disabled))
-                let menu = BackForwardMenuView(items: items, colors: colors) { [weak self, weak b] index in
+                let menu = BackForwardMenuView(items: items, colors: self.backForwardMenuColors()) { [weak self, weak b] index in
                     guard let self else { return }
                     self.backForwardMenu.close()
                     guard let index, let b = forPeek ? b : self.browsers.runtime(for: id)?.browser else { return }
@@ -3189,6 +3185,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 self.backForwardMenu.present(menu, frame: place.frame, from: anchor, systemShadow: false)
             }
         }
+    }
+
+    /// Back and Forward's history menu is Arc's ArcMenu, the + menu's, coloured from the space for the Mac's
+    /// appearance (#416, #822).
+    func backForwardMenuColors() -> SidebarCreationMenuColors {
+        SidebarCreationMenuColors(ArcMenuTones(theme: store.focusedSpace(window: windowID).theme.shown, dark: SystemAppearance.shared.isDark))
+    }
+
+    /// cra://debug?arcMenus=<label> (#822): the fill and title colour the capture menu, Back's history menu and the
+    /// sidebar's ••• menu open with, as sRGB hex, and the Mac's appearance.
+    func debugArcMenuColors(_ label: String) -> String {
+        func hex(_ c: NSColor) -> String {
+            let s = c.usingColorSpace(.sRGB) ?? c
+            return String(format: "#%02X%02X%02X", Int(s.redComponent * 255 + 0.5), Int(s.greenComponent * 255 + 0.5), Int(s.blueComponent * 255 + 0.5))
+        }
+        let capture = CaptureMenu(easels: [], choose: { _ in }).debugColors
+        let back = backForwardMenuColors()
+        let more = (shell.sidebarHost as? SidebarView)?.moreMenuColors()
+        return "arc menus \(label): capture=\(hex(capture.fill)) captureInk=\(hex(capture.ink))"
+            + " history=\(hex(back.fill)) historyInk=\(hex(back.ink))"
+            + " more=\(more.map { hex($0.fill) } ?? "-") moreInk=\(more.map { hex($0.ink) } ?? "-")"
+            + " dark=\(SystemAppearance.shared.isDark ? 1 : 0)"
     }
 
     /// cra://debug?historyMenu=<label> (#416): the history menu's rows, width, the tail's offset

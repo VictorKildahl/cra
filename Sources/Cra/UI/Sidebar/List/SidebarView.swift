@@ -76,6 +76,8 @@ final class SidebarView: NSView {
     func debugSpaceCreationTip(_ row: String) -> String { creationHost?.debugTip(row) ?? "none" }
     /// For scenarios (#822): the colours the dock's + menu opens with.
     func debugCreationMenuColors() -> String { dock.debugCreationMenuColors() }
+    /// The colours the header's ••• menu opens with (#822).
+    func moreMenuColors() -> SidebarCreationMenuColors { topBar.moreMenuColors() }
     func closeSpaceCreationPopovers() { creationHost?.closeIconPicker() }
     func focusSpaceCreationName() { creationHost?.focusName() }
     /// The creation animation, then `done`; at once when the page isn't up.
@@ -797,6 +799,13 @@ final class SidebarTopBarView: NSView {
         }
     }
 
+    /// The ••• menu's colours: Arc's ArcMenu, dark in Dark mode and the space's light palette in Light (#287, #822).
+    func moreMenuColors() -> SidebarCreationMenuColors {
+        let dark = SystemAppearance.shared.isDark
+        let theme = store.focusedSpace(window: ui.windowID).theme
+        return SidebarCreationMenuColors(SidebarMoreMenu.tones(theme: dark ? theme : theme.shown, dark: dark))
+    }
+
     /// The narrow header's ••• (Arc 1.17x, #287): Reload and Toggle Sidebar with their shortcuts,
     /// in a popover under the button, which shows ✕ while it's open.
     private func toggleMorePanel() {
@@ -807,7 +816,7 @@ final class SidebarTopBarView: NSView {
         let panel = SidebarMorePanel(items: [
             .init(symbol: "arrow.clockwise", title: "Reload", keys: keys("reload"), enabled: hasTab) { [weak self] in self?.actions.reload() },
             .init(symbol: store.settings.sidebarSide.toggleSymbol, title: "Toggle Sidebar", keys: keys("toggleSidebar"), enabled: true) { [weak self] in self?.actions.toggleSidebar() },
-        ], ink: store.focusedSpace(window: ui.windowID).theme.shadedDark)
+        ], colors: moreMenuColors())
         panel.onClose = { [weak self] in
             self?.morePanel = nil
             self?.apply()
@@ -1293,10 +1302,7 @@ final class SpaceDockView: NSView {
     /// The + menu's colours: Arc's menu takes the space's palette for the Mac's appearance, dark in Dark mode and light
     /// in Light (#822).
     private func creationMenuColors() -> SidebarCreationMenuColors {
-        let tones = ArcMenuTones(theme: store.focusedSpace(window: ui.windowID).theme.shown, dark: SystemAppearance.shared.isDark)
-        func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
-        return SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
-                                         shortcut: ink(tones.shortcut), disabled: ink(tones.disabled), ink: ink(tones.ink))
+        SidebarCreationMenuColors(ArcMenuTones(theme: store.focusedSpace(window: ui.windowID).theme.shown, dark: SystemAppearance.shared.isDark))
     }
 
     /// For scenarios (#822): the colours the + menu opens with, as sRGB hex.
@@ -1995,5 +2001,15 @@ final class LibraryButtonView: NSView {
         } else if bounds.contains(p) {
             actions.toggleLibrary()
         }
+    }
+}
+
+/// An ArcMenu's colours from CraCore's tones (the + menu, the ••• menu, Back and Forward's history; #822).
+extension SidebarCreationMenuColors {
+    init(_ tones: ArcMenuTones) {
+        func color(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
+        self.init(fill: color(tones.fill), hover: color(tones.hover), separator: color(tones.separator),
+                  shortcut: color(tones.shortcut), disabled: color(tones.disabled), ink: color(tones.ink),
+                  isDark: tones.ink == RGB(1, 1, 1))
     }
 }

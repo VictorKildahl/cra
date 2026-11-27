@@ -53,3 +53,9 @@ final class TabRuntime {
 enum EmbeddedPages {
     static func pageViews(of window: NSWindow) -> [NSView]? { window.contentView?.subviews }
 }
+
+/// The app's appearance (Theme.swift's), set by the checks.
+final class SystemAppearance: @unchecked Sendable {
+    static let shared = SystemAppearance()
+    var isDark = true
+}

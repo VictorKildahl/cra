@@ -137,15 +137,19 @@ enum CaptureStyle {
     static let bubbleText = NSColor(srgbRed: 0.204, green: 0.021, blue: 0.58, alpha: 0.78)
     static let bubbleBlue = NSColor(srgbRed: 0, green: 0.278, blue: 1, alpha: 0.5)
     static let bubblePink = NSColor(srgbRed: 1, green: 0.6, blue: 0.6, alpha: 0.5)
-    static let menuFill = NSColor(srgbRed: 0.071, green: 0.059, blue: 0.18, alpha: 1)
-    static let menuText = NSColor(white: 1, alpha: 0.9)
-    static let menuIcon = NSColor(white: 1, alpha: 0.3)
-    static let menuDivider = NSColor(white: 1, alpha: 0.07)
-    /// The "Send To…" field: a lighter box on the menu, its prompt dimmer than a row's text.
-    static let menuField = NSColor(white: 1, alpha: 0.07)
-    static let menuPrompt = NSColor(white: 1, alpha: 0.45)
-    static let menuHover = NSColor(srgbRed: 0.161, green: 0.18, blue: 0.757, alpha: 1)
-    static let menuHoverText = NSColor(white: 1, alpha: 0.95)
+}
+
+/// The capture menu's colours for the Mac's appearance: white with black text in Light mode, Arc's dark navy in Dark
+/// (CraCore CaptureMenuTones, #822).
+struct CaptureMenuColors {
+    let fill, text, icon, divider, field, prompt, hover, hoverText: NSColor
+
+    init(dark: Bool = SystemAppearance.shared.isDark) {
+        let t = CaptureMenuTones(dark: dark)
+        func color(_ i: CaptureMenuTones.Ink) -> NSColor { NSColor(srgbRed: i.rgb.r, green: i.rgb.g, blue: i.rgb.b, alpha: i.alpha) }
+        (fill, text, icon, divider) = (color(t.fill), color(t.text), color(t.icon), color(t.divider))
+        (field, prompt, hover, hoverText) = (color(t.field), color(t.prompt), color(t.hover), color(t.hoverText))
+    }
 }
 
 // MARK: - The page, the lens and the pointer
@@ -928,8 +932,8 @@ final class CaptureBubble: NSView {
 
 // MARK: - The menu after a capture
 
-/// Arc's CapturedImageActionsView, dark whatever the theme (Arc 1.173.1, 17 Nov 2026): 273 pt
-/// wide, 10 pt corners, fill (18,15,46); a "Send To…" field on top that takes the keyboard and
+/// Arc's CapturedImageActionsView (Arc 1.173.1, 17 Nov 2026): 273 pt wide, 10 pt corners, its colours from the Mac's
+/// appearance, whatever the space (CaptureMenuColors, #822): fill (18,15,46) in Dark mode, white in Light; a "Send To…" field on top that takes the keyboard and
 /// narrows the rows as you type; 40 pt rows with a 13 pt symbol centred 25 pt in at white 30 % and
 /// 14 pt medium text from 41 pt at white 90 %; sections apart by 9 pt with a hairline 10 pt in from
 /// both sides. The last section is where the capture can go: New Easel, then each easel by name
@@ -948,6 +952,7 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
     private let field = NSTextField()
     private var selected: Int? { didSet { for (i, r) in rowViews.enumerated() { r.highlighted = i == selected } } }
     private let choose: (CaptureOverlay.Action) -> Void
+    private let colors = CaptureMenuColors()
     /// Escape in the field.
     var onCancel: () -> Void = {}
 
@@ -958,7 +963,7 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
         sections = CaptureMenuLayout.sections(easels: easels, maxHeight: maxHeight)
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = CaptureStyle.menuFill.cgColor
+        layer?.backgroundColor = colors.fill.cgColor
         layer?.cornerRadius = Self.cornerRadius
         layer?.cornerCurve = .continuous
         shadow = {
@@ -970,7 +975,7 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
         }()
         let m = CaptureMenuLayout.self
         fieldBox.wantsLayer = true
-        fieldBox.layer?.backgroundColor = CaptureStyle.menuField.cgColor
+        fieldBox.layer?.backgroundColor = colors.field.cgColor
         fieldBox.layer?.cornerRadius = 7
         fieldBox.layer?.cornerCurve = .continuous
         fieldBox.frame = NSRect(x: m.fieldInset, y: m.fieldTop, width: m.width - 2 * m.fieldInset, height: m.fieldHeight)
@@ -980,8 +985,8 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
         field.drawsBackground = false
         field.focusRingType = .none
         field.font = font
-        field.textColor = CaptureStyle.menuText
-        field.placeholderAttributedString = NSAttributedString(string: "Send To…", attributes: [.font: font, .foregroundColor: CaptureStyle.menuPrompt])
+        field.textColor = colors.text
+        field.placeholderAttributedString = NSAttributedString(string: "Send To…", attributes: [.font: font, .foregroundColor: colors.prompt])
         field.cell?.usesSingleLineMode = true
         field.cell?.lineBreakMode = .byTruncatingTail
         field.delegate = self
@@ -993,6 +998,11 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// For scenarios (#822): the fill and the rows' text colour the menu opens with.
+    var debugColors: (fill: NSColor, ink: NSColor) {
+        (layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) ?? .clear, field.textColor ?? .clear)
+    }
 
     override var isFlipped: Bool { true }
 
@@ -1033,14 +1043,14 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
             if si > 0 {
                 let line = NSView(frame: NSRect(x: 10, y: y + 4.25, width: m.width - 20, height: 0.5))
                 line.wantsLayer = true
-                line.layer?.backgroundColor = CaptureStyle.menuDivider.cgColor
+                line.layer?.backgroundColor = colors.divider.cgColor
                 addSubview(line)
                 lines.append(line)
                 y += m.sectionGap
             }
             for row in section {
                 let index = rowViews.count
-                let v = CaptureMenuRow(title: row.title, symbol: Self.symbol(row.item)) { [weak self] in self?.choose(Self.action(row.item)) }
+                let v = CaptureMenuRow(title: row.title, symbol: Self.symbol(row.item), colors: colors) { [weak self] in self?.choose(Self.action(row.item)) }
                 v.onHover = { [weak self] inside in
                     if inside { self?.selected = index } else if self?.selected == index { self?.selected = nil }
                 }
@@ -1150,8 +1160,11 @@ final class CaptureMenuRow: NSView {
     var onHover: ((Bool) -> Void)?
     var highlighted = false { didSet { paint() } }
 
-    init(title: String, symbol: String, action: @escaping () -> Void) {
+    private let colors: CaptureMenuColors
+
+    init(title: String, symbol: String, colors: CaptureMenuColors, action: @escaping () -> Void) {
         self.action = action
+        self.colors = colors
         label = NSTextField(labelWithString: title)
         super.init(frame: .zero)
         wantsLayer = true
@@ -1205,10 +1218,10 @@ final class CaptureMenuRow: NSView {
     private func paint() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        fill.backgroundColor = highlighted ? CaptureStyle.menuHover.cgColor : nil
+        fill.backgroundColor = highlighted ? colors.hover.cgColor : nil
         CATransaction.commit()
-        label.textColor = highlighted ? CaptureStyle.menuHoverText : CaptureStyle.menuText
-        icon.contentTintColor = highlighted ? CaptureStyle.menuHoverText : CaptureStyle.menuIcon
+        label.textColor = highlighted ? colors.hoverText : colors.text
+        icon.contentTintColor = highlighted ? colors.hoverText : colors.icon
     }
 }
 

@@ -3428,6 +3428,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("plus menu \(label): " + ((main.shell.sidebarHost as? SidebarView)?.debugCreationMenuColors() ?? "no sidebar"))
                 return
             }
+            // arcMenus=<label>: the colours the capture menu, Back's history menu and the ••• menu open with (#822).
+            if let label = dict["arcMenus"] { CraLog.note(main.debugArcMenuColors(label)); return }
             if let step = dict["spaceCreation"] { main.debugSpaceCreation(step); return }
             if let g = dict["swipe"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2 {
                 // &releaseStall=<ms>: the main thread held that long after the release, as a busy space switch holds it (#613).

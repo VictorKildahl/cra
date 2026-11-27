@@ -116,6 +116,27 @@ enum CaptureOverlayTests {
         expect([ring.redComponent, ring.greenComponent, ring.blueComponent].map { Int(($0 * 255).rounded()) } == [22, 28, 47],
                "the ring is Arc's #161C2F")
         expect(CaptureStyle.dim == 0.75, "the page around the selection is dimmed as Arc dims it (243 → 181)")
+        checkMenuFollowsTheAppearance()
+    }
+
+    /// #822: the menu beside a capture is white with black text in Light mode and Arc's navy with white text in Dark,
+    /// as ARC_Capture.bundle's light and dark colours are. It was navy in Light mode too.
+    // promise: #822
+    @MainActor
+    private static func checkMenuFollowsTheAppearance() {
+        func bytes(_ c: NSColor) -> [Int] {
+            let s = c.usingColorSpace(.sRGB)!
+            return [s.redComponent, s.greenComponent, s.blueComponent].map { Int(($0 * 255).rounded()) }
+        }
+        defer { SystemAppearance.shared.isDark = true }
+        SystemAppearance.shared.isDark = false
+        let light = CaptureMenu(easels: [], choose: { _ in }).debugColors
+        expect(bytes(light.fill) == [255, 255, 255], "Light mode: the capture menu is white (\(bytes(light.fill)))")
+        expect(bytes(light.ink) == [0, 0, 0], "Light mode: its text is black (\(bytes(light.ink)))")
+        SystemAppearance.shared.isDark = true
+        let dark = CaptureMenu(easels: [], choose: { _ in }).debugColors
+        expect(bytes(dark.fill) == [18, 15, 46], "Dark mode: the capture menu is Arc's (18,15,46) (\(bytes(dark.fill)))")
+        expect(bytes(dark.ink) == [255, 255, 255], "Dark mode: its text is white (\(bytes(dark.ink)))")
     }
 
     /// Arc's Edit row (#851): the capture opens in the image editor over the page, Escape and ⌘ keys stay in it
