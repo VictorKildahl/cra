@@ -813,7 +813,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .space(let id) where store.space(id) != nil:
             store.createTab(url: url, in: id, select: true)
         case .space, .mostRecentSpace:
-            store.createTab(url: url, select: true)
+            let tab = store.createTab(url: url, select: true)
+            main.browsers.beginRedirectRouting(for: tab.id, space: store.focusedSpaceID(window: main.windowID))
         }
         main.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)

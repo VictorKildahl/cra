@@ -134,4 +134,119 @@ struct LinkRoutingTests {
     func noSiteOutsideTheWeb(url: String) {
         #expect(SiteKey.site(of: url) == nil)
     }
+
+    /// In-app link clicks route to configured space routes (#868), excluding defaults,
+    /// same-space, missing/standalone spaces, and non-http(s) schemes.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/868"))
+    func inAppLinkRoutesToTargetSpace() {
+        let pro = UUID(), personal = UUID(), missing = UUID()
+        var settings = AppSettings()
+        settings.defaultLinkDestination = .space(personal)
+        settings.linkRoutes = [
+            LinkRoute(match: .contains, text: "scaler.com/stay", destination: .mostRecentSpace),
+            LinkRoute(match: .contains, text: "scaler.com/little", destination: .littleWindowInUse),
+            LinkRoute(match: .contains, text: "scaler.com", destination: .space(personal)),
+            LinkRoute(match: .contains, text: "gone.example", destination: .space(missing)),
+        ]
+        let available: (UUID) -> Bool = { $0 == pro || $0 == personal }
+
+        #expect(settings.space(forLinkURL: "https://www.scaler.com/problems/1", currentSpaceID: pro, isStandalone: false, spaceAvailable: available) == personal)
+        #expect(settings.space(forLinkURL: "https://www.scaler.com/problems/1", currentSpaceID: personal, isStandalone: false, spaceAvailable: available) == nil, "already in target space")
+        #expect(settings.space(forLinkURL: "https://www.scaler.com/problems/1", currentSpaceID: pro, isStandalone: true, spaceAvailable: available) == nil, "standalone/incognito stays put")
+        #expect(settings.space(forLinkURL: "https://www.scaler.com/stay", currentSpaceID: pro, isStandalone: false, spaceAvailable: available) == nil, "first match Most Recent Space")
+        #expect(settings.space(forLinkURL: "https://www.scaler.com/little", currentSpaceID: pro, isStandalone: false, spaceAvailable: available) == nil, "first match Little Window")
+        #expect(settings.space(forLinkURL: "https://gone.example/x", currentSpaceID: pro, isStandalone: false, spaceAvailable: available) == nil, "deleted/unavailable space")
+        #expect(settings.space(forLinkURL: "https://unmatched.example/", currentSpaceID: pro, isStandalone: false, spaceAvailable: available) == nil, "default never applies")
+
+        for nonWeb in ["about:blank", "data:text/html,scaler.com", "javascript:scaler.com", "blob:https://scaler.com/1", "cra://open?url=scaler.com", "chrome://version", "file:///scaler.com", ""] {
+            #expect(settings.space(forLinkURL: nonWeb, currentSpaceID: pro, isStandalone: false, spaceAvailable: available) == nil)
+        }
+    }
+
+    /// A new tab moves to the route's space when its redirect lands (#868): while its first page loads, and
+    /// for `clientRedirectGrace` after, so a 200 redirector (google.com/url?q=…) that moves on by script still
+    /// routes. It moves once, and the window follows only when the tab is the one in front.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/868"))
+    func transientTabMovesOnRedirectAndGuardedAgainstLoops() {
+        let pro = UUID(), personal = UUID(), work = UUID()
+        let available: (UUID) -> Bool = { $0 == pro || $0 == personal || $0 == work }
+        let routes = [
+            LinkRoute(match: .contains, text: "scaler.com", destination: .space(personal)),
+            LinkRoute(match: .contains, text: "pro.example", destination: .space(pro)),
+            LinkRoute(match: .contains, text: "work.example", destination: .space(work)),
+        ]
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        func decide(_ url: String, in space: UUID = pro, inFront: Bool = true, standalone: Bool = false,
+                    _ state: inout LinkRedirectState, at now: Date) -> LinkRedirectDecision {
+            LinkRedirectRouting.decision(for: url, currentSpaceID: space, isStandalone: standalone, isPinnedOrFavorite: false,
+                                         inSplit: false, isInFront: inFront, state: &state, routes: routes,
+                                         spaceAvailable: available, now: now)
+        }
+
+        // The redirector loads and finishes; its script moves on inside the grace: the tab goes, the window with it.
+        var fg = LinkRedirectState()
+        #expect(decide("about:blank", &fg, at: t0) == .none)
+        #expect(decide("https://www.google.com/url?q=encoded", &fg, at: t0) == .none)
+        #expect(fg.isTransient)
+        fg.noteLoadFinished(at: t0)
+        #expect(fg.isWithinTransientWindow(at: t0.addingTimeInterval(LinkRedirectState.clientRedirectGrace - 0.5)))
+        #expect(decide("https://www.scaler.com/problems/1", &fg, at: t0.addingTimeInterval(1)) == .moveTab(toSpace: personal, follow: true))
+        #expect(!fg.isTransient)
+
+        // Moved once: a redirect on to another routed space doesn't bounce it again.
+        #expect(decide("https://pro.example/back", in: personal, &fg, at: t0.addingTimeInterval(1.1)) == .none)
+        #expect(decide("https://work.example/next", in: personal, &fg, at: t0.addingTimeInterval(1.2)) == .none)
+
+        // A tab that isn't the one in front (opened behind, or the user went to another tab) moves on its own.
+        var behind = LinkRedirectState()
+        #expect(decide("https://www.scaler.com/problems/2", inFront: false, &behind, at: t0) == .moveTab(toSpace: personal, follow: false))
+
+        // Before the first page has loaded there's no deadline: a slow redirect chain still routes.
+        var slow = LinkRedirectState()
+        #expect(decide("https://www.scaler.com/problems/slow", &slow, at: t0.addingTimeInterval(60)) == .moveTab(toSpace: personal, follow: true))
+
+        // Past the grace the tab has settled: the address stays in it, for good.
+        var expired = LinkRedirectState()
+        expired.noteLoadFinished(at: t0)
+        let afterGrace = t0.addingTimeInterval(LinkRedirectState.clientRedirectGrace + 0.5)
+        #expect(!expired.isWithinTransientWindow(at: afterGrace))
+        #expect(decide("https://www.scaler.com/problems/3", &expired, at: afterGrace) == .none)
+        #expect(!expired.isTransient)
+
+        // An incognito or standalone tab never routes.
+        var standalone = LinkRedirectState()
+        #expect(decide("https://www.scaler.com/problems/4", standalone: true, &standalone, at: t0) == .none)
+        #expect(LinkRedirectRouting.normalizedHost(of: "https://WWW.Scaler.com/a") == "scaler.com")
+        #expect(LinkRedirectRouting.normalizedHost(of: "about:blank") == nil)
+    }
+
+    /// A navigation inside any other tab stays in that tab and its space (#868), as in Arc, whose Air Traffic
+    /// Control never routes in-tab navigation: a pinned, favorite or split tab, one that has settled, and one
+    /// whose address the user typed (⌘L).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/868"))
+    func settledPinnedFavoriteAndSplitTabsStayInTheirTab() {
+        let pro = UUID(), personal = UUID()
+        let available: (UUID) -> Bool = { $0 == pro || $0 == personal }
+        let routes = [LinkRoute(match: .contains, text: "scaler", destination: .space(personal))]
+        let t0 = Date(timeIntervalSince1970: 2_000)
+
+        for (pinnedOrFavorite, inSplit) in [(true, false), (false, true)] {
+            var state = LinkRedirectState()
+            #expect(LinkRedirectRouting.decision(for: "https://www.scaler.com/problems/1", currentSpaceID: pro, isStandalone: false,
+                                                 isPinnedOrFavorite: pinnedOrFavorite, inSplit: inSplit, isInFront: true, state: &state,
+                                                 routes: routes, spaceAvailable: available, now: t0) == .none)
+        }
+
+        var settled = LinkRedirectState()
+        settled.noteLoadFinished(at: t0)
+        var typed = LinkRedirectState()
+        typed.retireTransient()
+        for var state in [settled, typed] {
+            for (i, url) in ["https://www.scaler.com/problems/1", "https://www.google.com/search?q=scaler"].enumerated() {
+                #expect(LinkRedirectRouting.decision(for: url, currentSpaceID: pro, isStandalone: false, isPinnedOrFavorite: false,
+                                                     inSplit: false, isInFront: true, state: &state, routes: routes,
+                                                     spaceAvailable: available, now: t0.addingTimeInterval(5 + Double(i))) == .none)
+            }
+        }
+    }
 }

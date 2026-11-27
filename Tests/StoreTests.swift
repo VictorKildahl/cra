@@ -157,6 +157,7 @@ enum StoreTests {
         recentCardsKeepSplitsWhole()
         incognitoSpaceKeepsItsContext()
         newWindowsTakeTheLastSidebarChoice()
+        rerouteTabKeepsOriginSelection()
         print("Store: \(checks) checks passed")
     }
 
@@ -5742,6 +5743,32 @@ enum StoreTests {
         let small = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { r in NSColor.red.setFill(); r.fill(); return true }
         let smallPNG = ZenImporter.faviconPNG(small).flatMap(NSBitmapImageRep.init(data:))
         expect(smallPNG?.pixelsWide == 16, "a 16 px favicon stays 16 px")
+    }
+
+    // promise: #868
+    /// Air Traffic Control's `rerouteTab` moves a newly opened non-pinned Today tab to the target
+    /// space and follows it while keeping the originating space's prior tab (`DSA Sheet`) selected,
+    /// and refuses to move pinned/favorite tabs or target standalone/missing spaces (#868).
+    @MainActor
+    private static func rerouteTabKeepsOriginSelection() {
+        let store = AppComposition(clock: ManualScheduler()).store
+        let pro = store.orderedSpaces[0].id
+        let personal = store.createSpace(title: "Personal", emoji: "👤").id
+        let sheet = store.createTab(url: "https://docs.google.com/sheet", in: pro, pinned: true, select: true)
+        let redirected = store.createTab(url: "https://www.scaler.com/problems/1", in: pro, select: true)
+        expect(store.selectedTabID(in: pro) == redirected.id, "newly opened foreground tab is selected in Pro")
+        store.rerouteTab(redirected.id, toSpace: personal, window: nil)
+        expect(store.spaceID(ofItem: redirected.id) == personal && store.focusedSpaceID == personal
+               && store.selectedTabID(in: personal) == redirected.id,
+               "rerouteTab moves the Today tab to Personal and switches focus there")
+        expect(store.selectedTabID(in: pro) == sheet.id,
+               "originating space Pro still has DSA Sheet selected instead of going blank")
+
+        store.rerouteTab(sheet.id, toSpace: personal, window: nil)
+        expect(store.spaceID(ofItem: sheet.id) == pro, "rerouteTab never moves a pinned tab")
+        let blank = store.addBlankWindow(frame: nil).focusedSpaceID!
+        store.rerouteTab(redirected.id, toSpace: blank, window: nil)
+        expect(store.spaceID(ofItem: redirected.id) == personal, "rerouteTab never targets a standalone space")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
