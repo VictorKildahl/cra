@@ -67,8 +67,9 @@ enum Palette {
     static let lightBarGlyph = rgb(0x3a3a3c)
     static let lightBarControlFill = UIColor(white: 0, alpha: 0.12)
     static let lightBarBorder = UIColor(white: 0, alpha: 0.18)
-    /// The light-page address field's placeholder and icons: a light grey ink.
-    static let fieldLightPageInk = rgb(0xd8d8d8)
+    /// The light-page address field's placeholder and icons: a cool grey on light mode's milky
+    /// field, a light grey on dark mode's.
+    static let fieldLightPageInk = dynamic(light: rgb(0xbbbcc2), dark: rgb(0xd8d8d8))
     /// The same controls floating over the tab switcher's backdrop.
     /// Dark: Victor's screenshot IMG_1896 (13 Nov), pill #3B3B4B and circles #40404D on #232333.
     static let switcherPillFill = dynamic(light: UIColor(red: 71 / 255, green: 58 / 255, blue: 190 / 255, alpha: 0.16), dark: UIColor(white: 1, alpha: 0.11))
