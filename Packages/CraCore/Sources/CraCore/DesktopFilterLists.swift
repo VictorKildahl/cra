@@ -55,6 +55,12 @@ public struct DesktopFilterList: Identifiable {
         }
     }
 
+    /// Strict's page lists (#845), the catalog's own entries: uBlock filters – Ads, – Quick fixes, and AdGuard – Ads
+    /// (AdGuard's Base filter in uBlock Origin's syntax, without the EasyList it otherwise includes).
+    public static let ublockFiltersAddress = "https://ublockorigin.github.io/uAssetsCDN/filters/filters.min.txt"
+    public static let ublockQuickFixesAddress = "https://ublockorigin.github.io/uAssets/filters/quick-fixes.txt"
+    public static let adguardBaseAddress = "https://filters.adtidy.org/extension/ublock/filters/2_without_easylist.txt"
+
     static let proAddress = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt"
     static let proMiniAddress = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.mini-onlydomains.txt"
 
@@ -151,13 +157,31 @@ public enum AdBlockingLevel: Hashable, Sendable {
 }
 
 public extension DesktopFilterList {
+    /// What makes Settings say Strict: EasyList and EasyPrivacy on.
     static let strictAddresses = ["https://easylist.to/easylist/easylist.txt", "https://easylist.to/easylist/easyprivacy.txt"]
+    /// What Strict also turns on (#845): the lists whose scriptlets and procedural rules take YouTube's in-stream ads
+    /// and X's and Instagram's promoted posts out. Each keeps its own switch under Advanced….
+    static let strictPageAddresses = [ublockFiltersAddress, ublockQuickFixesAddress, adguardBaseAddress]
 }
 
 public extension AppSettings {
     var adBlockingLevel: AdBlockingLevel {
         get { DesktopFilterList.strictAddresses.allSatisfy(customBlocklists.contains) ? .strict : .standard }
-        set { for address in DesktopFilterList.strictAddresses { setFilterList(address, enabled: newValue == .strict) } }
+        set {
+            for address in DesktopFilterList.strictAddresses + DesktopFilterList.strictPageAddresses {
+                setFilterList(address, enabled: newValue == .strict)
+            }
+        }
+    }
+
+    /// Settings from before #845 that say Strict get Strict's page lists once (`strictListsVersion` 0 → 1).
+    mutating func upgradeStrictLists() {
+        guard strictListsVersion < 1 else { return }
+        strictListsVersion = 1
+        guard adBlockingLevel == .strict else { return }
+        for address in DesktopFilterList.strictPageAddresses where !customBlocklists.contains(address) {
+            customBlocklists.append(address)
+        }
     }
 
     /// The pane's main switch. On while any of Cra's lists or Strict's are on; off turns all of them off,
@@ -259,6 +283,9 @@ public struct DesktopHidingRules {
 
     private var byHost: [String: [Rule]] = [:]
 
+    /// Whether any line was a rule this reads.
+    public var hasRules: Bool { !byHost.isEmpty }
+
     private static func parse(_ line: String) -> (hosts: [String], rule: Rule)? {
         guard line.utf8.count <= 2048, let parts = FilterList.cosmetic(line),
               parts.marker == "##" || parts.marker == "#@#",
@@ -317,17 +344,18 @@ public struct DesktopHidingRules {
         var lines: [String] = []
         var allowed = Set<String>()
         var ancestorsOfAllowed = Set<String>()
-        var conditionalDepth = 0
-        var skipped = 0
-        for raw in text.split(whereSeparator: \.isNewline) {
+        // `!#if` blocks for a Chromium browser are read; the rest (uBlock Origin's own, AdGuard's, Safari's) not.
+        let (active, conditionalSkips) = FilterConditions.active(text.split(whereSeparator: \.isNewline))
+        var skipped = conditionalSkips
+        for raw in active {
             let line = raw.trimmingCharacters(in: .whitespaces)
-            if line.hasPrefix("!#if ") { conditionalDepth += 1; continue }
-            if line == "!#endif" { conditionalDepth = max(0, conditionalDepth - 1); continue }
-            if conditionalDepth > 0 {
-                if !line.hasPrefix("!") { skipped += 1 }
+            if line.contains("#"), parse(line) != nil {
+                lines.append(line)
                 continue
             }
-            if line.contains("#"), parse(line) != nil {
+            // Scriptlets and procedural hiding (#845) are kept with the hiding rules; which of them run is decided
+            // when the lists are put together (ScriptletTable, ProceduralTable), by the list they came from.
+            if line.contains("#"), Scriptlets.parse(line) != nil || ProceduralHiding.parse(line, trusted: true) != nil {
                 lines.append(line)
                 continue
             }

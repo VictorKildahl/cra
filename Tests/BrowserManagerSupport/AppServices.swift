@@ -47,6 +47,11 @@ enum TestRoot { case today }
     static let shared = BlockLists()
     func isPaused(url: String) -> Bool { false }
     func style(for host: String) -> String { "" }
+    func procedural(for host: String) -> [String] { [] }
+}
+/// The filter lists' page scripts (#845): no procedural hiding in the harness.
+@MainActor enum FilterPageScripts {
+    static func proceduralExpression(_ selectors: [String]) -> String? { nil }
 }
 
 @MainActor final class SidebarStore {

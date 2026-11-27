@@ -70,7 +70,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         observeFrontmostApp()
         PerfCEF.install(app: self)
         CraCEFRuntime.setChromeHosting(store.settings.chromeEngine)
-        CraCEFRuntime.setDocumentStartScript(PageScript.mainWorld, isolatedScript: PageScript.isolatedWorld, world: PageScript.world)
+        // PageScript's scripts, with the filter lists' scriptlets as the last run left them (#845).
+        FilterPageScripts.install(table: nil)
         startContentBlocking()
         observeGlobalShortcut()
         observeMenuBarMode()

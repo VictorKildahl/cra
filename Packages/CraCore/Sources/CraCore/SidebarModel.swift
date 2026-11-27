@@ -658,6 +658,8 @@ public struct AppSettings: Codable, Equatable {
     /// the data folder's Blocklists folder.
     public var customBlocklists: [String] = []
     public var disabledCustomBlocklists: [String] = []
+    /// 1 once Strict's page lists came in (#845, `upgradeStrictLists`); settings from before say 0.
+    public var strictListsVersion = 1
     public var personalBlockFilters: String?
     /// Exact HTTP(S) hosts where the user paused list filtering.
     public var pausedFilterHosts: Set<String>?
@@ -1065,6 +1067,8 @@ extension AppSettings {
         let legacyMasterOff = !c.contains(.adAwayEnabled) && !c.contains(.anudeepEnabled) && !oldMaster
         personalFiltersEnabled = previousPersonalSetting ?? !legacyMasterOff
         customBlocklists = addresses
+        strictListsVersion = try c.decodeIfPresent(Int.self, forKey: .strictListsVersion) ?? 0
+        upgradeStrictLists()
         if legacyMasterOff {
             for address in customBlocklists { setFilterList(address, enabled: false) }
         }

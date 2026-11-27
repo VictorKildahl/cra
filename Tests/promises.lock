@@ -1865,6 +1865,16 @@
 #843   Tests/BrowserManagerLifecycleTests.swift::pictureInPictureBackToTabSpaceCase  beb48900e792
 #843   Tests/StoreTests.swift::selectSharedFavoriteInSpace  70f2cd4ec02f
 #844   Tests/Scenarios/filter-helper-hidden.scenario  535df66793d5
+#845   Packages/CraCore/Tests/CraCoreTests/ScriptletsTests.swift::ifBlocksForChromiumAreRead  fd0302f8976f
+#845   Packages/CraCore/Tests/CraCoreTests/ScriptletsTests.swift::listCopiesKeepScriptletAndProceduralLines  93babd4f3b88
+#845   Packages/CraCore/Tests/CraCoreTests/ScriptletsTests.swift::otherListsSyntaxReadsTheSame  65acfcc57a5f
+#845   Packages/CraCore/Tests/CraCoreTests/ScriptletsTests.swift::proceduralTableSelectsByHostWithExceptions  1e40dc367625
+#845   Packages/CraCore/Tests/CraCoreTests/ScriptletsTests.swift::promotedPostRulesGoToTheProceduralRunner  086cdc4bd90a
+#845   Packages/CraCore/Tests/CraCoreTests/ScriptletsTests.swift::strictTurnsOnThePageListsAndOlderStrictSettingsGetThemOnce  4779f1b21efc
+#845   Packages/CraCore/Tests/CraCoreTests/ScriptletsTests.swift::tableKeysExceptionsAndExcludedHosts  97c70c40c0d9
+#845   Packages/CraCore/Tests/CraCoreTests/ScriptletsTests.swift::trustedScriptletsRunOnlyFromTrustedLists  e37ce008e1bc
+#845   Packages/CraCore/Tests/CraCoreTests/ScriptletsTests.swift::youTubeRulesParseIntoTheCallsScriptletsJSRuns  58678ec5c747
+#845   Tests/Scenarios/filter-page-scripts.scenario  f05e33d47933
 #847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onePasswordInstalledGetsItsManifestWithoutAnImport  6cd3a3b215da
 #847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onlyWhenInstalledAndNotAlreadyThere  1698d6458511
 #848   Packages/CraCore/Tests/CraCoreTests/LittlePageHealthTests.swift::aPageInSightThatDoesntDrawIsStuck  2ca42b58241f

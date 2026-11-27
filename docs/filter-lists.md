@@ -3,9 +3,9 @@
 **Settings → Privacy** has one switch, **Block ads and trackers** (on by default), and one choice under it:
 
 - **Standard** uses Cra's built-in lists, AdAway and Anudeep's Blacklist. They work offline and rarely get in a page's way.
-- **Strict** adds EasyList and EasyPrivacy, which catch more ads and trackers. Now and then a page needs ad blocking turned off for it.
+- **Strict** adds EasyList and EasyPrivacy, which catch more ads and trackers, and the lists that take ads out of sites' own pages and data: uBlock filters – Ads, uBlock filters – Quick fixes and AdGuard – Ads. These handle YouTube's in-stream video ads and the promoted posts on X and Instagram. Now and then a page needs ad blocking turned off for it.
 
-Turning the switch off turns all of these off; turning it back on gives Standard. Strict is simply EasyList and EasyPrivacy both switched on, so it shows the same way under **Advanced…**.
+Turning the switch off turns all of these off; turning it back on gives Standard. Settings shows Strict while EasyList and EasyPrivacy are both on, and Strict's other three lists show the same way under **Advanced…**, each with its own switch. Settings from before these three lists were added that were already on Strict get them once.
 
 The **Block lists** row says how many rules are in use and from how many lists, each rule counted once however many lists name it.
 
@@ -37,6 +37,15 @@ With the updated Chromium framework, Cra enables its bundled filter for private 
 
 The helper is part of Cra, like Chrome’s own component extensions: chrome://extensions doesn’t list it and other extensions can’t see it through `chrome.management`, so it can’t be switched off or removed there (#844). **Settings → Privacy** is the one place that controls it.
 
+## Scriptlets and procedural hiding
+
+YouTube's in-stream ads arrive inside the page's own player data, and X and Instagram mark a promoted post only by a label such as "Ad" or "Sponsored". Network and stylesheet rules cannot reach either. For these, lists use two other kinds of rule, and Cra runs both itself:
+
+- **Scriptlets**, such as `youtube.com##+js(json-prune, playerResponse.adPlacements)`, are small named functions. They run in every frame of the site before the page's own scripts and take the ads out of its data before the page reads it. Cra reads uBlock Origin's `##+js(…)`, AdGuard's `#%#//scriptlet(…)` and Adblock Plus's `#$#` forms. It runs its own implementation of each name (`Resources/blocklist/scriptlets.js`), including `set-constant`, `json-prune` and its fetch and XHR variants, `abort-on-property-read/write`, `abort-current-script`, the timer and event-listener defusers, `no-fetch-if`, `remove-attr`, `replace-node-text` and `edit-inbound-object`. A name it does not implement is counted among the rules Cra can't use. `trusted-` scriptlets, which can rewrite a page's data freely, run only from uBlock Origin's own lists and your own filters.
+- **Procedural hiding** rules, such as `x.com#?#div[data-testid="cellInnerDiv"]:has(span:has-text(/^Ad$/))`, find an element by its text (`:has-text`, `:contains`), its surroundings (`:has`, `:upward`, `:xpath`) or its computed style (`:matches-css`). They also cover site-specific selectors too complex for the stylesheet path. They run in Cra's own world on each page and again as the page changes (`Resources/blocklist/procedural.js`). `:style()` runs only from trusted lists, the same as `trusted-` scriptlets. A procedural rule for every site is left out.
+
+Lists' `!#if env_chromium` blocks are read; blocks for uBlock Origin itself, AdGuard or Safari are not. Pausing a site stops its scriptlets and procedural hiding as well, from the page's next load. Pages that are already open run new or changed rules from their next load.
+
 ## Pause on a website
 
 **Ad Blocking** in the site menu (the address bar's site button) stores a choice for the exact host across ports and HTTP/HTTPS. Switch it back on to remove the exception. Reload the page after changing it so previously blocked resources and embedded frames load with the new settings. It covers the native domain lists, subscription and personal rules, element hiding and the built-in cookie-banner filter. Connection security and fingerprinting protection have separate settings. The exceptions are browser settings shared across profiles and can be included in settings sync.
@@ -52,6 +61,8 @@ The optional catalog contains subscription addresses. Cra does not distribute th
 | Subscription | Publisher and terms |
 |---|---|
 | EasyList, EasyPrivacy, EasyList Germany, EasyList Italy, Adblock Warning Removal List | The subscriptions refer to the EasyList licensing page, which offers GPL 3 or later or CC BY-SA 3.0 or later, subject to its stated exceptions. [EasyList licensing](https://easylist.to/pages/licence.html) |
+| uBlock filters (Ads, Badware risks, Privacy, Unbreak, Quick fixes, Experimental, Cookie Notices, Annoyances) | uBlock Origin's volunteers publish them under GPL 3. Cra fetches them from their own address and does not bundle them. Its scriptlets are Cra's own implementation. [uAssets](https://github.com/uBlockOrigin/uAssets) · [License](https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE) |
+| AdGuard – Ads, Mobile Ads, Cookie Notices, Social Widgets, Mobile App Banners, Other Annoyances | AdGuard's builds in uBlock Origin's syntax (Ads without EasyList), under GPL 3. [AdGuard filters](https://adguard.com/kb/general/ad-filtering/adguard-filters/) · [AdGuard filter repository](https://github.com/AdguardTeam/AdguardFilters) |
 | EasyList Cookie List, Fanboy’s Annoyance List and Social Blocking List | Their published file headers specify CC BY 3.0. The Annoyance List already covers the cookie and social lists. [Fanboy subscriptions](https://fanboy.co.nz/) · [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
 | Liste FR | The published French list specifies CC BY-SA 3.0. [Subscription](https://easylist-downloads.adblockplus.org/liste_fr.txt) · [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) |
 | AdGuard Popups and AdGuard Widgets | Separately maintained parts of the Annoyances filter. The publishers document their sources and license in the filter repository. [AdGuard filters](https://adguard.com/kb/general/ad-filtering/adguard-filters/) · [AdGuard filter repository](https://github.com/AdguardTeam/AdguardFilters) |

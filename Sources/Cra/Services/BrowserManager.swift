@@ -12,6 +12,8 @@ final class TabRuntime {
     /// The site (host) the committed page was styled for (list filters, boost), nil until it commits.
     /// Chromium reports a link's or redirect's page committing before its address (#869).
     var styledSite: String?
+    /// The page's document runs the filter lists' procedural hiding (#845).
+    var hasProceduralHiding = false
     var progress: Double = 0
     /// The toolbar's colour as read off the page (ToolbarSampler), "" until read.
     var themeColor: String = ""
@@ -1680,6 +1682,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
                 runtime.boostCanvasDocument += 1
                 runtime.boostCanvasFallbackOn = false
                 runtime.boostCSS = ""
+                runtime.hasProceduralHiding = false
                 applyElementHiding(to: runtime)
             }
             shareTheme(id, with: browser)
@@ -1723,12 +1726,25 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             let selectors = CookieBanners.selectors.joined(separator: ",")
             runPageScript("(\(recovery))(\(cookies),\(warnings),\(Self.jsonString(selectors)))", in: browser)
         }
+        applyProceduralHiding(to: runtime, host: host)
         let css = BlockLists.shared.style(for: host)
         guard runtime.hasElementHidingStyle || !css.isEmpty else { return }
         // Important declarations in a layer outrank unlayered site author styles.
         let layered = css.isEmpty ? "" : "@layer cra-list-filters {\n" + css + "\n}"
         adopt(layered, as: "__craListFilters", in: browser)
         runtime.hasElementHidingStyle = !css.isEmpty
+    }
+
+    /// The lists' procedural hiding for the page's site, in Cra's world (FilterPageScripts, #845): a promoted post
+    /// found by the text in it, again as the page adds posts. An empty list takes back what an earlier one hid.
+    private func applyProceduralHiding(to runtime: TabRuntime, host: String) {
+        let selectors = BlockLists.shared.procedural(for: host)
+        guard runtime.hasProceduralHiding || !selectors.isEmpty,
+              let expression = FilterPageScripts.proceduralExpression(selectors),
+              let params = try? JSONSerialization.data(withJSONObject: ["expression": expression]),
+              let json = String(data: params, encoding: .utf8) else { return }
+        runtime.browser.evaluate(inIsolatedWorld: PageScript.world, params: json) { _, _ in }
+        runtime.hasProceduralHiding = !selectors.isEmpty
     }
 
     /// Arc's "Allow websites to get your theme data": the space's palette as `--arc-palette-*` and

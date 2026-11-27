@@ -286,7 +286,9 @@ public struct CachedBlocklist: Equatable {
     public var domains: [String]
     public var hidingRules: [String] = []
     public var networkRules: [String] = []
-    private static let formatVersion = "3"
+    /// 4 (#845): scriptlet and procedural hiding lines are kept, and `!#if` blocks for Chromium are read. A copy of
+    /// an older format reads as having no network source, so the next launch fetches it again.
+    private static let formatVersion = "4"
     public var hasNetworkSource = false
     // Mixed lists keep the original hosts independently of their legacy ABP domain projection.
     public var sourceHosts: [String]?

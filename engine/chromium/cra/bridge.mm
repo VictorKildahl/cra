@@ -187,6 +187,8 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 
 @interface CraBrowser ()
 - (void)adoptContents:(content::WebContents*)contents;
+/// The new setDocumentStartScript: scripts for the page's next document (#845).
+- (void)refreshDocumentStartScripts;
 /// The page's Boost colorize for its WebPreferences (#602), empty for none.
 - (std::string)boostTintForPrefs;
 - (void)contentsCreated:(content::WebContents*)contents;
@@ -258,6 +260,8 @@ BOOL g_mock_keychain = NO;
 NSArray<NSString*>* g_extension_paths = nil;
 // Page.addScriptToEvaluateOnNewDocument params every page gets once it exists (setDocumentStartScript:…).
 NSArray<NSString*>* g_document_start_params = nil;
+// Which setDocumentStartScript: call the params are from: a page drops what an older one installed (#845).
+NSUInteger g_document_start_generation = 0;
 NSString* g_extension_profiles = nil;
 int g_exit_code = 0;
 bool g_ready = false;
@@ -2297,6 +2301,9 @@ bool HandleDebugMethod(content::WebContents* contents,
   NSView* __weak _devToolsFrontendView;
   // An agent page (MCP) renders while never on screen, as the CEF bridge's windowless page did.
   base::ScopedClosureRunner _agentCapture;
+  // The identifiers of the document-start scripts installed in the page, and the generation they're from (#845).
+  NSMutableArray<NSString*>* _documentStartIdentifiers;
+  NSUInteger _documentStartGeneration;
   // The download the agent asked for (startAgentDownload:…); anything else the site starts is cancelled.
   BOOL _agentDownloadActive;
   BOOL _agentDownloadCancelled;
@@ -2500,19 +2507,62 @@ bool HandleDebugMethod(content::WebContents* contents,
 // page agent runs new-document scripts only while its domain is enabled. Protocol messages run in order, so
 // they are in before the page's first load.
 - (void)installDocumentStartScripts {
+  _documentStartGeneration = g_document_start_generation;
+  if (!_documentStartIdentifiers) {
+    _documentStartIdentifiers = [NSMutableArray array];
+  }
   if (!g_document_start_params.count) {
     return;
   }
   [self sendDevToolsMethod:@"Page.enable" params:@"{}" completion:^(NSString*, NSString*) {}];
+  NSUInteger generation = _documentStartGeneration;
+  CraBrowser* __weak weakSelf = self;
   for (NSString* params in g_document_start_params) {
     [self sendDevToolsMethod:@"Page.addScriptToEvaluateOnNewDocument"
                       params:params
-                  completion:^(NSString*, NSString* error) {
+                  completion:^(NSString* result, NSString* error) {
                     if (error) {
                       NSLog(@"Cra: document start script not installed: %@", error);
+                      return;
                     }
+                    [weakSelf keepDocumentStartScript:result generation:generation];
                   }];
   }
+}
+
+// An installed script's identifier, kept to take it out again; one from an older generation goes at once.
+- (void)keepDocumentStartScript:(NSString*)result generation:(NSUInteger)generation {
+  NSData* data = [result dataUsingEncoding:NSUTF8StringEncoding];
+  NSDictionary* json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+  NSString* identifier = [json isKindOfClass:[NSDictionary class]] ? json[@"identifier"] : nil;
+  if (![identifier isKindOfClass:[NSString class]]) {
+    return;
+  }
+  if (generation != _documentStartGeneration) {
+    [self removeDocumentStartScript:identifier];
+    return;
+  }
+  [_documentStartIdentifiers addObject:identifier];
+}
+
+- (void)removeDocumentStartScript:(NSString*)identifier {
+  NSString* params = JSONString(@{@"identifier" : identifier});
+  [self sendDevToolsMethod:@"Page.removeScriptToEvaluateOnNewDocument"
+                    params:params
+                completion:^(NSString*, NSString*) {}];
+}
+
+// setDocumentStartScript: again (the filter lists' scriptlets changed, a site was paused; #845): the page's next
+// document runs the new scripts instead of the ones it was made with.
+- (void)refreshDocumentStartScripts {
+  if (!_contents || _documentStartGeneration == g_document_start_generation) {
+    return;
+  }
+  for (NSString* identifier in _documentStartIdentifiers) {
+    [self removeDocumentStartScript:identifier];
+  }
+  [_documentStartIdentifiers removeAllObjects];
+  [self installDocumentStartScripts];
 }
 
 - (void)contentsCreated:(content::WebContents*)contents {
@@ -4342,7 +4392,21 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
       [all addObject:[[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]];
     }
   }
+  if ([all isEqualToArray:g_document_start_params ?: @[]]) {
+    return;
+  }
   g_document_start_params = all;
+  g_document_start_generation += 1;
+  // Pages already open take the new scripts for their next document (#845).
+  std::vector<CraBrowser*> pages;
+  for (const auto& entry : PagesByContents()) {
+    if (CraBrowser* page = entry.second) {
+      pages.push_back(page);
+    }
+  }
+  for (CraBrowser* page : pages) {
+    [page refreshDocumentStartScripts];
+  }
 }
 + (void)setBundledNetworkRulesExpected:(BOOL)expected {
   if (g_bundled_network_rules_expected.exchange(expected) != expected) {
