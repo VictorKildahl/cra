@@ -855,8 +855,8 @@ final class SearchField: UITextField {
         textColor = .white
         attributedPlaceholder = NSAttributedString(string: "Search...", attributes: [
             .foregroundColor: lightPageField ? Palette.fieldLightPageInk : Palette.placeholder,
-            // Bold, a deviation from Arc Search's regular weight.
-            .font: UIFont.systemFont(ofSize: 20, weight: .bold),
+            // Semibold, a deviation from Arc Search's regular weight.
+            .font: UIFont.systemFont(ofSize: 20, weight: .semibold),
         ])
     }
 
