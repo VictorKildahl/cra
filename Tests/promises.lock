@@ -1912,6 +1912,10 @@
 #869   Tests/BrowserManagerLifecycleTests.swift::boostAfterRedirectCase  ab4f48434aa9
 #869   Tests/Scenarios/boost-linked-pages.scenario  97187a77dc15
 #876   Tests/Scenarios/sidebar-title-row.scenario  78019136ff4e
+#883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::eachNewPlaceTicks  d514287a15c2
+#883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::nowhereIsSilentAndComingBackTicks  b0622ee05ea5
+#883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::theSamePlaceTicksOnce  20e7ead609e3
+#883   Tests/Scenarios/sidebar-reorder-haptics.scenario  a67cbf7b9082
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

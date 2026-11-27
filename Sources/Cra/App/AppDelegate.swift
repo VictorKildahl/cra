@@ -3302,6 +3302,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 CraLog.note("row point: \(Int(p.x)) \(Int(p.y))")
                 return
             }
+            // reorder=<label>&drag=<id>&path=<row id>:<f>,…: the row dragged over each row f of the way down,
+            // as a drag would; "reorder <label>: ticks=<n> places=<…>" (#883).
+            if let label = dict["reorder"] {
+                let path = (dict["path"] ?? "").split(separator: ",").compactMap { step -> (row: UUID, f: CGFloat)? in
+                    let parts = step.split(separator: ":")
+                    guard parts.count == 2, let id = UUID(uuidString: String(parts[0])), let f = Double(parts[1]) else { return nil }
+                    return (id, CGFloat(f))
+                }
+                guard let id = dict["drag"].flatMap(UUID.init(uuidString:)),
+                      let r = SpaceListView.debugReorder(id, path: path, ui: main.sidebarUI) else {
+                    CraLog.note("reorder \(label): no row"); return
+                }
+                CraLog.note("reorder \(label): ticks=\(r.ticks) places=\(r.places.joined(separator: ","))")
+                return
+            }
             // folderPreviewOpen=<label>: "Cra folderPreview <label>: open=<folder id>" or "open=none" (#743).
             if let label = dict["folderPreviewOpen"] {
                 let open = FolderPreviewController.shared.isOpen ? FolderPreviewController.shared.folderID?.uuidString ?? "none" : "none"

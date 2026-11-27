@@ -5628,3 +5628,20 @@ colours. Other actions are `pullRequestResolveConflicts` and `pullRequestShowCom
 The client uses `GitHub-Verified-Fetch`, `X-Requested-With` and embedded
 `pullsDashboardSurfaceContentRoute` JSON. Cra limits this phase to a snapshot card and
 GET-only checks on hover; review state and the other actions remain out of scope.
+
+## Sidebar reorder haptics (Arc 1.174.3, static, 27 Nov 2026, #883)
+- [O metadata] The sidebar outline's data source holds `diffableSnapshot`, `draggingHandlers`,
+  `dragToCombineTabsIntoSplitEnabled`, `outlineView`, `tabReorderingHapticsDisabled`, `dropHapticSubject`,
+  `dropHapticSubscription` and `draggedItemIndexes`. The tick belongs to the outline, which takes tabs, folders and
+  splits alike, not to any one row type. The settings model's `hapticFeedbackWhenReordering` sits beside
+  `tabGroupCommandClick`, `newTabsAtStart` and `autoCleanTabs`; Favorites' collection view has its own
+  `dropHapticSubject`.
+- [O] `performFeedbackPattern:performanceTime:` has 16 call sites in the Arc executable. Most are
+  `.generic` (0), `.now` (1); `.alignment` (1), `.now` is the page detent (PageSwipeController, #260) and one other.
+- [I] The subject fires as the outline is offered a new drop place, so the tick comes while the finger is still on the
+  trackpad. The reporter felt it as "a tick as the item moves into a new position", the same for a tab or a folder.
+  [?] Not measured live: the subject's throttling, and whether a drop also ticks.
+- Cra (#883): `SidebarReorderHaptics` in CraCore ticks `.generic`, now, each time the drag is offered a new place
+  (any row, behind "Haptic feedback when reordering tabs"). The ticks are counted for `cra://debug?reorder=…` and
+  the `sidebar-reorder-haptics` scenario. Before this, only a tab offering to combine into a split ticked during
+  the drag. The `.alignment` tick at drop stays.
