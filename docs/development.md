@@ -84,7 +84,9 @@ each with its hash under the manifest's `easels` (not `files`, so an older Cra s
 whole). A picture the writing Mac lacks is left out, and one already in the folder stays only when its hash
 matches. A bundle applies whole, pictures first, then the easels, then the sidebar; a picture the bundle
 carries that this Mac lacks is copied whether or not its easel changed. Picture reads, hashes and copies run
-off the main thread before the rest of a write or an apply, one task at a time. Each easel merges three ways (`Easel.merge`) against the newest bundle the
+off the main thread before the rest of a write or an apply, one task at a time; Export… and Import… run theirs the same
+way, and Settings turns both off until they answer. A write whose pictures copied while another Mac wrote takes that
+bundle first, as a look does. Each easel merges three ways (`Easel.merge`) against the newest bundle the
 writer names under `easelParentIDs`, the parents it had easels for, and one deleted on either Mac
 goes. With none of them here, easels are added and overwritten and none is deleted, and a blank
 `Easel(id:)` (what an older Cra saves when a tab opens a row it has no file for) never replaces a real one. Import… and Use That Sidebar add and overwrite easels and delete none. A

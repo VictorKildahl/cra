@@ -21,7 +21,7 @@ struct SyncSection: View {
             }
             .alert("Import these settings?", isPresented: Binding(get: { importing != nil }, set: { if !$0 { importing = nil } })) {
                 Button("Import") {
-                    if let (url, _) = importing { notice = sync.importBundle(from: url) ?? "Settings imported." }
+                    if let (url, _) = importing { sync.importBundle(from: url) { notice = $0 ?? "Settings imported." } }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -78,7 +78,9 @@ struct SyncSection: View {
                 Text("Settings file").font(.system(size: 13))
             } trailing: {
                 Button("Export…") { exportBundle() }
+                    .disabled(sync.transferring)
                 Button("Import…") { importBundle() }
+                    .disabled(sync.transferring)
             }
         }
         SettingsFootnote(notice ?? "Spaces, pinned tabs, favorites, folders, easels, settings and shortcuts sync. Logins, cookies, history and extensions stay on each Mac.")
@@ -137,12 +139,14 @@ struct SyncSection: View {
     private func exportBundle() {
         let panel = folderPanel(prompt: "Export", message: "Choose where to save a “Cra” folder with your sidebar, settings, shortcuts and easels.")
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        notice = sync.export(to: url).map { "Not exported: \($0)" } ?? "Exported to \((url.path as NSString).abbreviatingWithTildeInPath)/Cra."
+        sync.export(to: url) { notice = $0.map { "Not exported: \($0)" } ?? "Exported to \((url.path as NSString).abbreviatingWithTildeInPath)/Cra." }
     }
 
     private func importBundle() {
         let panel = folderPanel(prompt: "Import", message: "Choose the folder that holds the exported “Cra” folder, or that folder itself.")
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        if let summary = sync.summary(ofBundleIn: url) { importing = (url, summary) } else { notice = "The folder holds no Cra settings." }
+        sync.summary(ofBundleIn: url) { summary in
+            if let summary { importing = (url, summary) } else { notice = "The folder holds no Cra settings." }
+        }
     }
 }

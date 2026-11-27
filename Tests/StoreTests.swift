@@ -5101,6 +5101,14 @@ enum StoreTests {
         done(work.run())
     }
 
+    /// What Export… or Import… answers when its picture tasks run in place; nil when it hasn't answered.
+    @MainActor
+    private static func answer(_ start: (@escaping @MainActor (String?) -> Void) -> Void) -> String?? {
+        var said: String?? = nil
+        start { said = .some($0) }
+        return said
+    }
+
     /// Picture tasks handed over and not run yet: a test runs them when it chooses, as the thread they go to would.
     @MainActor
     private final class HeldPictures {
@@ -5179,6 +5187,17 @@ enum StoreTests {
         syncStartsNoSecondPictureTaskWhileOneRuns()
         syncAppliesNothingWhenAPictureCopyFails()
         syncLooksWithoutReadingAPictureOnTheMainThread()
+        syncTakesABundleWrittenWhileItsPicturesCopy()
+        syncWritesNoPictureThroughAFolderLinkedWhileTheTaskWaits()
+        syncSendsAPictureOnceItCanBeReadAgain()
+        exportCopiesItsPicturesOffTheMainThread()
+        importCopiesThePicturesItLacksOffTheMainThread()
+        settingsTurnsExportBackOnOnceItAnswers()
+        syncReadsNoPictureThroughALinkSwappedInWhileTheTaskWaits()
+        syncReadsNoFIFOSwappedInWhileTheTaskWaits()
+        syncReadsNoFIFONamedAsAnEaselFile()
+        useThatSidebarHashesAPictureOffTheMainThread()
+        importNamesAPictureGoneBeforeItApplies()
     }
 
     // MARK: Picture work off the main thread (#4)
@@ -5269,6 +5288,226 @@ enum StoreTests {
         macs.clockB.advance(by: 10); macs.syncB.poll()
         expect(held.tasks.count == 1 && macs.syncB.easelReads == reads + 1,
                "the look reads only the easel's JSON, and hands the picture to a task (\(macs.syncB.easelReads - reads) reads)")
+    }
+
+    /// Another Mac wrote while this one copied its pictures, and the write that followed went over that bundle unseen.
+    @MainActor
+    private static func syncTakesABundleWrittenWhileItsPicturesCopy() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let held = HeldPictures()
+        held.hold(macs.syncA)
+        let (easel, pictures) = pictured("Copied while the other Mac writes")
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        let tab = macs.b.createTab(url: "https://example.com/written-meanwhile")
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        held.runAll()
+        expect(macs.a.document.items.contains { $0.id == tab.id }, "once its pictures are copied, the first Mac takes the bundle written meanwhile")
+    }
+
+    /// A peer put a link in place of an easel's picture folder while the picture task waited: the copy went through it.
+    @MainActor
+    private static func syncWritesNoPictureThroughAFolderLinkedWhileTheTaskWaits() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let outside = outsideFolder(in: macs)
+        let held = HeldPictures()
+        held.hold(macs.syncA)
+        let (easel, pictures) = pictured("Relinked while its copy waits")
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        let pictureFolder = macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(easel.id.uuidString)")
+        try? FileManager.default.createDirectory(at: pictureFolder.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? FileManager.default.createSymbolicLink(at: pictureFolder, withDestinationURL: outside)
+        held.runAll()
+        let left = (try? FileManager.default.subpathsOfDirectory(atPath: outside.path))?.sorted()
+        expect(left == ["keep.txt", "sub", "sub/x.txt"], "the folder the link points at gets no picture (\(left ?? []))")
+    }
+
+    /// A picture this Mac couldn't read stayed out of the bundle once its permissions were fixed, which change
+    /// neither its size nor its date.
+    @MainActor
+    private static func syncSendsAPictureOnceItCanBeReadAgain() {
+        let macs = EaselMacs()
+        let (easel, pictures) = pictured("Readable again")
+        let name = pictures.keys.first!
+        let picture = macs.easelsA.appendingPathComponent("\(easel.id.uuidString)/\(name)")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: picture.path)
+            macs.done()
+        }
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: picture.path)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: picture.path)
+        macs.clockA.advance(by: 30)
+        expect(macs.manifest?.easels?["\(SettingsSync.easelsName)/\(easel.id.uuidString)/\(name)"] != nil,
+               "the next look sends the picture it can read again")
+    }
+
+    /// Export… read, hashed and copied its pictures on the main thread, and Settings hung until they were done.
+    @MainActor
+    private static func exportCopiesItsPicturesOffTheMainThread() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-export-off-main-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let easels = dir.appendingPathComponent("Easels", isDirectory: true)
+        let (easel, pictures) = pictured("Exported off the main thread")
+        saveEasel(easel, pictures: pictures, in: easels)
+        let clock = ManualScheduler()
+        let sync = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easels)
+        let held = HeldPictures()
+        held.hold(sync)
+        sync.export(to: dir.appendingPathComponent("export", isDirectory: true)) { _ in }
+        expect(held.tasks.count == 1, "Export… hands its picture copy to a task (\(held.tasks.count) tasks)")
+    }
+
+    /// Settings turns Export… and Import… off while one runs, and back on once it answers.
+    @MainActor
+    private static func settingsTurnsExportBackOnOnceItAnswers() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-export-answers-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let easels = dir.appendingPathComponent("Easels", isDirectory: true)
+        let (easel, pictures) = pictured("Exported while Settings waits")
+        saveEasel(easel, pictures: pictures, in: easels)
+        let clock = ManualScheduler()
+        let sync = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easels)
+        let held = HeldPictures()
+        held.hold(sync)
+        var said: String?? = nil
+        sync.export(to: dir.appendingPathComponent("export", isDirectory: true)) { said = .some($0) }
+        let waiting = sync.transferring && said == nil
+        held.runAll()
+        expect(waiting && !sync.transferring && said == .some(nil), "Export… stays off until it answers that it exported")
+    }
+
+    /// Import… hashed the bundle's pictures and copied the ones this Mac lacks on the main thread.
+    @MainActor
+    private static func importCopiesThePicturesItLacksOffTheMainThread() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-import-off-main-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let easelsA = dir.appendingPathComponent("a/Easels", isDirectory: true), easelsB = dir.appendingPathComponent("b/Easels", isDirectory: true)
+        let exported = dir.appendingPathComponent("export", isDirectory: true)
+        let (easel, pictures) = pictured("Imported off the main thread")
+        saveEasel(easel, pictures: pictures, in: easelsA)
+        let clock = ManualScheduler()
+        let syncA = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easelsA)
+        syncA.runPictures = picturesInPlace
+        syncA.export(to: exported) { _ in }
+        let syncB = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "MacBook", deviceID: "macbook", easels: easelsB)
+        let held = HeldPictures()
+        held.hold(syncB)
+        syncB.importBundle(from: exported) { _ in }
+        expect(held.tasks.count == 1, "Import… hands its picture reads to a task (\(held.tasks.count) tasks)")
+    }
+
+    /// How many files the second Mac's picture task reads when `swap` replaces the folder's picture while the task waits.
+    @MainActor
+    private static func readsAfterSwappingThePicture(_ swap: (_ picture: URL, _ bytes: Data, _ dir: URL) -> Void) -> Int {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let (easel, pictures) = pictured("Swapped while its task waits")
+        let (name, bytes) = pictures.first!
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        let held = HeldPictures()
+        held.hold(macs.syncB)
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        let reads = macs.syncB.easelReads
+        let inFolder = macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(easel.id.uuidString)/\(name)")
+        try? FileManager.default.removeItem(at: inFolder)
+        swap(inFolder, bytes, macs.dir)
+        held.runAll()
+        return macs.syncB.easelReads - reads
+    }
+
+    /// A peer swapped a bundle picture for a link to a file elsewhere while the picture task waited: the task read through it.
+    @MainActor
+    private static func syncReadsNoPictureThroughALinkSwappedInWhileTheTaskWaits() {
+        let reads = readsAfterSwappingThePicture { picture, bytes, dir in
+            let elsewhere = dir.appendingPathComponent("elsewhere.png")
+            try? bytes.write(to: elsewhere)
+            try? FileManager.default.createSymbolicLink(at: picture, withDestinationURL: elsewhere)
+        }
+        expect(reads == 0, "the task reads nothing through the link (\(reads) reads)")
+    }
+
+    /// A FIFO in place of a bundle picture is never read: the read would wait for a writer for ever.
+    @MainActor
+    private static func syncReadsNoFIFOSwappedInWhileTheTaskWaits() {
+        let reads = readsAfterSwappingThePicture { picture, _, _ in _ = mkfifo(picture.path, 0o644) }
+        expect(reads == 0, "the task leaves the FIFO alone (\(reads) reads)")
+    }
+
+    /// A peer's FIFO named as an easel file in the bundle: opening it on the main thread waited for a writer for ever.
+    /// The test holds it open for writing, so a read tried returns and is counted rather than hanging the suite.
+    @MainActor
+    private static func syncReadsNoFIFONamedAsAnEaselFile() {
+        let easel = Easel(title: "Its file turned into a FIFO")
+        let macs = EaselMacs([(easel, [:])])
+        defer { macs.done() }
+        let file = macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(easel.id.uuidString).json")
+        try? FileManager.default.removeItem(at: file)
+        _ = mkfifo(file.path, 0o644)
+        let writer = open(file.path, O_RDWR)
+        defer { close(writer) }
+        let reads = macs.syncB.easelReads
+        macs.clockB.advance(by: 30)
+        expect(macs.syncB.easelReads == reads, "the look leaves the FIFO alone (\(macs.syncB.easelReads - reads) reads)")
+    }
+
+    /// Use That Sidebar hashed a picture that changed since the question on the main thread.
+    @MainActor
+    private static func useThatSidebarHashesAPictureOffTheMainThread() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-use-remote-off-main-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let easelsA = dir.appendingPathComponent("a/Easels", isDirectory: true), easelsB = dir.appendingPathComponent("b/Easels", isDirectory: true)
+        let root = dir.appendingPathComponent("sync", isDirectory: true)
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let (easel, pictures) = pictured("Hashed again after the question")
+        saveEasel(easel, pictures: pictures, in: easelsA)
+        let syncA = SettingsSyncService(store: SidebarStore(clock: clockA), clock: clockA, device: "Studio", deviceID: "studio", easels: easelsA)
+        let syncB = SettingsSyncService(store: SidebarStore(clock: clockB), clock: clockB, device: "MacBook", deviceID: "macbook", easels: easelsB)
+        syncA.runPictures = picturesInPlace
+        let held = HeldPictures()
+        held.hold(syncB)
+        defer { syncA.disable(); syncB.disable() }
+        expect(syncA.enable(folder: root) == .synced, "the first Mac syncs through a folder")
+        _ = syncB.enable(folder: root)
+        held.runAll()
+        expect(syncB.pendingChoice != nil, "the second Mac is asked once its look hashed the picture")
+        // The picture's date moves after the question: its hash is unknown again.
+        let inFolder = root.appendingPathComponent("\(SettingsSync.folderName)/\(SettingsSync.easelsName)/\(easel.id.uuidString)/\(pictures.keys.first!)")
+        try? FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000_000)], ofItemAtPath: inFolder.path)
+        let reads = syncB.easelReads
+        syncB.useRemote()
+        expect(syncB.easelReads == reads && held.tasks.count == 1,
+               "Use That Sidebar hands the picture to a task (\(syncB.easelReads - reads) reads, \(held.tasks.count) tasks)")
+    }
+
+    /// A picture Import copied went from this Mac before the import applied, and Settings said only "The file doesn't exist."
+    @MainActor
+    private static func importNamesAPictureGoneBeforeItApplies() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-import-gone-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let easelsA = dir.appendingPathComponent("a/Easels", isDirectory: true), easelsB = dir.appendingPathComponent("b/Easels", isDirectory: true)
+        let exported = dir.appendingPathComponent("export", isDirectory: true)
+        let (easel, pictures) = pictured("Its picture goes during the import")
+        let name = pictures.keys.first!
+        saveEasel(easel, pictures: pictures, in: easelsA)
+        let clock = ManualScheduler()
+        let syncA = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easelsA)
+        syncA.runPictures = picturesInPlace
+        _ = answer { syncA.export(to: exported, done: $0) }
+        let syncB = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "MacBook", deviceID: "macbook", easels: easelsB)
+        // Each task's copy is gone again by the time its answer reaches the main thread.
+        syncB.runPictures = { work, done in
+            let result = work.run()
+            try? FileManager.default.removeItem(at: easelsB.appendingPathComponent("\(easel.id.uuidString)/\(name)"))
+            done(result)
+        }
+        let said = answer { syncB.importBundle(from: exported, done: $0) }
+        expect(said??.contains(name) == true, "Import… names the picture that went (\(String(describing: said)))")
     }
 
     /// A test that reads a saved file next (a relaunch) flushes the save instead of sleeping past its delay.
@@ -5546,14 +5785,16 @@ enum StoreTests {
         let (easel, pictures) = pictured("Exported")
         saveEasel(easel, pictures: pictures, in: easelsA)
         let syncA = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easelsA)
-        expect(syncA.export(to: exported) == nil, "the first Mac exports")
+        syncA.runPictures = picturesInPlace
+        expect(answer { syncA.export(to: exported, done: $0) } == .some(nil), "the first Mac exports")
         let onlyHere = Easel(title: "Only on this Mac")
         saveEasel(onlyHere, in: easelsB)
         var older = easel
         older.title = "An older copy"
         saveEasel(older, in: easelsB)
         let syncB = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "MacBook", deviceID: "macbook", easels: easelsB)
-        expect(syncB.importBundle(from: exported) == nil, "the second Mac imports it")
+        syncB.runPictures = picturesInPlace
+        expect(answer { syncB.importBundle(from: exported, done: $0) } == .some(nil), "the second Mac imports it")
         expect(loadEasel(easel.id, in: easelsB) == easel, "Import… takes the exported easel over this Mac's copy")
         expect(loadEasel(onlyHere.id, in: easelsB) == onlyHere, "and keeps an easel the export lacks")
         let bak = (try? Data(contentsOf: easelsB.appendingPathComponent(easel.id.uuidString + ".json.bak")))
@@ -5599,9 +5840,11 @@ enum StoreTests {
         saveEasel(Easel(id: easel.id), in: easelsA)
         saveEasel(easel, pictures: pictures, in: easelsB)
         let syncA = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easelsA)
-        expect(syncA.export(to: exported) == nil, "the first Mac exports its blank copy")
+        syncA.runPictures = picturesInPlace
+        expect(answer { syncA.export(to: exported, done: $0) } == .some(nil), "the first Mac exports its blank copy")
         let syncB = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "MacBook", deviceID: "macbook", easels: easelsB)
-        _ = syncB.importBundle(from: exported)
+        syncB.runPictures = picturesInPlace
+        _ = answer { syncB.importBundle(from: exported, done: $0) }
         expect(loadEasel(easel.id, in: easelsB) == easel, "Import… leaves the real easel in place of the blank copy")
     }
 
@@ -5816,8 +6059,8 @@ enum StoreTests {
         macs.syncAToB()
         expect(macs.syncB.error != nil, "sync on the second Mac reports the easel it couldn't save")
         let exported = macs.dir.appendingPathComponent("export", isDirectory: true)
-        expect(macs.syncA.export(to: exported) == nil, "the first Mac exports")
-        expect(macs.syncB.importBundle(from: exported) != nil, "Import… reports the easels it couldn't save")
+        expect(answer { macs.syncA.export(to: exported, done: $0) } == .some(nil), "the first Mac exports")
+        expect(answer { macs.syncB.importBundle(from: exported, done: $0) }??.isEmpty == false, "Import… reports the easels it couldn't save")
     }
 
     /// A manifest path that names no easel file or picture is never read or written, here or in the folder.
