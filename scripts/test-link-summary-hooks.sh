@@ -9,7 +9,7 @@ xcrun swiftc -swift-version 5 -emit-module -emit-object -parse-as-library -modul
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} -I "$TEST_DIR" "$TEST_DIR/CraCEF.o" \
   Packages/CraCore/Sources/CraCore/*.swift Packages/CraCore/Sources/CraCore/Perf/*.swift Sources/Cra/Perf/Perf.swift \
   Sources/Cra/Services/Import/*.swift Sources/Cra/Services/SidebarStore.swift Sources/Cra/Services/SidebarIntegrity.swift \
-  Sources/Cra/Services/Persistence.swift Sources/Cra/Services/SettingsSyncService.swift Sources/Cra/Services/EaselFolder.swift \
+  Sources/Cra/Services/Persistence.swift Sources/Cra/Services/SettingsSyncService.swift Sources/Cra/Services/EaselFolder.swift Sources/Cra/Services/BundleDirectory.swift \
   Tests/Support/LegacyLiveFolderResults.swift Sources/Cra/Services/FaviconCache.swift Sources/Cra/Services/SafeStorage.swift Sources/Cra/App/EngineFramework.swift \
   Sources/Cra/Services/CraLog.swift Sources/Cra/Services/Scheduler.swift Sources/Cra/Services/TidyTabsService.swift Sources/Cra/Services/TidyTabsModel.swift \
   Sources/Cra/Services/LinkSummaryFetch.swift Sources/Cra/Services/LinkSummaryImageFetch.swift Sources/Cra/Services/LinkSummaryService.swift \

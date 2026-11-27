@@ -5193,6 +5193,15 @@ enum StoreTests {
         exportCopiesItsPicturesOffTheMainThread()
         importCopiesThePicturesItLacksOffTheMainThread()
         settingsTurnsExportBackOnOnceItAnswers()
+        exportKeepsThePicturesOfAnEaselDeletedWhileItCopies()
+        exportLeavesOutAnEaselDeletedBeforeItsPictureCopied()
+        bundleWriteFollowsNoLinkSwappedInOnceItMayWrite()
+        bundleDirectoryWritesThroughNoLinkAtAnyLevel()
+        exportNamesAPictureItCouldNotWrite()
+        syncSendsAPictureOnceTheBundleTakesItAgain()
+        syncWritesThroughACraLinkTheUserMade()
+        syncWritesThroughACraLinkSetUpOnAnOlderCra()
+        syncPrunesATempFileAWriteLeftBehind()
         syncReadsNoPictureThroughALinkSwappedInWhileTheTaskWaits()
         syncReadsNoFIFOSwappedInWhileTheTaskWaits()
         syncReadsNoFIFONamedAsAnEaselFile()
@@ -5360,6 +5369,207 @@ enum StoreTests {
         held.hold(sync)
         sync.export(to: dir.appendingPathComponent("export", isDirectory: true)) { _ in }
         expect(held.tasks.count == 1, "Export… hands its picture copy to a task (\(held.tasks.count) tasks)")
+    }
+
+    /// What Export… leaves in its folder when the user deletes an easel while its picture copy waits; `exportedBefore`:
+    /// the folder already holds that easel's pictures from an earlier Export…, and a second easel's picture is copied.
+    @MainActor
+    private static func exportAfterDeletingAnEaselWhileItsCopyWaits(exportedBefore: Bool) -> (easel: Easel, manifest: SyncManifest?, folder: URL, dir: URL) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-export-deleted-\(UUID().uuidString)", isDirectory: true)
+        let easels = dir.appendingPathComponent("Easels", isDirectory: true), exported = dir.appendingPathComponent("export", isDirectory: true)
+        let (easel, pictures) = pictured("Deleted while Export… copies")
+        saveEasel(easel, pictures: pictures, in: easels)
+        let clock = ManualScheduler()
+        let sync = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easels)
+        if exportedBefore {
+            sync.runPictures = picturesInPlace
+            expect(answer { sync.export(to: exported, done: $0) } == .some(nil), "the first Export… writes the easel and its picture")
+            let (other, otherPictures) = pictured("Copied by the second Export…")
+            saveEasel(other, pictures: otherPictures, in: easels)
+        }
+        let held = HeldPictures()
+        held.hold(sync)
+        var said: String?? = nil
+        sync.export(to: exported) { said = .some($0) }
+        EaselFolder.remove(easel.id, in: easels)
+        held.runAll()
+        expect(said == .some(nil), "Export… answers that it exported (\(String(describing: said)))")
+        let folder = exported.appendingPathComponent(SettingsSync.folderName, isDirectory: true)
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let manifest = (try? Data(contentsOf: folder.appendingPathComponent(SettingsSync.manifestName)))
+            .flatMap { try? decoder.decode(SyncManifest.self, from: $0) }
+        return (easel, manifest, folder, dir)
+    }
+
+    /// Whether an exported easel and its pictures went together, each named picture held: the easel with them all, or neither.
+    private static func exportHoldsTheEaselWithItsPicturesOrNeither(_ easel: Easel, _ manifest: SyncManifest?, in folder: URL) -> Bool {
+        guard let named = manifest?.easels else { return false }
+        let mine = named.keys.filter { SettingsSync.easelPath($0)?.id == easel.id }
+        let pictures = Set(easel.items.flatMap(Easel.files(of:))).map { "\(SettingsSync.easelsName)/\(easel.id.uuidString)/\($0)" }
+        let held = named.keys.allSatisfy { FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) }
+        return held && (mine.isEmpty || Set(mine) == Set(pictures + ["\(SettingsSync.easelsName)/\(easel.id.uuidString).json"]))
+    }
+
+    /// An easel deleted while Export… copied another's picture kept its JSON in the export and lost the pictures an
+    /// earlier Export… had put there (Greptile, PR #894).
+    @MainActor
+    private static func exportKeepsThePicturesOfAnEaselDeletedWhileItCopies() {
+        let (easel, manifest, folder, dir) = exportAfterDeletingAnEaselWhileItsCopyWaits(exportedBefore: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        expect(exportHoldsTheEaselWithItsPicturesOrNeither(easel, manifest, in: folder),
+               "the export holds the deleted easel with its picture, or neither (\(manifest?.easels?.keys.sorted() ?? []))")
+    }
+
+    /// An easel deleted while Export… waited to copy its picture went into the export without the picture.
+    @MainActor
+    private static func exportLeavesOutAnEaselDeletedBeforeItsPictureCopied() {
+        let (easel, manifest, folder, dir) = exportAfterDeletingAnEaselWhileItsCopyWaits(exportedBefore: false)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        expect(exportHoldsTheEaselWithItsPicturesOrNeither(easel, manifest, in: folder),
+               "the export holds the deleted easel with its picture, or neither (\(manifest?.easels?.keys.sorted() ?? []))")
+    }
+
+    /// A peer swapped an easel's picture folder in the bundle for a link once the coordinator let the write go, after
+    /// any check: the write followed the link out of the bundle.
+    @MainActor
+    private static func bundleWriteFollowsNoLinkSwappedInOnceItMayWrite() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let outside = outsideFolder(in: macs)
+        let id = UUID().uuidString
+        let pictureFolder = macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(id)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: pictureFolder, withIntermediateDirectories: true)
+        try? SettingsSyncService.coordinatedWrite(Data("a picture".utf8), to: "\(SettingsSync.easelsName)/\(id)/p.png", in: macs.bundle) {
+            try? FileManager.default.removeItem(at: pictureFolder)
+            try? FileManager.default.createSymbolicLink(at: pictureFolder, withDestinationURL: outside)
+        }
+        let left = (try? FileManager.default.subpathsOfDirectory(atPath: outside.path))?.sorted()
+        expect(left == ["keep.txt", "sub", "sub/x.txt"], "the folder the link points at gets no picture (\(left ?? []))")
+    }
+
+    /// A peer's link in place of `Easels`, an easel's picture folder or the picture: a bundle write puts nothing outside
+    /// the bundle, and replaces a linked picture rather than writing through it.
+    @MainActor
+    private static func bundleDirectoryWritesThroughNoLinkAtAnyLevel() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-bundle-links-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = UUID().uuidString
+        for (level, name) in [(1, "Easels"), (2, "the picture folder"), (3, "the picture")] {
+            let root = dir.appendingPathComponent("\(level)", isDirectory: true)
+            let outside = root.appendingPathComponent("outside", isDirectory: true), keep = outside.appendingPathComponent("keep.txt")
+            try? FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+            try? Data("keep".utf8).write(to: keep)
+            let folder = root.appendingPathComponent("sync/\(SettingsSync.folderName)", isDirectory: true)
+            let path = "\(SettingsSync.easelsName)/\(id)/p.png"
+            let parts = [folder] + (1...3).map { folder.appendingPathComponent(path.split(separator: "/").prefix($0).joined(separator: "/")) }
+            try? FileManager.default.createDirectory(at: parts[level].deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? FileManager.default.createSymbolicLink(at: parts[level], withDestinationURL: level == 3 ? keep : outside)
+            try? BundleDirectory.write(Data("a picture".utf8), to: path, in: folder)
+            let left = (try? FileManager.default.contentsOfDirectory(atPath: outside.path))?.sorted()
+            let kept = (try? Data(contentsOf: keep)) == Data("keep".utf8)
+            let replaced = level < 3 || (try? Data(contentsOf: parts[3])) == Data("a picture".utf8)
+            expect(left == ["keep.txt"] && kept && replaced, "a link in place of \(name) takes no write out of the bundle (\(left ?? []))")
+        }
+    }
+
+    /// A picture Export… couldn't write left its easel out of the export, and Export… said it had exported.
+    @MainActor
+    private static func exportNamesAPictureItCouldNotWrite() {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-export-unwritable-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let easels = dir.appendingPathComponent("Easels", isDirectory: true), exported = dir.appendingPathComponent("export", isDirectory: true)
+        let (easel, pictures) = pictured("Its picture can't be exported")
+        saveEasel(easel, pictures: pictures, in: easels)
+        // A file where the easel's picture folder goes: the picture can't be written.
+        let inTheWay = exported.appendingPathComponent("\(SettingsSync.folderName)/\(SettingsSync.easelsName)/\(easel.id.uuidString)")
+        try? FileManager.default.createDirectory(at: inTheWay.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? Data("in the way".utf8).write(to: inTheWay)
+        let clock = ManualScheduler()
+        let sync = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio", easels: easels)
+        sync.runPictures = picturesInPlace
+        let said = answer { sync.export(to: exported, done: $0) }
+        expect(said??.contains(pictures.keys.first!) == true, "Export… names the picture it couldn't write (\(String(describing: said)))")
+    }
+
+    /// A picture sync couldn't write into the bundle stayed out of every later bundle, with no error, until a relaunch.
+    @MainActor
+    private static func syncSendsAPictureOnceTheBundleTakesItAgain() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let (easel, pictures) = pictured("Sent once the way is clear")
+        let inTheWay = macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(easel.id.uuidString)")
+        try? FileManager.default.createDirectory(at: inTheWay.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? Data("in the way".utf8).write(to: inTheWay)
+        saveEasel(easel, pictures: pictures, in: macs.easelsA)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        let said = macs.syncA.error
+        try? FileManager.default.removeItem(at: inTheWay)
+        macs.clockA.advance(by: 30)
+        let sent = macs.manifest?.easels?["\(SettingsSync.easelsName)/\(easel.id.uuidString)/\(pictures.keys.first!)"] != nil
+        expect(said != nil && sent, "sync says it couldn't write the picture, and sends it at the next look (\(said ?? "no error"), sent: \(sent))")
+    }
+
+    /// Whether sync, set up by `setUp` with the folder `<dir>/Sync` whose `Cra` links to `target`, writes its bundle into `target`.
+    @MainActor
+    private static func syncWritesIntoTheLinkedFolder(_ target: String, setUp: (SettingsSyncService, _ picked: URL) -> Void) -> Bool {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-linked-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let real = dir.appendingPathComponent(target, isDirectory: true), picked = dir.appendingPathComponent("Sync", isDirectory: true)
+        try? FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: picked, withIntermediateDirectories: true)
+        try? FileManager.default.createSymbolicLink(at: picked.appendingPathComponent(SettingsSync.folderName), withDestinationURL: real)
+        let clock = ManualScheduler()
+        let sync = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio",
+                                       easels: dir.appendingPathComponent("Easels", isDirectory: true))
+        sync.runPictures = picturesInPlace
+        defer { sync.disable() }
+        setUp(sync, picked)
+        return FileManager.default.fileExists(atPath: real.appendingPathComponent(SettingsSync.manifestName).path)
+    }
+
+    /// The user picked a folder whose `Cra` links to a folder named otherwise, or picked that link itself: every bundle
+    /// write failed, or went to a new `Cra` inside the target.
+    @MainActor
+    private static func syncWritesThroughACraLinkTheUserMade() {
+        let throughFolder = syncWritesIntoTheLinkedFolder("Dropbox/Settings") { sync, picked in _ = sync.enable(folder: picked) }
+        let throughLink = syncWritesIntoTheLinkedFolder("Dropbox/Settings") { sync, picked in
+            _ = sync.enable(folder: picked.appendingPathComponent(SettingsSync.folderName))
+        }
+        expect(throughFolder && throughLink, "sync writes into the folder the Cra link points at (picked its folder: \(throughFolder), the link: \(throughLink))")
+    }
+
+    /// Sync set up on v0.1.58 with a folder whose `Cra` is a link: after the update, every bundle write failed.
+    @MainActor
+    private static func syncWritesThroughACraLinkSetUpOnAnOlderCra() {
+        let written = syncWritesIntoTheLinkedFolder("Dropbox/\(SettingsSync.folderName)") { sync, picked in
+            sync.disable()
+            // sync.json as v0.1.58 saved it: the picked folder, links unresolved.
+            let json = #"{"devices":[],"location":{"folder":{"_0":"\#(picked.path)"}}}"#
+            try? Data(json.utf8).write(to: AppPaths.file("sync.json"))
+            let clock = ManualScheduler()
+            let relaunched = SettingsSyncService(store: SidebarStore(clock: clock), clock: clock, device: "Studio", deviceID: "studio",
+                                                 easels: picked.deletingLastPathComponent().appendingPathComponent("Easels", isDirectory: true))
+            relaunched.runPictures = picturesInPlace
+            relaunched.poll()
+            relaunched.disable()
+        }
+        expect(written, "sync set up on an older Cra writes into the folder its Cra link points at")
+    }
+
+    /// Temp files a bundle write left at the bundle's root and in an easel's picture folder, when Cra stopped before
+    /// their rename, go at the next write.
+    @MainActor
+    private static func syncPrunesATempFileAWriteLeftBehind() {
+        let (easel, pictures) = pictured("A write stopped beside it")
+        let macs = EaselMacs([(easel, pictures)])
+        defer { macs.done() }
+        let left = [macs.bundle.appendingPathComponent("\(SettingsSync.easelsName)/\(easel.id.uuidString)/.\(pictures.keys.first!).\(UUID().uuidString).tmp"),
+                    macs.bundle.appendingPathComponent(".\(SettingsSync.manifestName).\(UUID().uuidString).tmp")]
+        for file in left { try? Data("half a file".utf8).write(to: file) }
+        _ = macs.a.createTab(url: "https://example.com/a-change-to-write")
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        let kept = left.filter { FileManager.default.fileExists(atPath: $0.path) }.map(\.lastPathComponent)
+        expect(kept.isEmpty, "the next write removes the temp files left behind (\(kept))")
     }
 
     /// Settings turns Export… and Import… off while one runs, and back on once it answers.

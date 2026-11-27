@@ -441,10 +441,16 @@ final class SettingsSyncService {
             try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
             let easels = localEasels()
             guard !easels.holds else { return done(Self.unreadableEasels(easels)) }
-            transferPictures(try sendPictures(easels, to: target).copies) { [self] failed in
-                if let failed { return done(failed) }
+            let (pictures, copies) = try sendPictures(easels, to: target)
+            // Export's task leaves sync's knowledge of the pictures as it is.
+            transferPictures(copies) { [self] result in
+                if let failed = result.failed { return done(failed) }
+                // The easels listed before the copy, with the pictures the folder held then or the copy sent; one this Mac
+                // couldn't read stays out as it does from sync.
+                let unreadable = Set(easels.pictures.filter { result.unreadable[localURL($0).path] != nil || unreadableFiles[localURL($0).path] != nil })
+                let (kept, held) = easels.holding(pictures.merging(result.sent) { a, _ in a }, unreadable: unreadable)
                 do {
-                    _ = try write(localFiles().files, easels: easels, pictures: sendPictures(easels, to: target).pictures, to: target)
+                    _ = try write(localFiles().files, easels: kept, pictures: held, to: target)
                     done(nil)
                 } catch { done(error.localizedDescription) }
             }
@@ -465,8 +471,9 @@ final class SettingsSyncService {
         lookHashed(at: Self.bundleFolder(in: picked)) { [self] found in
             guard case .bundle(let manifest, let bundle) = found else { return done("The folder holds no Cra settings.") }
             do {
-                transferPictures(try picturesLacking(manifest, bundle, base: nil)) { [self] failed in
-                    if let failed { return done("Not imported: \(failed)") }
+                transferPictures(try picturesLacking(manifest, bundle, base: nil)) { [self] result in
+                    take(result)
+                    if let failed = result.failed { return done("Not imported: \(failed)") }
                     do {
                         try apply(manifest, bundle, merge: false, remember: false, retry: nil)
                         done(nil)
@@ -489,7 +496,10 @@ final class SettingsSyncService {
     private func lookHashed(at folder: URL, then: @escaping @MainActor (Look) -> Void) {
         let found = look(at: folder)
         guard case .hashing(let pictures) = found else { return then(found) }
-        transferPictures(pictures) { [self] _ in lookHashed(at: folder, then: then) }
+        transferPictures(pictures) { [self] result in
+            take(result)
+            lookHashed(at: folder, then: then)
+        }
     }
 
     /// `<picked>/Cra`, or `picked` itself when the user pointed at the Cra folder.
@@ -613,6 +623,20 @@ final class SettingsSyncService {
             guard let named else { return false }
             let isPicture = { (path: String) in SettingsSync.easelPath(path)?.picture != nil }
             return named.filter { !isPicture($0.key) } == files && Set(named.keys.filter(isPicture)) == pictures
+        }
+
+        /// These easels with the pictures of theirs in `held`. One lacking a picture it lists that isn't `unreadable` (gone
+        /// from this Mac while Export… copied) is left out with its pictures.
+        func holding(_ held: [String: String], unreadable: Set<String>) -> (easels: LocalEasels, pictures: [String: String]) {
+            let lacking = Set(pictures.filter { held[$0] == nil && !unreadable.contains($0) }.compactMap { SettingsSync.easelPath($0)?.id })
+            var kept = self
+            for id in lacking {
+                kept.files["\(SettingsSync.easelsName)/\(id.uuidString).json"] = nil
+                kept.easels[id] = nil
+                kept.json[id] = nil
+            }
+            kept.pictures = pictures.filter { SettingsSync.easelPath($0).map { !lacking.contains($0.id) } ?? false }
+            return (kept, held.filter { kept.pictures.contains($0.key) })
         }
     }
     private var localEaselsMade: LocalEasels?
@@ -856,17 +880,16 @@ final class SettingsSyncService {
             }
             // An easel as listed, so the bundle, the manifest and the history agree.
             guard let data = SettingsSync.easelPath(path).flatMap({ easels.json[$0.id] }) else { continue }
-            try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Self.coordinatedWrite(data, to: target)
+            try Self.coordinatedWrite(data, to: path, in: folder)
             written[path] = Self.hash(data)
             know(target, hash: Self.hash(data))
         }
-        for (name, data) in files { try Self.coordinatedWrite(data, to: folder.appendingPathComponent(name)) }
+        for (name, data) in files { try Self.coordinatedWrite(data, to: name, in: folder) }
         let manifest = SyncManifest(device: device, deviceID: deviceID, writtenAt: clock.now, files: files.mapValues(Self.hash),
                                     id: UUID(), parentIDs: parentIDs,
                                     autoArchived: SyncAutoArchive.listed(store.autoArchivedTabs, now: clock.now), easels: written,
                                     easelParentIDs: easelParentIDs)
-        try Self.coordinatedWrite(try Self.encoder.encode(manifest), to: folder.appendingPathComponent(SettingsSync.manifestName))
+        try Self.coordinatedWrite(try Self.encoder.encode(manifest), to: SettingsSync.manifestName, in: folder)
         prune(folder, keeping: written)
         return manifest
     }
@@ -874,44 +897,53 @@ final class SettingsSyncService {
     /// Removes, file by file and never through a link, the easel paths under the folder's `Easels` that `named` leaves out,
     /// and their iCloud placeholders. Only after this Mac wrote its manifest: an older Cra's manifest prunes nothing.
     private func prune(_ folder: URL, keeping named: [String: String]) {
-        let fm = FileManager.default
-        /// A name sync writes under `parent`, or iCloud's placeholder for one, that `named` leaves out.
+        /// A name sync writes under `parent`, or iCloud's placeholder for one, that `named` leaves out; or a temp file a
+        /// write left behind for any such name.
         func gone(_ name: String, in parent: String) -> Bool {
+            if let file = BundleDirectory.leftOver(name) { return SettingsSync.easelPath("\(parent)/\(file)") != nil }
             let file = name.hasPrefix(".") && name.hasSuffix(".icloud") ? String(name.dropFirst().dropLast(7)) : name
             return SettingsSync.easelPath("\(parent)/\(file)") != nil && named["\(parent)/\(file)"] == nil
         }
-        /// A file goes, or a link as a link; a folder stays.
-        func remove(_ url: URL) {
-            switch (try? fm.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType {
-            case .typeSymbolicLink?: try? fm.removeItem(at: url)
-            case .typeRegular?: coordinatedRemove(url)
-            default: break
+        let root = folder.appendingPathComponent(SettingsSync.easelsName)
+        /// A file goes through a file coordinator, or a link as a link; a folder stays.
+        func remove(_ name: String, in parent: BundleDirectory, at url: URL) {
+            switch parent.isFile(name) {
+            case true?: NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forDeleting, error: nil) { _ in parent.remove(name) }
+            case false?: parent.remove(name)
+            case nil: break
             }
         }
-        guard let root = Self.bundleURL(SettingsSync.easelsName, in: folder) else { return }
-        for name in (try? fm.contentsOfDirectory(atPath: root.path)) ?? [] {
-            let url = root.appendingPathComponent(name)
-            var isFolder: ObjCBool = false
-            guard !Self.isLink(url), fm.fileExists(atPath: url.path, isDirectory: &isFolder), isFolder.boolValue else {
-                if gone(name, in: SettingsSync.easelsName) { remove(url) }
+        // Temp files a write left at the bundle's root, for the manifest or the three files.
+        let topFiles = [SettingsSync.manifestName] + SettingsSync.fileNames
+        if let bundle = try? BundleDirectory(folder) {
+            for name in bundle.names() where BundleDirectory.leftOver(name).map(topFiles.contains) == true {
+                remove(name, in: bundle, at: folder.appendingPathComponent(name))
+            }
+        }
+        guard let easels = try? BundleDirectory(folder, path: [SettingsSync.easelsName]) else { return }
+        for name in easels.names() {
+            guard UUID(uuidString: name)?.uuidString == name, let pictures = easels.folder(name) else {
+                if gone(name, in: SettingsSync.easelsName) { remove(name, in: easels, at: root.appendingPathComponent(name)) }
                 continue
             }
-            // An easel's picture folder, emptied file by file; rmdir takes it only once nothing is left.
-            guard UUID(uuidString: name)?.uuidString == name else { continue }
+            // An easel's picture folder, emptied file by file; it goes only once nothing is left.
             let parent = "\(SettingsSync.easelsName)/\(name)"
-            for file in (try? fm.contentsOfDirectory(atPath: url.path)) ?? [] where gone(file, in: parent) { remove(url.appendingPathComponent(file)) }
-            rmdir(url.path)
+            for file in pictures.names() where gone(file, in: parent) { remove(file, in: pictures, at: root.appendingPathComponent("\(name)/\(file)")) }
+            easels.remove(name, folder: true)
         }
     }
 
-    /// Where a path under `Easels/` is in a bundle folder; nil when a part of it from the folder down is a link, which a
+    /// Where a path under `Easels/` is in a bundle folder; nil when a part of it below the folder is a link, which a
     /// peer on a shared folder may plant to point elsewhere on this Mac. `unlink` removes such links (the links only) first.
     nonisolated static func bundleURL(_ path: String, in folder: URL, unlink: Bool = false) -> URL? {
         var url = folder
-        for part in path.split(separator: "/") {
-            url.appendPathComponent(String(part))
+        let parts = path.split(separator: "/").map(String.init)
+        for (i, part) in parts.enumerated() {
+            url.appendPathComponent(part)
             guard Self.isLink(url) else { continue }
-            guard unlink, (try? FileManager.default.removeItem(at: url)) != nil else { return nil }
+            // Through its folder's descriptor: a link swapped in above it fails rather than leads elsewhere.
+            guard unlink, let parent = try? BundleDirectory(folder, path: Array(parts[..<i])), parent.isFile(part) == false,
+                  parent.remove(part) else { return nil }
         }
         return url
     }
@@ -928,27 +960,17 @@ final class SettingsSyncService {
         (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeSymbolicLink
     }
 
-    /// Writes `data` through a file coordinator. `ready` runs once the coordinator lets it write, and false writes nothing.
-    @discardableResult
-    nonisolated static func coordinatedWrite(_ data: Data, to url: URL, ready: () throws -> Bool = { true }) throws -> Bool {
+    /// Writes `data` at a bundle path through a file coordinator and a `BundleDirectory`, never through a link. `ready`
+    /// runs once the coordinator lets it write: a test swaps a link in there.
+    nonisolated static func coordinatedWrite(_ data: Data, to path: String, in folder: URL, ready: () -> Void = {}) throws {
         var coordinationError: NSError?
         var writeError: Error?
-        var written = false
-        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { u in
-            do {
-                guard try ready() else { return }
-                try data.write(to: u, options: .atomic)
-                written = true
-            } catch { writeError = error }
+        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: folder.appendingPathComponent(path), options: .forReplacing,
+                                                         error: &coordinationError) { _ in
+            ready()
+            do { try BundleDirectory.write(data, to: path, in: folder) } catch { writeError = error }
         }
         if let e = coordinationError ?? writeError.map({ $0 as NSError }) { throw e }
-        return written
-    }
-
-    private func coordinatedRemove(_ url: URL) {
-        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forDeleting, error: nil) { u in
-            try? FileManager.default.removeItem(at: u)
-        }
     }
 
     /// iCloud's placeholder for a file it has not downloaded (before macOS 14).
@@ -1296,6 +1318,8 @@ final class SettingsSyncService {
             var hashed: [String: Hashed] = [:]
             /// The files that couldn't be read, by path, with the time their attributes changed.
             var unreadable: [String: Date] = [:]
+            /// The pictures the folder holds or has on its way after their sends, by bundle path, with their hashes.
+            var sent: [String: String] = [:]
             var reads = 0
             /// Why a copy failed; no step after it ran.
             var failed: String?
@@ -1338,19 +1362,21 @@ final class SettingsSyncService {
                     case .send(let picture, let path, let folder, let onItsWay):
                         // One this Mac can't read stays out of the bundle, as one it lacks does.
                         guard let here = hashed(picture, coordinated: false) else { continue }
-                        let target = folder.appendingPathComponent(path)
-                        if onItsWay || SettingsSyncService.bundleFile(path, in: folder).flatMap({ hashed($0, coordinated: true) })?.hash == here.hash { continue }
+                        if onItsWay || SettingsSyncService.bundleFile(path, in: folder).flatMap({ hashed($0, coordinated: true) })?.hash == here.hash {
+                            result.sent[path] = here.hash
+                            continue
+                        }
                         guard let data = here.data ?? (try? Data(contentsOf: picture)) else {
                             result.unreadable[picture.path] = SettingsSyncService.attributesChanged(picture)
                             continue
                         }
-                        let copied = try SettingsSyncService.coordinatedWrite(data, to: target) {
-                            // Once the coordinator lets it write: a path a peer linked elsewhere stays out of the bundle.
-                            guard SettingsSyncService.bundleURL(path, in: folder) != nil else { return false }
-                            try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                            return true
+                        do { try SettingsSyncService.coordinatedWrite(data, to: path, in: folder) } catch {
+                            // A link or a file a peer put on its way, or a full disk: the write fails, and a later one tries again.
+                            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey:
+                                "The picture \(picture.lastPathComponent) could not be written: \(error.localizedDescription)"])
                         }
-                        if copied { written(target, hash: here.hash) }
+                        written(folder.appendingPathComponent(path), hash: here.hash)
+                        result.sent[path] = here.hash
                     case .take(let path, let folder, let target, let hash):
                         guard let source = SettingsSyncService.bundleFile(path, in: folder), let data = SettingsSyncService.coordinatedRead(source),
                               SettingsSyncService.hash(data) == hash else {
@@ -1385,13 +1411,11 @@ final class SettingsSyncService {
         }
     }
 
-    /// Export's and Import's `steps` on a picture task beside sync's, which `then` follows with why a copy failed, if one did.
-    private func transferPictures(_ steps: [PictureWork.Step], then: @escaping @MainActor (_ failed: String?) -> Void) {
-        guard !steps.isEmpty else { return then(nil) }
-        runPictures(PictureWork(steps: steps, known: fileHashes)) { [self] result in
-            take(result)
-            then(result.failed)
-        }
+    /// Export's and Import's `steps` on a picture task beside sync's, which `then` follows with what it did. Import
+    /// `take`s the result; Export's stays its own.
+    private func transferPictures(_ steps: [PictureWork.Step], then: @escaping @MainActor (PictureWork.Result) -> Void) {
+        guard !steps.isEmpty else { return then(PictureWork.Result()) }
+        runPictures(PictureWork(steps: steps, known: fileHashes)) { then($0) }
     }
 
     private func take(_ result: PictureWork.Result) {
