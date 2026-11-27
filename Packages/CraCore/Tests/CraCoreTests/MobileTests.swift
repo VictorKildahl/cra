@@ -282,6 +282,20 @@ struct MobileSearchMotionTests {
         #expect(MobileSearchMotion.fadeWindow(from: 1, to: 1, over: surface) == 0...0)
     }
 
+    /// Let go mid-flick, the drawer goes on at the finger's speed rather than from rest.
+    @Test func theDrawerLetGoKeepsTheFingersSpeed() {
+        // 1,500 pt/s up with 300 pt still to rise: five times the move left per second.
+        #expect(MobileNewTabDrawer.releaseVelocity(fingerVelocity: -1500, releasedAt: 600, target: 300) == 5)
+        #expect(MobileNewTabDrawer.releaseVelocity(fingerVelocity: 0, releasedAt: 600, target: 300) == 0, "a finger at rest")
+        #expect(MobileNewTabDrawer.releaseVelocity(fingerVelocity: 150, releasedAt: 600, target: 300) == 0,
+                "a finger going down gives it no push back")
+        #expect(MobileNewTabDrawer.releaseVelocity(fingerVelocity: -1500, releasedAt: 280, target: 300) == 0,
+                "pulled past its place, the flick doesn't carry it further")
+        #expect(MobileNewTabDrawer.releaseVelocity(fingerVelocity: -3000, releasedAt: 300.5, target: 300) == 0, "already there")
+        #expect(MobileNewTabDrawer.releaseVelocity(fingerVelocity: -6000, releasedAt: 320, target: 300)
+                == MobileNewTabDrawer.maxReleaseVelocity, "a flick near the end is capped")
+    }
+
     /// The new tab drawer's tabs and menu buttons leave slowly over its pull, and its top corners
     /// stay square until the drawer is fully open.
     @Test func theDrawerLetsItsSideButtonsGoAndRoundsItsTop() {
@@ -337,6 +351,11 @@ struct MobileNewTabDrawerTests {
         #expect(MobileNewTabDrawer.materialOpacity(floats: true, letGo: true, openness: 0.3) == 0.3)
         #expect(MobileNewTabDrawer.materialOpacity(floats: true, letGo: true, openness: 0) == 0, "back in the bar")
         #expect(MobileNewTabDrawer.materialOpacity(floats: true, letGo: true, openness: 1.2) == 1)
+        // Going down over the tab row, the material it fades out in is the drawer's own: the page's,
+        // light over a light page, showed as a grey band sinking into the dark row.
+        #expect(MobileNewTabDrawer.keepsDrawerMaterial(floats: true, active: true))
+        #expect(!MobileNewTabDrawer.keepsDrawerMaterial(floats: false, active: true), "over a page the bar's own comes back")
+        #expect(!MobileNewTabDrawer.keepsDrawerMaterial(floats: true, active: false), "gone, the bar is itself again")
     }
 
     /// In dark mode the drawer's material takes a faint grey haze so it reads frosted; light mode
@@ -363,16 +382,26 @@ struct MobileNewTabDrawerTests {
 }
 
 struct MobileSuggestionsTests {
+    /// A Mac sidebar tab last active at `date`, for the synced Spaces tests.
+    static func mac(_ url: String, _ title: String, _ date: Double?) -> SidebarItem {
+        var item = SidebarItem.tab(url, title: title, parent: nil)
+        if case .tab(var tab) = item.data {
+            tab.timeLastActiveAt = date.map(Date.init(timeIntervalSince1970:))
+            item.data = .tab(tab)
+        }
+        return item
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/650")) func syncedSpaceSitesKeepTheirPlaceAndPhoneWins() {
         var a = SidebarDocument.fresh()
         var b = SidebarDocument.fresh()
         a.spaces[0].title = "A"
         b.spaces[0].title = "B"
-        let pinned = MobileRecentTabsTests.mac("https://x.example/p", "Manga pinned", 3)
-        let nested = MobileRecentTabsTests.mac("https://nested.example", "Manga folder", 2)
-        let today = MobileRecentTabsTests.mac("https://today.example", "Manga today", 4)
-        let undated = MobileRecentTabsTests.mac("https://undated.example", "Manga undated", nil)
-        let favorite = MobileRecentTabsTests.mac("https://favorite.example", "Manga favorite", 9)
+        let pinned = Self.mac("https://x.example/p", "Manga pinned", 3)
+        let nested = Self.mac("https://nested.example", "Manga folder", 2)
+        let today = Self.mac("https://today.example", "Manga today", 4)
+        let undated = Self.mac("https://undated.example", "Manga undated", nil)
+        let favorite = Self.mac("https://favorite.example", "Manga favorite", 9)
         var folder = SidebarItem.folder("Folder", parent: a.spaces[0].pinnedContainerID)
         folder.children = [nested.id]
         a.items += [pinned, nested, folder, favorite]
@@ -385,7 +414,7 @@ struct MobileSuggestionsTests {
         a.items += b.items
         var blank = SidebarDocument.fresh()
         blank.spaces[0].standaloneWindowID = UUID()
-        let hidden = MobileRecentTabsTests.mac("https://hidden.example", "Manga hidden", 10)
+        let hidden = Self.mac("https://hidden.example", "Manga hidden", 10)
         blank.items.append(hidden)
         blank.items[blank.items.firstIndex { $0.id == blank.spaces[0].pinnedContainerID }!].children = [hidden.id]
         a.spaces += blank.spaces
@@ -403,7 +432,7 @@ struct MobileSuggestionsTests {
         let duplicate = MobileSuggestions.rows(typed: "x.example", completions: [], sites: [phone] + sites)
         #expect(duplicate.filter { if case .site = $0.kind { return true }; return false }.count == 1)
         #expect(duplicate[0].place == nil)
-        let extras = (1...2).map { MobileRecentTabsTests.mac("https://extra\($0).example", "Manga extra", 1) }
+        let extras = (1...2).map { Self.mac("https://extra\($0).example", "Manga extra", 1) }
         a.items += extras
         a.items[a.items.firstIndex { $0.id == a.spaces[0].pinnedContainerID }!].children += extras.map(\.id)
         let many = MobileSuggestions.macSites(in: a)
@@ -574,6 +603,26 @@ struct MobileTabsTests {
         #expect(document.selected == other.id, "an opener that is gone falls back to the neighbour")
     }
 
+    /// A popup closed from its page hands the screen back to its opener, as putting it away does,
+    /// and the tab beside it in the row, which never showed, keeps its place in the tab button's
+    /// stack.
+    @Test func closingAPopupReturnsToItsOpener() {
+        var document = MobileTabsDocument()
+        let a = Self.tab("a", hoursAgo: 3), b = Self.tab("b", hoursAgo: 2), c = Self.tab("c", hoursAgo: 1)
+        [a, b, c].forEach { document.open($0) }
+        document.walk(to: a.id, now: Self.start)
+        let popup = MobileTab(url: "https://popup.example", title: "popup", lastActive: Self.start)
+        document.open(popup)
+        let cPicked = document.tabs.first { $0.id == c.id }?.lastPicked
+        document.close(popup.id, returningTo: a.id)
+        #expect(document.selected == a.id)
+        document.select(a.id, now: Self.start.addingTimeInterval(1))
+        #expect(document.tabs.first { $0.id == c.id }?.lastPicked == cPicked, "c never showed")
+        document.open(popup)
+        document.close(popup.id)
+        #expect(document.selected == c.id, "with no opener the tab before it takes its place")
+    }
+
     @Test func staleTabsGoToTheArchiveNewestFirst() {
         var document = MobileTabsDocument()
         let old = Self.tab("old", hoursAgo: 50), older = Self.tab("older", hoursAgo: 80), fresh = Self.tab("fresh", hoursAgo: 2)
@@ -649,17 +698,43 @@ struct MobileTabsTests {
         let bare = Data(#"{"tabs":[{"id":"7B0D4A1E-3C5F-4E7A-9B1D-2F6A8C0E4D21","url":"https://a.example","lastActive":0}],"selected":"00000000-0000-0000-0000-000000000000"}"#.utf8)
         let loaded = try JSONDecoder().decode(MobileTabsDocument.self, from: bare)
         #expect(loaded.tabs.first?.displayTitle == "a.example")
+        #expect(loaded.tabs.first?.lastPicked == loaded.tabs.first?.lastActive, "a tab saved before it had a pick time")
         #expect(loaded.selected == nil)
     }
 
-    /// The tab row opens focused on the card behind the page, to its left; the first or only
-    /// card focuses itself, and with no page the newest card does.
+    /// A swipe along the bar walks to the neighbouring tab without picking it: the tab button's
+    /// stack and the flick up keep the tabs last picked, flicked to or opened. The tab walked to
+    /// restarts its archive clock all the same, and the row keeps its order.
+    @Test func aSwipeAlongTheBarLeavesTheStackAsItWas() {
+        var document = MobileTabsDocument()
+        let a = Self.tab("a", hoursAgo: 3), b = Self.tab("b", hoursAgo: 2), c = Self.tab("c", hoursAgo: 1)
+        [a, b, c].forEach { document.open($0) }
+        document.walk(to: b.id, now: Self.start)
+        document.walk(to: a.id, now: Self.start.addingTimeInterval(1))
+        #expect(document.selected == a.id)
+        #expect(document.tabsBehindCurrent.map(\.title) == ["c", "b"], "b was only walked past")
+        #expect(document.previousTab?.title == "c")
+        #expect(document.tabs.first { $0.id == b.id }?.lastActive == Self.start, "its archive clock restarted")
+        #expect(document.rowTabs.map(\.title) == ["a", "b", "c"])
+        // Picked, a tab leads the stack, and the one it was picked from comes next: the flick
+        // back returns to the tab walked to, not one walked past.
+        document.bringToFront(c.id, now: Self.start.addingTimeInterval(2))
+        #expect(document.tabsBehindCurrent.map(\.title) == ["a", "b"])
+        // A new tab is picked as it opens.
+        document.walk(to: b.id, now: Self.start.addingTimeInterval(3))
+        document.open(MobileTab(url: "https://d.example", title: "d", lastActive: Self.start.addingTimeInterval(4)))
+        #expect(document.tabsBehindCurrent.map(\.title) == ["b", "c", "a"])
+    }
+
+    /// The tab row opens focused on the card behind the page, to its left, when the page is the
+    /// row's newest card; any other card, the first, or the only one focuses itself, and with no
+    /// page the newest card does.
     @Test func theRowFocusesTheCardBehindThePage() {
         var document = MobileTabsDocument()
         let tabs = ["a", "b", "c"].map { Self.tab($0, hoursAgo: 1) }
         tabs.forEach { document.open($0) }
-        document.select(tabs[1].id, now: Self.start)
-        #expect(document.switcherFocus?.id == tabs[0].id)
+        document.walk(to: tabs[1].id, now: Self.start)
+        #expect(document.switcherFocus?.id == tabs[1].id, "a tab short of the row's newest end focuses itself")
         document.select(tabs[0].id, now: Self.start)
         #expect(document.switcherFocus?.id == tabs[0].id, "the first card focuses itself")
         document.select(tabs[2].id, now: Self.start)
@@ -792,6 +867,74 @@ struct MobileTabCarouselTests {
         #expect(abs(matching.minX - portrait.minX) < 1 && abs(matching.minY - portrait.minY) < 1)
         #expect(abs(matching.maxX - portrait.maxX) < 1 && abs(matching.maxY - portrait.maxY) < 1)
         #expect(MobileTabCarousel.pictureFrame(image: .zero, in: narrow) == narrow)
+    }
+
+    /// A picked card grows with the real page in it, drawn exactly where its picture was, so the
+    /// swap from picture to page changes nothing on screen.
+    @Test func aPickedCardsLivePageSitsWhereItsPictureWas() {
+        let page = CGRect(x: 0, y: 62, width: Self.phone.width, height: 756)
+        for area in [CGRect(x: 40, y: 230, width: 273, height: 525), CGRect(x: 0, y: 62, width: 393, height: 756),
+                     CGRect(x: 12, y: 100, width: 300, height: 200)] {
+            let picture = MobileTabCarousel.pictureFrame(image: page.size, in: area)
+            let placed = MobileTabCarousel.livePage(page: page, screen: Self.phone, area: area)
+            // The page view's corners, carried through the container's scale about its centre.
+            func mapped(_ point: CGPoint) -> CGPoint {
+                CGPoint(x: placed.center.x + (point.x - Self.phone.width / 2) * placed.scale,
+                        y: placed.center.y + (point.y - Self.phone.height / 2) * placed.scale)
+            }
+            let topLeft = mapped(CGPoint(x: page.minX, y: page.minY))
+            let bottomRight = mapped(CGPoint(x: page.maxX, y: page.maxY))
+            #expect(abs(topLeft.x - picture.minX) < 0.01 && abs(topLeft.y - picture.minY) < 0.01)
+            #expect(abs(bottomRight.x - picture.maxX) < 0.01 && abs(bottomRight.y - picture.maxY) < 0.01)
+        }
+        // The card's own rect, carried into the container and back out, is itself: the mask
+        // there shows exactly the card.
+        let area = CGRect(x: 40, y: 230, width: 273, height: 525)
+        let placed = MobileTabCarousel.livePage(page: page, screen: Self.phone, area: area)
+        let inContainer = MobileTabCarousel.containerRect(area, placed: placed, screen: Self.phone)
+        #expect(abs(inContainer.minX - page.minX) < 0.01 && abs(inContainer.minY - page.minY) < 0.01)
+        #expect(abs(inContainer.width - area.width / placed.scale) < 0.01)
+        // Full size, the container is the page's own: no scale, no move.
+        let full = MobileTabCarousel.livePage(page: page, screen: Self.phone, area: page)
+        #expect(abs(full.scale - 1) < 0.0001)
+        #expect(abs(full.center.x - Self.phone.width / 2) < 0.01 && abs(full.center.y - Self.phone.height / 2) < 0.01)
+    }
+
+    /// A page that is showing grows as itself; one made only now grows under its picture, which
+    /// fades out with the grow; only Browse for Me's loading, which isn't in the card, keeps the
+    /// picture alone.
+    @Test func aPickedCardGrowsWithItsPageUnderOrInPlaceOfItsPicture() {
+        #expect(MobileTabCarousel.growth(pageInMemory: true, hasAddress: true, covered: false) == .live)
+        #expect(MobileTabCarousel.growth(pageInMemory: false, hasAddress: true, covered: false) == .liveUnderPicture)
+        #expect(MobileTabCarousel.growth(pageInMemory: true, hasAddress: false, covered: false) == .liveUnderPicture)
+        #expect(MobileTabCarousel.growth(pageInMemory: true, hasAddress: true, covered: true) == .picture)
+        // The picture fades on its own clock: briefly over a page already showing, for WebKit's
+        // first frames back in the window; over the whole grow on a page that may be blank.
+        #expect(MobileTabCarousel.pictureFade(.live, handOver: 0.4) == MobileTabCarousel.liveCover)
+        #expect(MobileTabCarousel.liveCover < 0.2, "a cover, not a crossfade to watch")
+        #expect(MobileTabCarousel.pictureFade(.live, handOver: 0.05) == 0.05, "never past the hand-over")
+        #expect(MobileTabCarousel.pictureFade(.liveUnderPicture, handOver: 0.4) == MobileTabCarousel.loadingFade,
+                "on its own clock, not the grow's")
+        #expect(MobileTabCarousel.loadingFade > MobileTabCarousel.liveCover)
+        #expect(MobileTabCarousel.loadingFade <= 0.3)
+        #expect(MobileTabCarousel.pictureFade(.liveUnderPicture, handOver: 0.9) == MobileTabCarousel.loadingFade)
+        // The bar's slab comes in over 0.09 s, never longer than the grow.
+        #expect(MobileTabCarousel.slabFade(handOver: 0.4) == 0.1)
+        #expect(MobileTabCarousel.slabFade(handOver: 0.05) == 0.05)
+        #expect(MobileTabCarousel.slabFade(handOver: 0.4) < MobileTabCarousel.liveCover)
+        #expect(MobileTabCarousel.pictureFade(.picture, handOver: 0.4) == 0)
+    }
+
+    /// The page is handed back once the card is within half a point of it: about 0.4 s into
+    /// `tabOpen` across a phone's height, well before the spring has settled to UIKit's tolerance.
+    @Test func aPickedPageTakesTouchesOnceItsCardIsInPlace() {
+        let spring = MobileMotion.tabOpen
+        let time = MobileTabCarousel.handOverTime(spring: spring, travel: Self.phone.height)
+        #expect(abs(spring.remaining(after: time) * Double(Self.phone.height) - 0.5) < 0.001)
+        #expect(time > 0.35 && time < 0.45)
+        #expect(MobileTabCarousel.handOverTime(spring: spring, travel: 100) < time, "a shorter move is there sooner")
+        #expect(MobileTabCarousel.handOverTime(spring: spring, travel: 0) == 0, "nothing to move")
+        #expect(spring.time(toWithin: 1) == 0)
     }
 
     /// Arc Search's row at rest on an iPhone 15 Pro.
@@ -1188,6 +1331,13 @@ struct MobileSwipeTests {
         #expect(MobileSwipe.tabStep(translation: 200, velocity: 0, width: 393, hasOlder: true, hasNewer: true) == -1)
         #expect(MobileSwipe.tabStep(translation: -200, velocity: 0, width: 393, hasOlder: true, hasNewer: true) == 1)
         #expect(MobileSwipe.tabStep(translation: 200, velocity: 0, width: 393, hasOlder: false, hasNewer: true) == 0)
+    }
+
+    /// The neighbouring tab rides a screen and a gap beside the page, on the side it comes in from.
+    @Test func theNeighbouringTabSitsAScreenAndAGapAway() {
+        #expect(MobileSwipe.neighbourOffset(step: 1, width: 393) == 393 + MobileSwipe.tabGap)
+        #expect(MobileSwipe.neighbourOffset(step: -1, width: 393) == -(393 + MobileSwipe.tabGap))
+        #expect(MobileSwipe.neighbourOffset(step: 0, width: 393) == 0)
     }
 
     /// Arc Search: back on a tab's first page archives the tab; the opposite swipe reopens it.
@@ -2613,94 +2763,6 @@ struct MobileAITests {
         #expect(off?.opensSettings == true)
         #expect(off?.message.contains("Settings \u{25B8} Apple Intelligence & Siri") == true)
         #expect(MobileAI.prompt(for: .preparing)?.opensSettings == false)
-    }
-}
-
-/// Arc Search's recent tabs under the empty field (#591): the phone's and the Mac's, newest first.
-struct MobileRecentTabsTests {
-    static func mac(_ url: String, _ title: String, _ date: Double?) -> SidebarItem {
-        var item = SidebarItem.tab(url, title: title, parent: nil)
-        if case .tab(var tab) = item.data {
-            tab.timeLastActiveAt = date.map(Date.init(timeIntervalSince1970:))
-            item.data = .tab(tab)
-        }
-        return item
-    }
-
-    /// A one-Space sidebar with `today` in its Today list.
-    static func sidebar(today: [SidebarItem]) -> SidebarDocument {
-        var document = SidebarDocument.fresh()
-        let container = document.spaces[0].todayContainerID
-        document.items += today
-        if let index = document.items.firstIndex(where: { $0.id == container }) { document.items[index].children = today.map(\.id) }
-        return document
-    }
-
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/591")) func mergesAndFiltersRecentTabs() {
-        let selected = MobileTab(url: "https://selected.example", title: "Selected", lastActive: Date(timeIntervalSince1970: 5))
-        let phone = MobileTab(url: "https://phone.example", title: "Phone", lastActive: Date(timeIntervalSince1970: 4))
-        let privateTab = MobileTab(url: "https://private.example", lastActive: Date(timeIntervalSince1970: 9), isIncognito: true)
-        let mac = Self.mac
-        var renamed = mac("https://rename.example", "Saved", 8)
-        renamed.title = "Renamed"
-        let document = Self.sidebar(today: [renamed, mac("https://saved.example", "Saved", 7), mac("https://host.example/path", "", 6),
-                                            mac("https://host.example/path", "Old", 1), mac(selected.url, "Selected duplicate", 20),
-                                            mac(phone.url, "Phone duplicate", 19), mac("https://undated.example", "Undated", nil),
-                                            mac("", "Empty", 21)])
-        let rows = MobileRecentTabs.rows(phone: [selected, phone, privateTab], selected: selected.id, mac: document, limit: 10)
-        #expect(rows.map(\.title) == ["Renamed", "Saved", "host.example", "Phone"])
-        #expect(rows.last?.source == .phone(phone.id))
-        #expect(rows.first?.source == .mac)
-        #expect(MobileRecentTabs.rows(phone: [selected, phone], selected: selected.id, mac: document, limit: 2).count == 2)
-        #expect(MobileRecentTabs.rows(phone: [selected, phone], selected: selected.id, mac: nil).map(\.title) == ["Phone"])
-    }
-
-    /// The same page in another form (scheme, "www.", trailing slash, fragment) is one row, the
-    /// phone's when the phone has it. An incognito tab is no tab here, so it hides nothing.
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/591")) func aPageListedTwiceShowsOnce() {
-        let phone = MobileTab(url: "https://www.news.example/story/", title: "Story", lastActive: Date(timeIntervalSince1970: 1))
-        let privateTab = MobileTab(url: "https://secret.example/", lastActive: Date(timeIntervalSince1970: 2), isIncognito: true)
-        let document = Self.sidebar(today: [Self.mac("http://news.example/story#comments", "Story on the Mac", 9),
-                                            Self.mac("https://docs.example/a", "Doc", 8), Self.mac("https://www.docs.example/a/", "Doc again", 7),
-                                            Self.mac("https://secret.example", "Secret on the Mac", 6),
-                                            Self.mac("https://docs.example/a?page=2", "Doc page 2", 5)])
-        let rows = MobileRecentTabs.rows(phone: [phone, privateTab], selected: nil, mac: document, limit: 10)
-        #expect(rows.map(\.title) == ["Doc", "Secret on the Mac", "Doc page 2", "Story"])
-        #expect(rows.last?.source == .phone(phone.id))
-    }
-
-    /// Arc Sync brought the Mac's Spaces over (pinned tabs, folders, Today) but never its
-    /// favorites (ATH3): a Mac favorite isn't a recent tab, and neither is a blank window's tab.
-    /// Tabs inside folders and splits are.
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/591")) func macTabsComeFromItsSyncedSpaces() {
-        var document = Self.sidebar(today: [Self.mac("https://today.example", "Today", 1)])
-        var space = document.spaces[0]
-        var folder = SidebarItem.folder("Work", parent: space.pinnedContainerID)
-        let inFolder = Self.mac("https://folder.example", "In a folder", 4)
-        var split = SidebarItem.split(parent: space.pinnedContainerID)
-        let inSplit = Self.mac("https://split.example", "In a split", 3)
-        folder.children = [inFolder.id]
-        split.children = [inSplit.id]
-        let favorite = Self.mac("https://favorite.example", "Favorite", 9)
-        document.items += [folder, inFolder, split, inSplit, favorite]
-        for (container, children) in [(space.pinnedContainerID, [folder.id, split.id]), (space.favoritesContainerID, [favorite.id])] {
-            if let index = document.items.firstIndex(where: { $0.id == container }) { document.items[index].children = children }
-        }
-        #expect(MobileRecentTabs.rows(phone: [], selected: nil, mac: document, limit: 10).map(\.title) == ["In a folder", "In a split", "Today"])
-
-        space.standaloneWindowID = UUID()
-        document.spaces[0] = space
-        #expect(MobileRecentTabs.rows(phone: [], selected: nil, mac: document).isEmpty)
-    }
-
-    /// The sidebar comes from another device: a folder listed inside itself still ends, and its
-    /// tab is listed once.
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/591")) func aFolderInsideItselfStillEnds() {
-        var folder = SidebarItem.folder("Loop", parent: nil)
-        let inFolder = Self.mac("https://loop.example", "In the loop", 1)
-        folder.children = [folder.id, inFolder.id]
-        let document = Self.sidebar(today: [folder, inFolder])
-        #expect(MobileRecentTabs.rows(phone: [], selected: nil, mac: document, limit: 10).map(\.title) == ["In the loop"])
     }
 }
 

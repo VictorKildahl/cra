@@ -352,27 +352,29 @@ struct MobileBarCollapseTests {
         #expect(!bar.pageRunsUnder(collapses: true, scrolls: false, loaded: true), "back under an open bar")
     }
 
-    /// The page's covered bottom is what lies between the bar's top and the safe area's edge,
-    /// following the bar from its whole height open to nothing closed, so a sticky bottom stays
-    /// on the bar's top all the way; it never leaves the range WebKit is given for `svh`/`lvh`.
+    /// The page's view runs on to the screen's bottom edge, so the bar's material has the page
+    /// behind it right down to the home indicator; its covered bottom is what lies between the
+    /// bar's top and that edge, following the bar from its whole height open to the home
+    /// indicator's strip closed, so a sticky bottom stays on the bar's top all the way; it never
+    /// leaves the range WebKit is given for `svh`/`lvh`.
     @Test func thePagesCoveredBottomFollowsTheBar() {
         let size = CGSize(width: 402, height: 874)
         let safe: CGFloat = 34
-        let edge = size.height - safe
-        let range = MobileBarCollapse.viewportInsets
-        #expect(range.least == 0 && range.most == MobileBottomBar.height)
+        let range = MobileBarCollapse.viewportInsets(safeBottom: safe)
+        #expect(range.least == safe && range.most == MobileBottomBar.height + safe)
         var bar = MobileBarCollapse()
         var last = range.most
         for _ in 0..<50 {
             let top = MobileBottomBar.top(in: size, safeBottom: safe, progress: bar.progress, scale: 3)
             let covered = MobileBottomBar.covered(in: size, safeBottom: safe, progress: bar.progress, scale: 3)
-            #expect(covered == edge - top, "the page's visible bottom is the bar's top")
+            #expect(covered == size.height - top, "the page's visible bottom is the bar's top")
             #expect(covered <= last && covered >= range.least && covered <= range.most)
             last = covered
             bar.dragged(by: 1, collapses: true, scrolls: true)
         }
-        #expect(bar.isClosed && MobileBottomBar.covered(in: size, safeBottom: safe, progress: bar.progress, scale: 3) == 0)
-        #expect(MobileBottomBar.covered(in: size, safeBottom: safe, progress: 0.5, scale: 3) == MobileBottomBar.height / 2)
+        #expect(bar.isClosed && MobileBottomBar.covered(in: size, safeBottom: safe, progress: bar.progress, scale: 3) == safe,
+                "closed, only the home indicator's strip is over the page")
+        #expect(MobileBottomBar.covered(in: size, safeBottom: safe, progress: 0.5, scale: 3) == MobileBottomBar.height / 2 + safe)
     }
 
     /// The bar's top, and so the page's bottom, sits on the display's pixel grid as the bar

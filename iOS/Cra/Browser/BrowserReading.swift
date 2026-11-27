@@ -249,6 +249,10 @@ extension BrowserViewController {
         }
     }
 
+    /// Whether Browse for Me's loading covers `id`'s page: until its answer is in, the tab opens
+    /// from the tab row or a bar swipe as its picture, not as its page (`MobileTabCarousel.growth`).
+    func browseLoadingCovers(_ id: UUID) -> Bool { browseLoading?.tabID == id }
+
     // MARK: Pinch to Summarize
 
     @objc func pagePinched(_ pinch: UIPinchGestureRecognizer) {

@@ -300,12 +300,13 @@ public enum MobileBottomBar {
         return scale > 0 ? (top * scale).rounded() / scale : top
     }
 
-    /// How much of a page that runs on to the safe area's edge the bar covers with the bar
-    /// `progress` of the way down: from the bar's top to that edge, its whole height open and
-    /// nothing closed. The page is laid out clear of it frame by frame, so its visible bottom,
-    /// and a sticky or fixed `bottom: 0` on it, is always the bar's top.
+    /// How much of a page that runs on to the screen's bottom edge the bar covers with the bar
+    /// `progress` of the way down: from the bar's top to that edge, its whole height and the home
+    /// indicator's strip open, that strip alone closed. The page is laid out clear of it frame by
+    /// frame, so its visible bottom, and a sticky or fixed `bottom: 0` on it, is always the bar's
+    /// top, while the page itself shows under the bar's material down to the screen's edge.
     public static func covered(in size: CGSize, safeBottom: CGFloat, progress: CGFloat, scale: CGFloat = 0) -> CGFloat {
-        max(0, size.height - safeBottom - top(in: size, safeBottom: safeBottom, progress: progress, scale: scale))
+        max(0, size.height - top(in: size, safeBottom: safeBottom, progress: progress, scale: scale))
     }
 
     /// Where a drag up brings back the previous tab rather than opening the tab row (#537): the
@@ -401,7 +402,9 @@ public struct MobileBarCollapse: Equatable {
     /// The least and the most the bar ever covers (`MobileBottomBar.covered`), given to WebKit up front (its minimum and
     /// maximum viewport insets): the page's `lvh` and `svh` hold still across the bar's travel,
     /// and only its visible viewport follows the bar.
-    public static let viewportInsets: (least: CGFloat, most: CGFloat) = (0, travel)
+    public static func viewportInsets(safeBottom: CGFloat) -> (least: CGFloat, most: CGFloat) {
+        (safeBottom, travel + safeBottom)
+    }
 
     /// A finger came down on the page: its drag starts afresh, so closing moves the bar at once
     /// and opening waits the dead zone, whichever way the last touch went.

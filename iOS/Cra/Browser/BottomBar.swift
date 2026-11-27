@@ -83,6 +83,10 @@ final class BottomBar: UIView {
             // Gone, the drawer hands the material back to the bar. A let-go drawer has already taken
             // it down over the home or the tab row; this only catches a close that never let go.
             guard !drawerActive else { return }
+            // A drawer that kept its own colour on the way down over the tab row
+            // (`MobileNewTabDrawer.keepsDrawerMaterial`) hands the bar's back, with nothing left
+            // showing; the slab's own opacity fades below.
+            UIView.performWithoutAnimation { applyDrawerColour() }
             UIView.animate(withDuration: MobileNewTabDrawer.materialFade, delay: 0,
                            options: [.beginFromCurrentState, .allowUserInteraction]) {
                 self.blur.alpha = self.slabAlpha
@@ -104,24 +108,57 @@ final class BottomBar: UIView {
     /// Swaps the material only when the bar's state calls for another one. Inside an animation
     /// block the swap crossfades.
     private func applyMaterial() {
-        let wanted = MobileBottomBar.material(drawerShowing: drawerAppearance > 0, pageIsLight: pageIsLight,
+        let drawerShowing = drawerAppearance > 0 || keepsDrawerMaterial
+        let wanted = MobileBottomBar.material(drawerShowing: drawerShowing, pageIsLight: pageIsLight,
                                               incognito: isIncognito)
         guard wanted != material else { return }
         material = wanted
         blur.effect = UIBlurEffect(style: wanted.style)
     }
 
+    /// Over the home or the tab row, the drawer's material and colour leave with it
+    /// (`MobileNewTabDrawer.keepsDrawerMaterial`).
+    private var keepsDrawerMaterial: Bool {
+        MobileNewTabDrawer.keepsDrawerMaterial(floats: mode == .tabs || overBackdrop, active: drawerActive)
+    }
+
+    /// The next return from floating leaves the slab out, for `fadeSlabIn` to bring in, rather
+    /// than bringing it back whole: a card picked in the tab row growing into its page.
+    var slabFadesIn = false
+
+    /// Fades the slab in over `duration`, eased in, on its own clock rather than the grow's spring
+    /// (`MobileTabCarousel.slabFade`).
+    func fadeSlabIn(over duration: TimeInterval) {
+        slabFadesIn = false
+        UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseIn, .allowUserInteraction]) {
+            self.blur.alpha = self.slabAlpha
+        }
+    }
+
     /// For the new tab drawer's UI test: the bar material's own opacity behind the drawer.
     var materialAlpha: CGFloat { blur.alpha }
+
+    /// For the tab row's UI test: whether the last light or dark swap crossfaded.
+    private(set) var materialFaded = false
+
+    /// For the tab row's UI test: whether the slab's opacity is animating in.
+    var slabFading: Bool { blur.layer.animation(forKey: "opacity") != nil }
 
     /// Whether the page's status bar text is dark, meaning a light page: the bar takes a light
     /// material then, crossfaded so switching tabs is smooth.
     var pageIsLight = false {
         didSet {
             guard pageIsLight != oldValue else { return }
-            UIView.animate(withDuration: MobileBottomBar.materialFade, delay: 0,
-                           options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]) {
-                self.applyMaterial()
+            // With no slab showing (over the tab row or the home) there is nothing to crossfade:
+            // the slab comes back already in the page's material.
+            materialFaded = !wasFloating
+            if wasFloating {
+                UIView.performWithoutAnimation { applyMaterial() }
+            } else {
+                UIView.animate(withDuration: MobileBottomBar.materialFade, delay: 0,
+                               options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut]) {
+                    self.applyMaterial()
+                }
             }
             applyPageChrome()
         }
@@ -264,12 +301,18 @@ final class BottomBar: UIView {
     /// The drawer's material and edge once it shows. Over the home or the switcher the bar has no
     /// slab of its own; the drawer brings the material back with it.
     private func applyDrawer() {
-        applyMaterial()
+        applyDrawerColour()
         drawerEdge.alpha = drawerAppearance
-        drawerHaze.alpha = drawerAppearance * MobileNewTabDrawer.haze(
-            darkMode: traitCollection.userInterfaceStyle == .dark, incognito: isIncognito, overTabRow: mode == .tabs)
         blur.alpha = slabAlpha
         setNeedsLayout()
+    }
+
+    /// The drawer's colour is its haze over a thin material: kept whole while a let-go drawer
+    /// takes the material down over the tab row, or the card behind shows through it light.
+    private func applyDrawerColour() {
+        applyMaterial()
+        drawerHaze.alpha = (keepsDrawerMaterial ? 1 : drawerAppearance) * MobileNewTabDrawer.haze(
+            darkMode: traitCollection.userInterfaceStyle == .dark, incognito: isIncognito, overTabRow: mode == .tabs)
     }
 
     /// Incognito's black fades in and out over the material.
@@ -311,11 +354,12 @@ final class BottomBar: UIView {
         let slabAlpha = self.slabAlpha
         if wasFloating, !floats {
             // The slab comes back with the page, whole: animating its opacity up from the row's
-            // no-slab state leaves the material see-through for the length of the close.
+            // no-slab state with the close's spring leaves the material see-through for its
+            // length. A card picked in the tab row fades it in on its own instead (`fadeSlabIn`).
             blur.layer.removeAnimation(forKey: "opacity")
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            blur.layer.opacity = Float(slabAlpha)
+            blur.layer.opacity = slabFadesIn ? 0 : Float(slabAlpha)
             CATransaction.commit()
         } else {
             blur.alpha = slabAlpha
