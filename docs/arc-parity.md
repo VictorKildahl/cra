@@ -452,8 +452,13 @@ the app's `SpaceCreationView`. Positions are from the sidebar card's top-left, i
   change the page, the small one setting the dark pixels' hue (Arc's `secondaryHueOffset`). A 2 pt line
   joins them, and a faint circle through both shows the orbit.
   Untinted, both are grey (130 and 68) and rest 40 pt out at 3 o'clock, in the brushed grey
-  frame; once tinted, the frame is a ring of every hue in the same order, not one saturation all round
-  (226/104/81 red, 168/244/243 cyan, 141/90/239 purple, read every 15°).
+  frame; once tinted, the frame is a ring of every hue in the same order, not one saturation all round.
+  Matched again on 27 Nov 2026 (PR #889, Elia Orsini, side-by-side screenshots of Arc's editor sampled
+  pixel by pixel): the ring as 25 stops, one every 15° (`BoostWheel.ringGradient`: 235/76/57 at red,
+  209/252/93 at 6, 132/249/240 at 9, 129/55/245 at 12, pre-compensated so SwiftUI's gradient lands on
+  Arc's colours), a 7 pt frame with 16 pt corners over a 28 pt-cornered face, a 4 pt grid of 1 pt dots at 9.5 %
+  black, the ring's colours washed over the face at 6 %, and a hairline round each handle in its own hue,
+  nearly white, instead of a shadow.
 - Advanced color controls: a light popover under its button, arrow up, about 224 pt wide.
 - The Site Control Center's actions are Share, New Boost (a flat brush with a sparkle; tooltip "New
   Boost"), Capture and Capture Full Page. A site with boosts gets a "Boosts" section between Extensions and
@@ -462,8 +467,7 @@ the app's `SpaceCreationView`. Positions are from the sidebar card's top-left, i
   the popover open; on hover a chevron shows at the right end, which opens that boost in the editor. The
   More menu: Clear Cache, Clear Cookies, ─, Manage Boosts…, New Boost…, ─, Manage Extensions…, Add
   Extension…. Cra keeps Copy URL in the second slot where a page can't be boosted (Arc not measured there).
-- Not matched: the code editor's first click in Arc wasn't measured (Cra's now focuses it at once), and
-  the faint colour wash in the middle of Arc's wheel.
+- Not matched: the code editor's first click in Arc wasn't measured (Cra's now focuses it at once).
 
 ## Theme editor: the slider and the dial (Arc 1.173.1, 18 Nov 2026)
 

@@ -94,6 +94,9 @@ built release app with a test profile. Note anything that fails in the release's
   follows the orbit and keeps its direction past half a turn. Either dot has three sizes: at rest,
   larger under the pointer, and largest while held and hovered, with no pointer change. CraCore pins
   the geometry and the colourize; only the gesture and the hover animation need a person to watch them.
+- **PR #889:** open the Boost editor beside Arc's on the same site, untinted and then tinted: the frame's
+  width and corners, the ring's colours, the dot grid, the faint colour wash on the face and the hairline
+  round each handle look the same. CraCore pins the ring's colour stops; the drawing needs an eye.
 
 ### Sidebar, tabs and the command bar
 
