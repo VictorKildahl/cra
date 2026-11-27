@@ -86,3 +86,5 @@ cra-page-window-bounds.patch
 cra-download-started-animation.patch
 extension-managed-by-cra.patch
 cra-hidden-filter-helper.patch
+extension-shared-storage.patch
+extension-shared-remove-hint.patch

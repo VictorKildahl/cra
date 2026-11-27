@@ -2,8 +2,11 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/cra_engine_hooks.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
@@ -59,7 +62,69 @@ bool ManagedByCra(content::BrowserContext* context, const std::string& extension
   return context && IsManagedExtension(Profile::FromBrowserContext(context), extension_id);
 }
 
+std::map<std::string, SharedStorage>& StorageByExtension() {
+  static auto* map = new std::map<std::string, SharedStorage>();
+  return *map;
+}
+
+// The loaded profile in `folder`, nil when it hasn't loaded (this never loads one).
+Profile* LoadedProfile(const std::string& folder) {
+  ProfileManager* manager = g_browser_process ? g_browser_process->profile_manager() : nullptr;
+  if (!manager) {
+    return nullptr;
+  }
+  return manager->GetProfileByPath(manager->user_data_dir().AppendASCII(folder));
+}
+
+const SharedStorage* SharedStorageOf(content::BrowserContext* context, const std::string& extension_id,
+                                     std::string* folder) {
+  if (!context) {
+    return nullptr;
+  }
+  auto it = StorageByExtension().find(extension_id);
+  if (it == StorageByExtension().end()) {
+    return nullptr;
+  }
+  *folder = FolderOf(Profile::FromBrowserContext(context));
+  return it->second.profiles.count(*folder) ? &it->second : nullptr;
+}
+
+content::BrowserContext* StorageContext(content::BrowserContext* context, const std::string& extension_id) {
+  std::string folder;
+  const SharedStorage* shared = SharedStorageOf(context, extension_id, &folder);
+  if (!shared || shared->home == folder) {
+    return context;
+  }
+  Profile* home = LoadedProfile(shared->home);
+  return home ? home : context;
+}
+
+std::vector<content::BrowserContext*> StoragePeers(content::BrowserContext* context, const std::string& extension_id) {
+  std::vector<content::BrowserContext*> peers;
+  std::string folder;
+  const SharedStorage* shared = SharedStorageOf(context, extension_id, &folder);
+  // Only the home's frontend owns the data, so only it relays.
+  if (!shared || shared->home != folder) {
+    return peers;
+  }
+  for (const std::string& profile : shared->profiles) {
+    if (profile == folder) {
+      continue;
+    }
+    if (Profile* peer = LoadedProfile(profile)) {
+      peers.push_back(peer);
+    }
+  }
+  return peers;
+}
+
 }  // namespace
+
+void SetSharedExtensionStorage(std::map<std::string, SharedStorage> by_extension) {
+  StorageByExtension() = std::move(by_extension);
+  g_extension_storage_context = &StorageContext;
+  g_extension_storage_peers = &StoragePeers;
+}
 
 void SetManagedExtensions(std::map<std::string, std::set<std::string>> ids_by_profile) {
   IdsByProfile() = std::move(ids_by_profile);

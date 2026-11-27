@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
@@ -189,6 +190,18 @@ inline ClosingWithoutAskingHook g_closing_without_asking = nullptr;
 // nothing; Cra's ManagementPolicy provider keeps it installed (patches/extension-managed-by-cra.patch).
 using ExtensionManagedHook = bool (*)(content::BrowserContext* context, const std::string& extension_id);
 inline ExtensionManagedHook g_extension_managed = nullptr;
+
+// A shared extension whose data comes from the profile it was set up in (discussion #595's follow-up): the context
+// whose chrome.storage.local and .sync it reads and writes from `context`, `context` itself when it isn't one or that
+// profile hasn't loaded (patches/extension-shared-storage.patch).
+using ExtensionStorageContextHook = content::BrowserContext* (*)(content::BrowserContext* context,
+                                                                 const std::string& extension_id);
+inline ExtensionStorageContextHook g_extension_storage_context = nullptr;
+
+// The loaded contexts that use `context`'s data for `extension_id`, which storage.onChanged reaches too.
+using ExtensionStoragePeersHook = std::vector<content::BrowserContext*> (*)(content::BrowserContext* context,
+                                                                           const std::string& extension_id);
+inline ExtensionStoragePeersHook g_extension_storage_peers = nullptr;
 
 }  // namespace cra
 

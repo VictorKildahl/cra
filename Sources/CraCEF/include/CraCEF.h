@@ -712,6 +712,15 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
 /// or a policy keeps it: take it out of setManagedExtensionIDs first. NO on CEF.
 + (BOOL)uninstallExtension:(NSString *)extensionID profilePath:(nullable NSString *)profilePath
     NS_SWIFT_NAME(uninstallExtension(_:profilePath:));
+/// Shared extensions whose data comes from one profile (discussion #595's follow-up): by extension ID, a dictionary
+/// with "home" (the profile folder it was set up in) and "profiles" (the folders sharing it, home among them). In those
+/// profiles the extension's chrome.storage.local and .sync read and write the home's, and storage.onChanged reaches it
+/// in all of them; websites' cookies and logins stay each profile's own. Replaces the whole map. Does nothing on CEF.
++ (void)setSharedExtensionStorage:(NSDictionary<NSString *, NSDictionary<NSString *, id> *> *)homes;
+/// Turns an extension on or off in a loaded profile (nil profilePath is Default), as chrome://extensions' switch does.
+/// NO when the profile hasn't loaded (this doesn't load it) or the extension isn't there. NO on CEF.
++ (BOOL)setExtensionEnabled:(NSString *)extensionID enabled:(BOOL)enabled profilePath:(nullable NSString *)profilePath
+    NS_SWIFT_NAME(setExtensionEnabled(_:enabled:profilePath:));
 /// A profile's pref as Chromium holds it now (nil profilePath is Default), as JSON: how Cra reads
 /// `default_search_provider_data.template_url_data`, the engine chrome://settings/searchEngines
 /// made the default. nil until that profile has loaded.
