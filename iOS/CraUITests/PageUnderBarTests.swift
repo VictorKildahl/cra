@@ -56,6 +56,25 @@ final class PageUnderBarTests: BrowserTestCase {
         keep("sticky footer")
     }
 
+    /// An app sized to the screen with `100vh` keeps its bottom strip above the bar, not under it,
+    /// as Excel for the web's sheet tabs were: WebKit measures `vh` from the view's frame, so a
+    /// page the bar never leaves ends at the bar's top.
+    func testAScreenSizedAppKeepsItsBottomStripAboveTheBar() {
+        launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Sheets</title>"
+                + "<body/style=margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden>"
+                + "<div/style=flex:1><h1>Sheets</h1></div>"
+                + "<button/style=flex:none;height:44px;font-size:20px>Sheet1</button>", "-CraSearch", "NO"])
+        waitForPage("Sheets")
+        let tab = app.webViews.buttons["Sheet1"]
+        XCTAssertTrue(tab.waitForExistence(timeout: 10))
+        sleep(1)
+        XCTAssertEqual(tab.frame.maxY, barTop, accuracy: 4, "the sheet tab sits on the bar's top: \(tab.frame) vs \(barTop)")
+        XCTAssertTrue(tab.isHittable, "the sheet tab can be tapped")
+        XCTAssertEqual(app.webViews.firstMatch.frame.maxY, barTop, accuracy: 2,
+                       "the page the bar never leaves ends at its top: \(app.webViews.firstMatch.frame)")
+        keep("screen-sized app above the bar")
+    }
+
     /// The page's visible bottom stays on the bar's top on every frame of the bar's travel, both
     /// under a dragging finger and through the settle after it: a sticky `bottom: 0` rides the
     /// bar rather than jump to it at the end. The trace keeps how often the page's covered bottom

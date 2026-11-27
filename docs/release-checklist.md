@@ -541,7 +541,10 @@ built release app with a test profile. Note anything that fails in the release's
   scroll stays even under the finger the whole way, the page's content shows through the bar's
   frosted material, and the last line scrolls clear of the bar.
   `PageUnderBarTests` pins the geometry in the simulator; the blur and the frame rate are a phone's
-  to judge.
+  to judge. Then open a workbook in Excel for the web, signed in, on an iPhone and an iPad: the
+  sheet tabs and the status bar under them sit on the bar's top, all tappable; the simulator has no
+  signed-in Office account, so `testAScreenSizedAppKeepsItsBottomStripAboveTheBar` stands in with a
+  `100vh` page.
 
 - **Pull to refresh:** on a TestFlight build on a real iPhone with System Haptics on, pull a page down
   from its top: the page's whole view comes down with the pull (its content stays at the top inside it, so

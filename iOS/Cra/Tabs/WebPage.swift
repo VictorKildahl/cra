@@ -247,9 +247,22 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         guard webView.window != nil, webView.bounds.width > 0 else { return done(nil) }
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = NSNumber(value: Double(webView.bounds.width))
-        configuration.rect = CGRect(x: 0, y: 0, width: webView.bounds.width,
-                                    height: min(max(0, height), webView.bounds.height))
-        webView.takeSnapshot(with: configuration) { image, _ in done(image) }
+        let shown = min(max(0, height), webView.bounds.height)
+        configuration.rect = CGRect(x: 0, y: 0, width: webView.bounds.width, height: shown)
+        // A page laid out above the bar has a view shorter than a tab's picture: the picture
+        // keeps the tab's shape, the strip the bar covers in the page's own background.
+        let fill: UIColor = webView.underPageBackgroundColor ?? .systemBackground
+        webView.takeSnapshot(with: configuration) { image, _ in
+            guard let image, shown > 0, height > shown + 0.5 else { return done(image) }
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = image.scale
+            let size = CGSize(width: image.size.width, height: (image.size.height * height / shown).rounded())
+            done(UIGraphicsImageRenderer(size: size, format: format).image { context in
+                fill.setFill()
+                context.fill(CGRect(origin: .zero, size: size))
+                image.draw(at: .zero)
+            })
+        }
     }
 
     /// The icons the page names for itself, best first (`MobileFavicons.bestFirst`): its own

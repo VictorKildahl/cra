@@ -332,6 +332,26 @@ struct MobileBarCollapseTests {
         #expect(!bar.isOpen)
     }
 
+    /// A page the bar never leaves ends at the bar's top, so a screen-sized app (Excel for the
+    /// web's sheet tabs, sized with `100vh`) has its bottom above the bar rather than under it. A
+    /// page that scrolls, one still loading, and any page while the bar is away or moving run on
+    /// under it.
+    @Test func aPageTheBarNeverLeavesEndsAtTheBarsTop() {
+        var bar = MobileBarCollapse()
+        #expect(!bar.pageRunsUnder(collapses: true, scrolls: false, loaded: true), "a loaded page with nothing to scroll")
+        #expect(!bar.pageRunsUnder(collapses: false, scrolls: true, loaded: true), "Collapse Bottom Bar off")
+        #expect(!bar.pageRunsUnder(collapses: false, scrolls: false, loaded: false), "Collapse Bottom Bar off, still loading")
+        #expect(bar.pageRunsUnder(collapses: true, scrolls: true, loaded: true), "a page that scrolls")
+        #expect(bar.pageRunsUnder(collapses: true, scrolls: false, loaded: false), "a page still loading")
+        bar.dragged(by: 10, collapses: true, scrolls: true)
+        #expect(!bar.isOpen)
+        #expect(bar.pageRunsUnder(collapses: true, scrolls: false, loaded: true), "the bar on its way")
+        bar.settle(atClosed: true)
+        #expect(bar.pageRunsUnder(collapses: true, scrolls: false, loaded: true), "the bar away")
+        bar.reveal()
+        #expect(!bar.pageRunsUnder(collapses: true, scrolls: false, loaded: true), "back under an open bar")
+    }
+
     /// The page's covered bottom is what lies between the bar's top and the safe area's edge,
     /// following the bar from its whole height open to nothing closed, so a sticky bottom stays
     /// on the bar's top all the way; it never leaves the range WebKit is given for `svh`/`lvh`.
