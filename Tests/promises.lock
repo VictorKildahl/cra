@@ -1951,6 +1951,11 @@
 #885   iOS/CraUITests/BrowserTests.swift::testManySpacesKeepTheSheetOnScreen  983d85777c2d
 #895   Packages/CraCore/Tests/CraCoreTests/DownloadListTests.swift::quietDownloadWithoutItsFileIsNotCancelledOnTheEngine  96045abc4374
 #895   Tests/Scenarios/download-quiet-not-cancelled.scenario  99a7c0b81d2a
+#896   Packages/CraCore/Tests/CraCoreTests/DownloadsTrayHoverTests.swift::aClosedListLightsNothing  03c95f92e7f7
+#896   Packages/CraCore/Tests/CraCoreTests/DownloadsTrayHoverTests.swift::aRowLightsUpUnderThePointerAndLooksPickedWhilePressed  79f03811104e
+#896   Packages/CraCore/Tests/CraCoreTests/DownloadsTrayHoverTests.swift::aRowWithNoFileOnlyHovers  3dfdd40d36b9
+#896   Packages/CraCore/Tests/CraCoreTests/DownloadsTrayHoverTests.swift::theCardIsTheRowsClickArea  ee3b4517a411
+#896   Tests/Scenarios/downloads-tray-row-hover.scenario  489860ec98f8
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aFrameWithoutATapDoesNothing  ddb0de68baae
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::aTappedLinkToAnotherAppsAddressOpensThatApp  4c21b7b69b3b
 crash-1086-external-schemes Packages/CraCore/Tests/CraCoreTests/MobileExternalLinksTests.swift::theAppsOwnAddressesStay  6d4433526f85

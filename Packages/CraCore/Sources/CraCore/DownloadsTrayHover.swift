@@ -30,3 +30,26 @@ public enum NowPlayingHover {
         overCards && cards > 0 && !downloadsListOpen
     }
 }
+
+/// How a download in the list looks under the pointer (GitHub #896). It looked the same whatever the
+/// pointer did, so it didn't look like something to pick, where the sidebar's tabs and Library ▸
+/// Downloads' rows get the space's hover fill. Under the pointer a row gets that fill; pressed (to open
+/// it, or dragged out) a file's row gets the selected tab's fill until the release or the drag's end.
+/// A running, failed or cancelled download has nothing to open or drag, so it only hovers.
+public enum DownloadsTrayRow {
+    public enum Fill: Equatable, Sendable { case none, hover, pressed }
+
+    /// The card reaches this far above and below the thumbnail, as the row's click area does, and
+    /// stands this far in from the column's sides: 4 pt round the thumbnail, which is 8 pt in.
+    public static let pad: CGFloat = 4
+    /// Library ▸ Downloads' card corners.
+    public static let corner: CGFloat = 10
+
+    public static func height(thumbnail: CGFloat) -> CGFloat { thumbnail + 2 * pad }
+
+    public static func fill(open: Bool, hovered: Bool, pressed: Bool, canOpen: Bool) -> Fill {
+        guard open else { return .none }
+        if pressed, canOpen { return .pressed }
+        return hovered || pressed ? .hover : .none
+    }
+}

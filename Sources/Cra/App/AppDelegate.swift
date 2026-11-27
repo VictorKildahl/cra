@@ -3117,8 +3117,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             if let label = dict["downloadsTray"] {
-                let tray = (main.sidebarUI.downloadsTray as? DownloadsTrayView)?.hoverReadout ?? "none"
-                CraLog.note("downloads tray \(label): open=\(main.sidebarUI.downloadsListOpen) \(tray)")
+                let trayView = main.sidebarUI.downloadsTray as? DownloadsTrayView
+                let tray = trayView?.hoverReadout ?? "none"
+                // &row=hover|press|release|leave (#896): the first row after that pointer event, and its fill.
+                let row = dict["row"].map { " " + (trayView?.debugFirstRow($0) ?? "row=none") } ?? ""
+                CraLog.note("downloads tray \(label): open=\(main.sidebarUI.downloadsListOpen) \(tray)\(row)")
                 return
             }
             if let label = dict["downloadState"] {
