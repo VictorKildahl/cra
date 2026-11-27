@@ -544,7 +544,8 @@ built release app with a test profile. Note anything that fails in the release's
 
 - **The tab row's settle (PR #882):** on a real iPhone with five or more tabs, flick the tab row and
   take a card up before the row lands: the row holds still under the held
-  card, then settles on the card it was heading to once the card is let go or thrown away. Catch the
+  card, then settles on the card it was heading to once the card is let go or thrown away, also when
+  a card thrown just before lands meanwhile (`aHeldRowResumesOnItsCardAfterAnEarlierThrowLands`). Catch the
   row with a finger while it springs back from past either end: it stays under the finger. XCUITest
   waits for the row to rest before its next gesture, so it can't stage either;
   `catchingTheRowPastAnEndHoldsItWhereItIs` covers the catch's arithmetic.

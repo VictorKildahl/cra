@@ -226,4 +226,12 @@ public struct MobileTabRow: Equatable, Sendable {
         }
         return Gap(position: position, settle: Int(min(max(0, target), CGFloat(max(0, cards.count - 1)))))
     }
+
+    /// Where a row that was settling on card `id` goes once a card taken up from it is let go,
+    /// the row at `position`: that card's place now, since a card thrown before it may have left
+    /// meanwhile and moved it; the card nearest `position` if it has gone itself.
+    public func resumeIndex(heading id: UUID, position: CGFloat) -> Int {
+        if let index = cards.firstIndex(of: id) { return index }
+        return Int(min(CGFloat(max(0, cards.count - 1)), max(0, position.rounded())))
+    }
 }

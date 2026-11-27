@@ -33,8 +33,8 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     private var settle: MobileTabCarousel.Settle?
     private var settleStart: CFTimeInterval = 0
     private var settleLink: CADisplayLink?
-    /// Where the row was settling when a card was taken up from it.
-    private var heldTarget: CGFloat?
+    /// The card the row was settling on when a card was taken up from it.
+    private var heldTarget: UUID?
     private let pan = UIPanGestureRecognizer()
     /// Whether the row is under a finger or settling.
     private var rowMoves: Bool { settle != nil || (draggedCard == nil && [.began, .changed].contains(pan.state)) }
@@ -204,7 +204,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
             case .began:
                 // The row holds still under a card being taken up, and settles on where it was
                 // going once the card is let go.
-                heldTarget = settle?.target
+                heldTarget = settle.flatMap { cards.indices.contains(Int($0.target)) ? cards[Int($0.target)].tabID : nil }
                 stopSettling()
             case .changed:
                 draggedOffset = min(0, translation.y)
@@ -215,7 +215,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
                 // before that.
                 draggedCard = nil
                 draggedOffset = 0
-                if let target = heldTarget { startSettling(to: Int(target), velocity: 0) }
+                if let target = heldTarget { startSettling(to: row.resumeIndex(heading: target, position: position), velocity: 0) }
                 heldTarget = nil
                 if closes, row.startThrow(card.tabID) { throwAway(card) } else { settleCards() }
             default: break

@@ -1029,6 +1029,23 @@ struct MobileTabRowTests {
         #expect(close(3, at: 1) == .init(position: 1, settle: 1))
         #expect(!MobileTabRow(cards: []).canTake(ids[0]))
     }
+
+    /// A card taken up while the row settles holds the row, which settles on where it was going
+    /// once the card is let go. It kept that card's place, so a card thrown earlier that left
+    /// meanwhile sent it to the next card, or past the end (Greptile on PR #882). It follows the
+    /// card instead.
+    @Test func aHeldRowResumesOnItsCardAfterAnEarlierThrowLands() {
+        let ids = Self.ids
+        var row = MobileTabRow(cards: ids)
+        // Throw the first card, flick the row towards the third, then take the second up.
+        row.startThrow(ids[0])
+        _ = row.finishThrow(ids[0], position: 1.6)
+        #expect(row.resumeIndex(heading: ids[2], position: 0.6) == 1, "the third card is second now")
+        #expect(row.resumeIndex(heading: ids[3], position: 1.6) == 2, "the newest stays in the row")
+        // A row heading for a card that has gone itself settles on the nearest.
+        #expect(row.resumeIndex(heading: ids[0], position: 2.7) == 2)
+        #expect(row.resumeIndex(heading: ids[0], position: -0.4) == 0)
+    }
 }
 
 struct MobilePageMenuTests {
