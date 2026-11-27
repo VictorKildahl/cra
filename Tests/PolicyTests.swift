@@ -22,6 +22,7 @@ enum PolicyTests {
         liveScheduler()
         try webHandoff()
         try defaultBrowserPicker()
+        try openWithPDF()
         try iPhoneDefaultBrowser()
         try iPhoneWebContentLoadsHTTP()
         print("Policies: \(checks) checks passed")
@@ -74,6 +75,18 @@ enum PolicyTests {
             .flatMap { $0["LSItemContentTypes"] as? [String] ?? [] }
         expect(types.contains("public.html"), "Cra views HTML files")
         expect(types.contains("public.xhtml"), "Cra views XHTML files, so the system's default browser picker lists it")
+    }
+
+    /// Finder's Open With lists Cra for a PDF, which opens in Chrome's PDF viewer, as a link from
+    /// another app does. Cra is only an Alternate for it: Preview stays the PDF app a double-click opens.
+    private static func openWithPDF() throws {
+        let plist = try Data(contentsOf: URL(fileURLWithPath: "resources/Info.plist"))
+        let info = try PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any]
+        let pdf = (info?["CFBundleDocumentTypes"] as? [[String: Any]] ?? [])
+            .filter { ($0["LSItemContentTypes"] as? [String] ?? []).contains("com.adobe.pdf") }
+        expect(pdf.count == 1, "Cra declares PDF documents once, so Open With lists it")
+        expect(pdf.first?["CFBundleTypeRole"] as? String == "Viewer", "Cra only views PDFs")
+        expect(pdf.first?["LSHandlerRank"] as? String == "Alternate", "Cra never takes over PDFs from Preview")
     }
 
     // promise: #504 #536
