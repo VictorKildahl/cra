@@ -3142,16 +3142,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         b.sendDevToolsMethod("Page.getNavigationHistory", params: "{}") { [weak self] result, _ in
             MainActor.assumeIsolated {
                 guard let self, let result, let page = BackForwardMenu.newTabPage(history: result, direction: direction) else { return }
-                self.store.createTab(url: page.url, title: page.title, in: self.store.spaceID(ofItem: id), select: true,
-                                     window: self.windowID, referrer: id)
-                CraLog.note("history new tab: \(direction == .back ? "back" : "forward") \(page.url)")
+                self.openHistoryPage(page, direction, from: id)
             }
         }
     }
 
+    /// A page of tab `id`'s history in a new tab that comes to the front, where new tabs go, opened from
+    /// `id`, which stays on its page: ⌘-click on Back or Forward (#797) or on a row of their menu.
+    private func openHistoryPage(_ page: BackForwardMenu.Row, _ direction: BackForwardMenu.Direction, from id: UUID) {
+        store.createTab(url: page.url, title: page.title, in: store.spaceID(ofItem: id), select: true, window: windowID, referrer: id)
+        CraLog.note("history new tab: \(direction == .back ? "back" : "forward") \(page.url)")
+    }
+
     /// Right-click or hold Back or Forward (#416): the pages that way in tab `tab`'s history (a
     /// split pane's, or the tab in front), in Arc's menu under the button; a row goes straight to
-    /// its page. Chromium's history comes over DevTools, so the main thread never waits for it.
+    /// its page, or with ⌘ held opens it in a new tab in front, as ⌘-click on the button does (#797).
+    /// Chromium's history comes over DevTools, so the main thread never waits for it.
     func showBackForwardMenu(tab: UUID?, direction: BackForwardMenu.Direction, anchor: NSView) {
         // The sidebar's ← → while its address field shows a Peek: the Peek's history (#648).
         let peek = tab == nil ? sidebarPeek?.browser : nil
@@ -3177,6 +3183,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                     b.sendDevToolsMethod("Page.navigateToHistoryEntry", params: "{\"entryId\":\(rows[index].entryID)}") { _, error in
                         if let error { CraLog.note("back-forward menu: \(error)") }
                     }
+                }
+                menu.onNewTab = { [weak self] index in
+                    guard let self else { return }
+                    self.backForwardMenu.close()
+                    guard let page = BackForwardMenu.newTabPage(history: result, entryID: rows[index].entryID) else { return }
+                    self.openHistoryPage(page, direction, from: id)
                 }
                 let rect = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
                 let screen = parent.screen?.visibleFrame ?? rect.insetBy(dx: -1000, dy: -1000)

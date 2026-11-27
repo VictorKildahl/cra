@@ -1527,7 +1527,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // target=floating: the sidebar sliding out at the edge, in its own panel (#424).
             if let g = dict["clickAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,
                let w = dict["target"] == "little" ? littleWindows.last?.window
-                    : dict["target"] == "floating" ? main.floatingSidebar?.panelWindow : main.window {
+                    : dict["target"] == "floating" ? main.floatingSidebar?.panelWindow
+                    : dict["target"] == "historyMenu" ? main.backForwardMenu.content?.window : main.window {
                 let point = NSPoint(x: g[0], y: w.frame.height - g[1])
                 if let b = dict["button"], let button = ["back": MouseButtonSpaceSwitch.back, "forward": MouseButtonSpaceSwitch.forward][b] {
                     let taken = TestGesture.otherMouseUp(at: point, in: w).map { main.mouseButtonSwitchesSpace(button, $0) } ?? false
@@ -1547,7 +1548,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 // clicks=2: a double-click there (a favorite's Back to Pinned Page, #264); mods=<modifier
                 // bits>: keys held through it (524288, Option: a link opens in Split View, #298);
-                // button=right: a right-click (Back's history menu, #416).
+                // button=right: a right-click (Back's history menu, #416). target=historyMenu: in that menu's window.
                 TestGesture.click(at: point, in: w, clicks: dict["clicks"].flatMap(Int.init) ?? 1,
                                   modifiers: NSEvent.ModifierFlags(rawValue: dict["mods"].flatMap(UInt.init) ?? 0),
                                   right: dict["button"] == "right")

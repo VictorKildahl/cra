@@ -1,0 +1,45 @@
+# ⌘-click a row of Back or Forward's history menu: that page opens in a new tab that comes to the
+# front, at the top of Today, and the tab whose history it is stays on its page, as ⌘-click on the
+# button does (#797). A plain click on a row still takes the tab there (#416).
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=one
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=two'","userGesture":true}
+wait 1.5
+cra://debug?cdp=Runtime.evaluate&params={"expression":"location.href='${PAGE}?n=three'","userGesture":true}
+wait 1.5
+cra://debug?back=start
+expect-log back start: selected=\S+n=three back=1 today=1$
+
+# Right-click the sidebar's ←, then ⌘-click its second row (n=one, rows are 40 pt from 20 pt down):
+# n=one in a new tab above, in front; the menu closes and the first tab stays on n=three.
+cra://debug?clickAt=238,23&button=right
+wait 1
+expect-log back-forward menu: back, 2 rows
+cra://debug?clickAt=100,80&target=historyMenu&mods=1048576
+wait 2
+expect-log history new tab: back \S+n=one$
+cra://debug?historyMenu=opened
+expect-log history menu opened: closed$
+cra://debug?back=opened
+expect-log back opened: selected=\S+n=one back=1 today=2$
+cra://debug?todayOrder=opened
+expect-log today order opened: \S+n=one \| \S+n=three$
+
+# Back on the new tab closes it back to n=three, still on its page; a plain click on the menu's
+# first row (n=two) takes that tab there, with no new tab.
+cra://action/goBack
+wait 2
+cra://debug?back=returned
+expect-log back returned: selected=\S+n=three back=1 today=1$
+cra://debug?clickAt=238,23&button=right
+wait 1
+expect-log back-forward menu: back, 2 rows
+cra://debug?clickAt=100,40&target=historyMenu
+wait 2
+cra://debug?back=plain
+expect-log back plain: selected=\S+n=two back=1 today=1$
