@@ -594,11 +594,15 @@ private struct ColorWheel: View {
                         .fill(AngularGradient(colors: [Color(white: 0.55), Color(white: 0.25), Color(white: 0.45), Color(white: 0.85),
                                                        Color(white: 0.95), Color(white: 0.7), Color(white: 0.55)], center: .center, angle: .degrees(180)))
                 }
-                RoundedRectangle(cornerRadius: 15, style: .continuous).fill(Color.white).padding(7)
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(Color.white)
+                    .overlay(AngularGradient(stops: BoostWheel.ringGradient.map { .init(color: Color(red: $0.1, green: $0.2, blue: $0.3), location: $0.0) }, center: .center).opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .padding(7)
                 Canvas { ctx, s in
-                    for x in stride(from: 12.0, to: s.width - 12, by: 6) {
-                        for y in stride(from: 12.0, to: s.height - 12, by: 6) {
-                            ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)), with: .color(.black.opacity(0.12)))
+                    for x in stride(from: 7.0, to: s.width - 7, by: 4) {
+                        for y in stride(from: 7.0, to: s.height - 7, by: 4) {
+                            ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)), with: .color(.black.opacity(0.095)))
                         }
                     }
                     // The orbit both handles are on, and the line between them.
