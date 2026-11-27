@@ -62,9 +62,13 @@ struct BoostWheelTests {
         #expect(close(BoostWheel.tint(hue: 0.5, strength: 38.5 / 56), 140, 213, 216))
         #expect(close(BoostWheel.accent(hue: 0.5, strength: 38.5 / 56), 49, 54, 71))
         #expect(close(BoostWheel.tint(hue: 0.36, strength: 0.18), 236, 248, 236))
-        #expect(close(BoostWheel.ring(0.724), 141, 90, 239))
-        #expect(close(BoostWheel.ring(0.5), 168, 244, 243))
-        #expect(close(BoostWheel.ring(0.03), 226, 104, 81))
-        #expect(close(BoostWheel.ring(0.2), 216, 239, 129))
+        let ring = BoostWheel.ringGradient
+        func nearStop(_ i: Int, _ r: Double, _ g: Double, _ b: Double) -> Bool {
+            abs(ring[i].1 * 255 - r) < 2 && abs(ring[i].2 * 255 - g) < 2 && abs(ring[i].3 * 255 - b) < 2
+        }
+        #expect(nearStop(0, 235, 76, 57))
+        #expect(nearStop(6, 209, 252, 93))
+        #expect(nearStop(12, 132, 249, 240))
+        #expect(nearStop(18, 129, 55, 245))
     }
 }

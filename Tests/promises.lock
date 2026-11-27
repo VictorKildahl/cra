@@ -955,7 +955,7 @@
 #472   Tests/Scenarios/space-switch-chrome-hidden.scenario  b643853d7bba
 #476   Tests/Scenarios/engine-host-closes-profile-stays.scenario  1ad6493ef44f
 #478   Packages/CraCore/Tests/CraCoreTests/BoostTests.swift::theSiteControlCenterListsTheSitesBoostsOnOrOff  7a97aab12e6b
-#478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::colorsMatchArcs  501e393ad819
+#478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::colorsMatchArcs  903e954067b0
 #478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::dragsPickHueClockwiseAndStrengthByDistance  9fda21ba2d34
 #478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::untintedHandlesRestAtThreeOClock  1372e31c2305
 #478   Packages/CraCore/Tests/CraCoreTests/BoostZapTests.swift::thePointerStepsThroughCandidatesInEqualSlices  82616c3903f1

@@ -587,7 +587,7 @@ private struct ColorWheel: View {
             ZStack {
                 if strength > 0 {
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(AngularGradient(stops: BoostWheel.ringStops.map { .init(color: color(BoostWheel.ring($0.hue)), location: $0.hue) }, center: .center))
+                        .fill(AngularGradient(stops: BoostWheel.ringGradient.map { .init(color: Color(red: $0.1, green: $0.2, blue: $0.3), location: $0.0) }, center: .center))
                 } else {
                     // Arc's frame: brushed metal, dark at the top left and right, light at the bottom.
                     RoundedRectangle(cornerRadius: 13, style: .continuous)

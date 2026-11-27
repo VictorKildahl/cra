@@ -63,19 +63,18 @@ public enum BoostWheel {
         return HSB(wrap(hue + accentOffset), 0.48 * pow(t, 1.2), 0.27 + 0.08 * pow(t, 4))
     }
 
-    /// The tinted frame's colour at a hue. Arc's ring isn't one saturation all round: read off it
-    /// every 15°, red is 226/104/81, cyan 168/244/243, purple 141/90/239.
-    public static func ring(_ hue: Double) -> HSB {
-        let h = wrap(hue)
-        guard let i = ringStops.lastIndex(where: { $0.hue <= h }), i + 1 < ringStops.count else { return ringStops[0] }
-        let a = ringStops[i], b = ringStops[i + 1], f = (h - a.hue) / (b.hue - a.hue)
-        return HSB(h, a.saturation + (b.saturation - a.saturation) * f, a.brightness + (b.brightness - a.brightness) * f)
-    }
-
-    /// Arc's ring, measured: saturation and brightness by hue (the last stop closes the circle).
-    public static let ringStops: [HSB] = [
-        HSB(0, 0.64, 0.89), HSB(0.2, 0.47, 0.96), HSB(0.45, 0.31, 0.97), HSB(0.6, 0.48, 0.95),
-        HSB(0.7, 0.65, 0.94), HSB(0.76, 0.62, 0.94), HSB(0.86, 0.58, 0.87), HSB(0.97, 0.56, 0.86), HSB(1, 0.64, 0.89),
+    /// Arc's ring as sRGB stops (location, red, green, blue). SwiftUI shifts these when it draws
+    /// them, so the values are pre-compensated to land on Arc's colours; the last stop closes it.
+    public static let ringGradient: [(Double, Double, Double, Double)] = [
+        (0.000, 0.920, 0.296, 0.223), (0.042, 0.916, 0.389, 0.211), (0.083, 0.920, 0.464, 0.219),
+        (0.125, 0.937, 0.558, 0.251), (0.167, 0.954, 0.743, 0.306), (0.208, 0.967, 0.929, 0.357),
+        (0.250, 0.820, 0.989, 0.365), (0.292, 0.641, 0.988, 0.381), (0.333, 0.586, 0.984, 0.455),
+        (0.375, 0.524, 0.984, 0.536), (0.417, 0.527, 0.984, 0.680), (0.458, 0.524, 0.980, 0.807),
+        (0.500, 0.516, 0.976, 0.940), (0.542, 0.369, 0.714, 0.959), (0.583, 0.227, 0.449, 0.966),
+        (0.625, 0.083, 0.192, 0.950), (0.667, 0.205, 0.179, 0.954), (0.708, 0.356, 0.204, 0.958),
+        (0.750, 0.504, 0.217, 0.962), (0.792, 0.743, 0.214, 0.878), (0.833, 0.857, 0.205, 0.748),
+        (0.875, 0.849, 0.201, 0.564), (0.917, 0.869, 0.225, 0.435), (0.958, 0.892, 0.237, 0.307),
+        (1, 0.920, 0.296, 0.223),
     ]
 
     private static func point(turns: Double, radius: Double) -> CGPoint {
