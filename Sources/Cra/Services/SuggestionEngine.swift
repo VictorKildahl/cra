@@ -442,7 +442,7 @@ final class SuggestionEngine {
             }
             guard !urls.contains(url) else { return nil }
             return Suggestion(id: "sugg:\(url)", kind: .history, title: r.text, subtitle: "", url: url,
-                              faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil, score: 0, fromSearchEngine: true)
+                              faviconKey: FaviconKey.sectionKey(for: url), symbol: "globe", trailing: nil, score: 0, fromSearchEngine: true)
         }
     }
 
@@ -456,7 +456,7 @@ final class SuggestionEngine {
         if Self.looksLikeURL(query) {
             let url = Self.urlFromInput(query)
             return Suggestion(id: "typed", kind: .navigate, title: query, subtitle: "Open URL", url: url,
-                              faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil, score: 1000)
+                              faviconKey: FaviconKey.sectionKey(for: url), symbol: "globe", trailing: nil, score: 1000)
         }
         let engine = searchEngine
         return Suggestion(id: "typed", kind: .search, title: query, subtitle: "Search \(engine.name)",
@@ -544,7 +544,7 @@ final class SuggestionEngine {
             guard bare.hasPrefix(q) || d.hasPrefix(q) else { continue }
             let url = "https://\(d)/"
             out.append(Suggestion(id: "top:\(d)", kind: .topDomain, title: bare, subtitle: "Open URL", url: url,
-                                  faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil,
+                                  faviconKey: FaviconKey.sectionKey(for: url), symbol: "globe", trailing: nil,
                                   score: 72 - Double(i) * 0.1))
         }
         return out
@@ -698,7 +698,7 @@ final class SuggestionEngine {
             s.subtitle = ["Archived \(Self.relative(entry.archivedAt))", spaceName, Self.humanURL(s.url ?? "")].filter { !$0.isEmpty }.joined(separator: " · ")
         case .history where s.id.hasPrefix("hist:"):
             s.subtitle = Self.humanURL(s.url ?? "")
-            s.faviconKey = s.url.flatMap { FaviconKey.key(for: $0) }
+            s.faviconKey = s.url.flatMap { FaviconKey.sectionKey(for: $0) }
         default: break
         }
         return s

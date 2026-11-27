@@ -3166,7 +3166,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 guard !rows.isEmpty else { return }
                 let favicons = self.app.favicons
                 let items = rows.map { row in
-                    let key = FaviconKey.key(for: row.url)
+                    let key = FaviconKey.sectionKey(for: row.url)
                     return BackForwardMenuItem(title: row.title, icon: favicons.image(forKey: key), flip: favicons.glyphIsDark(forKey: key) == true)
                 }
                 let menu = BackForwardMenuView(items: items, colors: self.backForwardMenuColors()) { [weak self, weak b] index in
