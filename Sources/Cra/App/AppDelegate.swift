@@ -1979,8 +1979,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 if let profile = dict["profile"] {
                     ExtensionStore.shared.setShared(e, profile: profile, included: dict["included"] != "0")
+                } else if let home = dict["home"] {
+                    // &home=<folder>&with=<folder>,<folder>: Share across Profiles… (discussion #595's follow-up).
+                    let with = (dict["with"] ?? "").split(separator: ",").map(String.init)
+                    ExtensionStore.shared.share(e, from: home, with: with)
                 } else {
                     ExtensionStore.shared.share(e)
+                }
+                return
+            }
+            // extensionOn=<id>&on=0|1: a shared extension's switch in Settings, for all its profiles.
+            if let id = dict["extensionOn"], let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) {
+                ExtensionStore.shared.setSharedOn(e, dict["on"] != "0")
+                return
+            }
+            // extensionSections=<label>: Settings ▸ Extensions' sections and rows (discussion #595's follow-up).
+            if let label = dict["extensionSections"] {
+                ExtensionStore.shared.reload()
+                let profiles = [("Default", store.profileName(nil))] + store.profiles.map { ($0.directoryName, $0.name) }
+                let sections = ExtensionsLayout.sections(
+                    items: ExtensionStore.shared.entries.map {
+                        ExtensionsLayout.Item(id: $0.extensionID, name: $0.name, installedByChrome: $0.managedByChrome, profiles: $0.profiles)
+                    },
+                    shares: ExtensionStore.shared.shares, allProfiles: profiles.map(\.0),
+                    names: Dictionary(profiles, uniquingKeysWith: { a, _ in a }))
+                let text = sections.map { section in
+                    section.title + " [" + section.rows.map { $0.id + ($0.profile.map { "@" + $0 } ?? "") }.joined(separator: ", ") + "]"
+                }.joined(separator: "; ")
+                CraLog.note("extension sections \(label): \(text)")
+                for (id, home) in ExtensionStore.shared.shares.storageHomes(allProfiles: profiles.map(\.0)) {
+                    CraLog.note("extension sections \(label): \(id) home \(home.home) on=\(ExtensionStore.shared.shares.isOn(id) ? 1 : 0)")
                 }
                 return
             }

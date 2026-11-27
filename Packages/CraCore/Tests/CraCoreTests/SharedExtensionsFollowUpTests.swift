@@ -67,15 +67,23 @@ struct SharedExtensionsFollowUpTests {
         var shares = SharedExtensions()
         shares.share(translate, from: "Profile W", with: all)
         // Turned off in Work's chrome://extensions: off everywhere.
-        var result = shares.followSwitch(translate, offIn: ["Profile W"], loaded: all, allProfiles: all)
+        var result = shares.followSwitch(translate, offIn: ["Profile W"], changed: ["Profile W"], loaded: all, allProfiles: all)
         #expect(!result.on && result.apply == ["Default": false, "Profile H": false])
         #expect(!shares.isOn(translate))
         // All off now: nothing to do.
         result = shares.followSwitch(translate, offIn: Set(all), loaded: all, allProfiles: all)
         #expect(!result.on && result.apply.isEmpty)
-        // Turned on again in Hobbies: on everywhere; a profile that hasn't loaded follows when it does.
-        result = shares.followSwitch(translate, offIn: ["Default", "Profile W"], loaded: ["Default", "Profile W", "Profile H"], allProfiles: all)
+        // A profile that has just loaded has it on, as Chrome starts it: it follows, nothing is turned on.
+        result = shares.followSwitch(translate, offIn: ["Default", "Profile W"], loaded: all, allProfiles: all)
+        #expect(!result.on && result.apply == ["Profile H": false])
+        // Turned on again in Hobbies' chrome://extensions: on everywhere.
+        result = shares.followSwitch(translate, offIn: ["Default", "Profile W"], changed: ["Profile H"], loaded: all, allProfiles: all)
         #expect(result.on && result.apply == ["Default": true, "Profile W": true])
+        // A profile that hasn't loaded isn't touched; it follows when it loads.
+        _ = shares.setOn(translate, false)
+        result = shares.followSwitch(translate, offIn: [], loaded: ["Default"], allProfiles: all)
+        #expect(!result.on && result.apply == ["Default": false])
+        _ = shares.setOn(translate, true)
         // Settings' switch.
         let turnedOff = shares.setOn(translate, false)
         #expect(turnedOff)

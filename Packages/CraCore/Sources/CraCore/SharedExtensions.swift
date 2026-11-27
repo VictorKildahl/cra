@@ -188,17 +188,19 @@ public struct SharedExtensions: Codable, Equatable, Sendable {
         return true
     }
 
-    /// One switch for a shared extension: Chrome says which of its profiles have it turned off now (`offIn`, from
-    /// chrome://extensions or Settings). One that differs from the shared state is the person turning it on or off
-    /// there, which goes for every profile it is in. Returns the new state and the profiles Chrome must switch
-    /// (profile → on), none when they agree. Profiles that haven't loaded aren't in `loaded`: they follow as they load.
-    public mutating func followSwitch(_ id: String, offIn: Set<String>, loaded: [String], allProfiles: [String])
-        -> (on: Bool, apply: [String: Bool]) {
+    /// One switch for a shared extension: Chrome says which of its profiles have it turned off now (`offIn`), and in
+    /// which the switch changed since Cra last looked (`changed`: the person used chrome://extensions there). A change
+    /// is the shared state for every profile it is in; otherwise each loaded profile follows the shared state (one that
+    /// has just loaded, say). Returns the state and the profiles Chrome must switch (profile → on). Profiles that
+    /// haven't loaded aren't in `loaded`: they follow as they load.
+    public mutating func followSwitch(_ id: String, offIn: Set<String>, changed: Set<String> = [], loaded: [String],
+                                      allProfiles: [String]) -> (on: Bool, apply: [String: Bool]) {
         guard isShared(id) else { return (true, [:]) }
         let members = profiles(of: id, allProfiles: allProfiles).filter(loaded.contains)
         var on = isOn(id)
-        if on, members.contains(where: offIn.contains) { on = false }
-        else if !on, members.contains(where: { !offIn.contains($0) }) { on = true }
+        if let flipped = members.first(where: { changed.contains($0) && offIn.contains($0) == on }) {
+            on = !offIn.contains(flipped)
+        }
         setOn(id, on)
         var apply: [String: Bool] = [:]
         for profile in members where offIn.contains(profile) == on { apply[profile] = on }
