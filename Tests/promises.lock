@@ -1854,7 +1854,13 @@
 #822   Packages/CraCore/Tests/CraCoreTests/ArcMenuTonesTests.swift::inLightModeTheMenuTakesTheLightPalette  379654d58ef0
 #822   Tests/Scenarios/plus-menu-appearance.scenario  0d01a89b2a64
 #825   Tests/Scenarios/reset-zoom-pinch.scenario  5c8fba8f4b8f
+#828   Packages/CraCore/Tests/CraCoreTests/ChatGPTCommandBarTests.swift::newMessageOpensTheScopeWhenOn  4eb46b9a04fa
+#828   Packages/CraCore/Tests/CraCoreTests/ChatGPTCommandBarTests.swift::theAskRowIsThirdForWordsTyped  c3005db0e4b4
+#828   Packages/CraCore/Tests/CraCoreTests/ChatGPTCommandBarTests.swift::theSettingsRowTextIsArcs  1f8495cb09dc
+#828   Packages/CraCore/Tests/CraCoreTests/ChatGPTCommandBarTests.swift::typingChatGPTOffersItsScopeOnlyWhenOn  c3fa371b9ffe
 #828   Packages/CraCore/Tests/CraCoreTests/SiteSearchTests.swift::anAddedChatSiteSearchTakesTabAndCarriesTheMessage  04b86b3b639b
+#828   Tests/Scenarios/chatgpt-command-bar-off.scenario  f0d4365f92e5
+#828   Tests/Scenarios/chatgpt-command-bar.scenario  144f05616ec7
 #829   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::thePlacesSayTheyAreOnTheIPhone  6beac92ad82c
 #829   iOS/CraUITests/BrowserTests.swift::testTheShareSheetSavesThroughTheExtension  8102a922a145
 #835   Packages/CraCore/Tests/CraCoreTests/ContentCaptureTests.swift::littleWindowCapturePicksNormalHostWindow  b39a23c6048a

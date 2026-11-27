@@ -187,6 +187,9 @@ final class KeyBindingRegistry {
             // Arc: File ▸ Share…, the system's share list for the page (#279).
             KeyAction(id: "share", name: "Share…", section: .file, shortcuts: [], triggers: ["share", "airdrop"]),
             KeyAction(id: "capturePage", name: "Capture…", section: .file, shortcuts: [Shortcut("2", cmdShift)], triggers: ["capture", "screenshot"]),
+            // Arc's gptMessage (#828): no menu item, a shortcut and a command; Settings ▸ Max ▸ ChatGPT in the Command Bar.
+            KeyAction(id: ChatGPTCommandBar.actionID, name: ChatGPTCommandBar.actionName, section: .none, shortcuts: [Shortcut("g", cmdOpt)],
+                      triggers: ["chatgpt", "ask chatgpt", "gpt"]),
             // Arc: File ▸ Capture Full Page, Save Page As ⇧⌘S.
             KeyAction(id: "captureFullPage", name: "Capture Full Page", section: .file, shortcuts: [], triggers: ["full page", "screenshot"]),
             KeyAction(id: "capturePortrait", name: "Capture in Portrait Mode", section: .file, shortcuts: [], triggers: ["portrait", "mobile screenshot"]),

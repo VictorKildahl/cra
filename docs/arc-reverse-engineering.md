@@ -4543,6 +4543,19 @@ instead of the AppKit `FindInPageView`. Tags as above; [B?] read off disassembly
   padding 12, field padding 6; Ask in callout semibold, padding 6 × 12.
 - [?] Not read: whether Return finds or asks, the card's placement, corner, shadow and background, the theme colours,
   fade heights. The purple border in the reporter's picture is the Arc window in a purple space, not part of the card.
+- [O live] ChatGPT in the Command Bar and ⌥⌘G (27 Nov 2026, Arc 1.174 main window on a 1x screen, `gptSiteSearchEnabled`
+  switched on with Arc quit and back off after, keys posted while Victor was idle; #828). [binary] Arc's SearchEngine.chatGPT:
+  `searchURLTemplate` on `https://chat.openai.com` with `%7BsearchTerms%7D`, colour #75A99C; the Shortcuts action
+  `gptMessage`, "Compose a ChatGPT message in the Command Bar." (no menu item); the Max row "ChatGPT in the Command Bar",
+  "Add ChatGPT to your Search suggestions, or press <shortcut> to ask any question instantly." / "…or start typing ChatGPT,
+  hit Tab, to ask any question instantly."; the archetype "Ask GPT What You Typed". [live] ⌥⌘G opens the ⌘T bar already
+  scoped: the "ChatGPT" pill (drawn #64AB9C on the dark bar), "Send a Message…"; typing gives one row, a magnifier and the
+  text, no caption, filled in the pill's colour. With the switch off ⌥⌘G opens the plain bar (no toast seen). "chatg" in the
+  plain bar shows "Ask ChatGPT  Tab" at the field's end (chatgpt.com in history completed the field). A question ("what is
+  two plus two") gets a row third, after the typed search and one suggestion: ChatGPT's logo, the text, "Ask ChatGPT" and
+  the arrow tile at the end. Return in the scope opened no tab or window in two tries and recorded no visit (presumably a
+  remote gate on Arc's side), so Cra opens the message as Arc's other site searches do: a new tab on chatgpt.com/?q=.
+  Not seen: the Max row's picture (the pane doesn't scroll to it under posted events).
 - [O] Live Arc 1.173.1 (12 Nov 2026, Victor's Arc, Blank Window on Wikipedia): Ask on Page is gone. Settings ▸ Max lists
   Tidy Tabs, Instant Links, 5-Second Previews, Tidy Tab Titles, Tidy Downloads and ChatGPT in the Command Bar, no Ask on
   Page row, though `askOnPageEnabled` is 1; ⌘F opens the plain dark find bar ("Find in page…", "NOT FOUND", no Ask). The

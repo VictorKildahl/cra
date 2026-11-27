@@ -224,6 +224,13 @@ public struct SiteSearch: Equatable, Sendable {
         self.init(name: engine.name, host: engine.keyword, url: engine.url, color: arc?.color)
     }
 
+    /// The hint at the field's end while Tab offers it: "Search YouTube", or Arc's "Ask ChatGPT" (#828).
+    public var hint: String { self == ChatGPTCommandBar.site ? ChatGPTCommandBar.ask : "Search \(name)" }
+    /// The scoped field's placeholder: "Search…", or ChatGPT's "Send a Message…".
+    public var placeholder: String { self == ChatGPTCommandBar.site ? ChatGPTCommandBar.placeholder : "Search…" }
+    /// The scoped row's caption: "Search YouTube"; ChatGPT's row has none.
+    public var rowCaption: String? { self == ChatGPTCommandBar.site ? nil : "Search \(name)" }
+
     public func searchURL(_ query: String) -> String {
         if url.contains("{") { return ChromiumSearchEngine.expand(url, query: query) }
         let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)?
@@ -235,14 +242,14 @@ public struct SiteSearch: Equatable, Sendable {
     /// wins when it is a site search itself. Chromium's keywords come in around Arc's sites: one
     /// typed out in full wins ("goo" for a Google edited to that), one started only after Arc's
     /// sites have had their turn, and from two letters on.
-    public static func match(_ q: String, completion: String?, keywords: [ChromiumSearchEngine] = []) -> SiteSearch? {
+    public static func match(_ q: String, completion: String?, keywords: [ChromiumSearchEngine] = [], sites: [SiteSearch] = all) -> SiteSearch? {
         var t = q.lowercased()
         if t.hasPrefix("www.") { t.removeFirst(4) }
         guard !t.isEmpty, !t.contains(" "), !t.contains("/") else { return nil }
         let offered = keywords.filter(\.takesTab)
         if let exact = offered.first(where: { $0.keyword.lowercased() == t }) { return SiteSearch(exact) }
-        if let completion, let site = all.first(where: { $0.host == completion && $0.host.hasPrefix(t) }) { return site }
-        if let site = all.first(where: { $0.host.hasPrefix(t) }) { return site }
+        if let completion, let site = sites.first(where: { $0.host == completion && $0.host.hasPrefix(t) }) { return site }
+        if let site = sites.first(where: { $0.host.hasPrefix(t) }) { return site }
         guard t.count >= 2 else { return nil }
         return offered.first { $0.keyword.lowercased().hasPrefix(t) }.map(SiteSearch.init)
     }

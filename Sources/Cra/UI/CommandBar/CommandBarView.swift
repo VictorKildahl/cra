@@ -246,7 +246,7 @@ final class CommandBarView: NSView {
         if !notice.isHidden { notice.apply(tones: tones) }
         keycap.isHidden = offered == nil
         if let offered {
-            hint.stringValue = "Search \(offered.name)"
+            hint.stringValue = offered.hint
             hint.textColor = NSColor.labelColor.withAlphaComponent(0.33)
             keycapLabel.textColor = NSColor.labelColor.withAlphaComponent(0.67)
             keycap.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.04).cgColor
@@ -716,8 +716,10 @@ final class CommandBarRowView: NSView {
             trailing.font = .systemFont(ofSize: 13, weight: .medium)
             trailing.stringValue = s.trailing ?? ""
         }
-        arrowBox.isHidden = !isTab
-        arrow.isHidden = !isTab
+        // Arc's "Ask ChatGPT" row has the arrow tile too (#828).
+        let arrowed = isTab || s.id == "askChatGPT"
+        arrowBox.isHidden = !arrowed
+        arrow.isHidden = !arrowed
         trailing.textColor = selected ? .white : secondaryInk
         // Arc: the arrow (189,189,189) on a white-5 % tile; selected, the row's colour on a white tile.
         arrow.contentTintColor = selected ? highlight.withAlphaComponent(1) : (dark ? NSColor.white.withAlphaComponent(0.72) : NSColor.labelColor.withAlphaComponent(0.65))

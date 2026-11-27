@@ -168,7 +168,7 @@ public struct UsageStats: Codable, Equatable, Sendable {
     /// On/off, choice and number settings: the ones a report may name when they differ from the default.
     public static let reportedSettings: Set<String> = [
         "askOnPage", "autoArchive", "autoArchiveEnabled", "autoPictureInPicture", "backgroundTabsBelowCurrent", "adAwayEnabled", "anudeepEnabled", "personalFiltersEnabled", "blockCookieBanners",
-        "boostsEnabled", "calendarHoverPreview", "commandBarCurrentSpaceOnly", "calendarMeetingLink", "calendarTimeToNextMeeting", "chromeEngine",
+        "boostsEnabled", "calendarHoverPreview", "commandBarCurrentSpaceOnly", "calendarMeetingLink", "calendarTimeToNextMeeting", "chatGPTInCommandBar", "chromeEngine",
         "crashReports", "defaultLinkDestination", "edgeToEdgeContent", "editAddressInPlace", "favoriteLogoOutline", "favoritePreviews", "fingerprintingProtection", "fiveSecondPreviews",
         "folderPreviews", "hapticFeedbackOnReorder", "httpsOnly", "instantLinks", "keepInMenuBar", "littleWindowArchiveAfter",
         "littleWindowOnOptionCommandClick", "notionCalendarPreviews", "outlookCalendarPreviews", "outlookMailPreviews", "littleWindowShortcutEverywhere", "liveCalendar", "mediaLibraryEnabled", "newTabButtonAtTop", "newTabsAtTop",

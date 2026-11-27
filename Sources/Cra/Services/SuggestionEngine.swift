@@ -151,12 +151,20 @@ final class SuggestionEngine {
                 items.insert(contentsOf: searchSuggestions(query, after: items).prefix(Self.maxRows - at), at: at)
             }
         }
+        // Arc Max's ChatGPT in the Command Bar (#828): "Ask ChatGPT" for what is typed, third.
+        if ChatGPTCommandBar.offersAskRow(query: query, enabled: store.settings.chatGPTInCommandBar, looksLikeURL: Self.looksLikeURL(query)) {
+            let site = ChatGPTCommandBar.site
+            items.insert(Suggestion(id: "askChatGPT", kind: .search, title: query, subtitle: "", url: site.searchURL(query),
+                                    faviconKey: site.host, symbol: "magnifyingglass", trailing: ChatGPTCommandBar.ask, score: 0),
+                         at: ChatGPTCommandBar.askRowIndex(rowCount: items.count))
+        }
         // Rows are scored without their subtitles; only the ones listed get them (#617). The bar holds
         // Arc's MaxSuggestions and shows five, the rest a scroll away (#805).
         result.items = items.prefix(CommandBarRowWindow.maxSuggestions).map(finished)
         result.inlineCompletion = completion?.text
         result.scope = TabSearchScope.isOffered(by: query) ? .tabs
-            : SiteSearch.match(q, completion: completion?.text, keywords: engines.keywords).map(CommandBarScope.site)
+            : SiteSearch.match(q, completion: completion?.text, keywords: engines.keywords,
+                               sites: ChatGPTCommandBar.sites(enabled: store.settings.chatGPTInCommandBar)).map(CommandBarScope.site)
         return result
     }
 
@@ -165,7 +173,7 @@ final class SuggestionEngine {
         let query = rawQuery.trimmingCharacters(in: .whitespaces)
         var result = SuggestionResult(query: query)
         guard !query.isEmpty else { return result }
-        result.items = [Suggestion(id: "typed", kind: .search, title: query, subtitle: "Search \(site.name)", url: site.searchURL(query),
+        result.items = [Suggestion(id: "typed", kind: .search, title: query, subtitle: site.rowCaption ?? "", url: site.searchURL(query),
                                    faviconKey: nil, symbol: "magnifyingglass", trailing: nil, score: 1000)]
         return result
     }
@@ -789,6 +797,12 @@ enum CommandBarScope: Equatable {
         case .tabs: return TabSearchScope.name
         case .actions: return ActionSearchScope.name
         }
+    }
+
+    /// The hint at the field's end while Tab offers the scope: "Search YouTube", ChatGPT's "Ask ChatGPT" (#828).
+    var hint: String {
+        if case .site(let site) = self { return site.hint }
+        return "Search \(name)"
     }
 }
 

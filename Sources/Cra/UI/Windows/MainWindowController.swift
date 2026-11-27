@@ -5024,7 +5024,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             guard let self else { return }
             CraLog.note("command bar scope \(step): \(self.commandBar.scope?.name ?? "none"), fill \(self.commandHost.debugFill), "
-                + "panel \(self.commandHost.debugPanel)")
+                + "panel \(self.commandHost.debugPanel), placeholder \(self.commandBar.placeholder), "
+                + "hint \(self.commandBar.result.scope?.hint ?? "-")")
         }
     }
 
@@ -5457,6 +5458,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// `fromSidebarAddress`: a click on the sidebar's address, which opens Arc's panel hanging from it
     /// (#663); ⌘L and the rest keep the centred bar.
+    /// Arc's ⌥⌘G (gptMessage, #828): the ⌘T bar scoped to ChatGPT, or the plain bar with the switch off.
+    func newChatGPTMessage() {
+        openCommandBar(.newTab)
+        guard commandBar.isOpen, ChatGPTCommandBar.newMessage(enabled: store.settings.chatGPTInCommandBar) == .scopedToChatGPT else { return }
+        commandBar.openScoped(to: ChatGPTCommandBar.site)
+    }
+
     func openCommandBar(_ mode: CommandBarMode, fromSidebarAddress: Bool = false) {
         guard let window else { return }
         // The bar takes over from the sidebar's address field edited in place (#344).

@@ -4472,6 +4472,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             main.showToast("Copied Cra Info!")  // Arc's `basicInfoCopied` toast, "Copied Arc Info!"
         case "print": main.currentBrowser?.print()
         case "capturePage": main.capturePage()
+        case ChatGPTCommandBar.actionID: main.newChatGPTMessage()
         case "find": main.showFindBar()
         case "findNext": main.findNext(forward: true)
         case "findPrevious": main.findNext(forward: false)

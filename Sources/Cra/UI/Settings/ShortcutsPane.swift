@@ -305,6 +305,7 @@ enum ShortcutDescriptions {
         "closeWindow": "Close the current window.",
         "closeTab": "Close the current tab.",
         "capturePage": "Take a screenshot of the page.",
+        ChatGPTCommandBar.actionID: "Compose a ChatGPT message in the Command Bar.",
         "print": "Print the page.",
         "copyURL": "Copy the page’s URL.",
         "copyURLMarkdown": "Copy the page’s title and URL as a Markdown link.",
