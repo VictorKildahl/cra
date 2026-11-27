@@ -956,7 +956,7 @@
 #476   Tests/Scenarios/engine-host-closes-profile-stays.scenario  1ad6493ef44f
 #478   Packages/CraCore/Tests/CraCoreTests/BoostTests.swift::theDarkHueIsTheSmallHandle  8643a1494974
 #478   Packages/CraCore/Tests/CraCoreTests/BoostTests.swift::theSiteControlCenterListsTheSitesBoostsOnOrOff  7a97aab12e6b
-#478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::colorsMatchArcs  501e393ad819
+#478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::colorsMatchArcs  903e954067b0
 #478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::connectorNeverSwitchesPastHalfATurn  f2d50628fda8
 #478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::dragsPickHueClockwiseAndStrengthByDistance  9fda21ba2d34
 #478   Packages/CraCore/Tests/CraCoreTests/BoostWheelTests.swift::theSmallHandleMovesOnItsOwn  db0c93bea60f
