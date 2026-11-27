@@ -546,8 +546,10 @@ built release app with a test profile. Note anything that fails in the release's
   take a card up before the row lands: the row holds still under the held
   card, then settles on the card it was heading to once the card is let go or thrown away, also when
   a card thrown just before lands meanwhile (`aHeldRowResumesOnItsCardAfterAnEarlierThrowLands`). Catch the
-  row with a finger while it springs back from past either end: it stays under the finger. XCUITest
-  waits for the row to rest before its next gesture, so it can't stage either;
+  row with a finger while it springs back from past either end: it stays under the finger. Throw a card
+  up and flick the row before it has flown off: the row lands on the card the flick was heading for
+  (`aFlickStillLandsOnItsCardWhenAnEarlierThrowLeaves`). XCUITest
+  waits for the row to rest before its next gesture, so it can't stage any of these;
   `catchingTheRowPastAnEndHoldsItWhereItIs` covers the catch's arithmetic.
 
 - **The page under the bar (iOS 26):** on a TestFlight build on a real iPhone, open a long page with

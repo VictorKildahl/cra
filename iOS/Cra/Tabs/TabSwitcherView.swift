@@ -293,15 +293,22 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
             self.layoutCards()
             card.alpha = 0
         } completion: { _ in
+            // A row settling after a flick keeps its card and its speed across the gap.
+            let heading = self.settle.flatMap { self.row.cards.indices.contains(Int($0.target)) ? self.row.cards[Int($0.target)] : nil }
+            let speed = self.settle?.velocity(after: CACurrentMediaTime() - self.settleStart) ?? 0
             card.removeFromSuperview()
             if self.views[id] === card { self.views[id] = nil }
-            guard let gap = self.row.finishThrow(id, position: self.position) else { return }
+            guard let gap = self.row.finishThrow(id, position: self.position, heading: heading) else { return }
             self.stopSettling()
             self.position = gap.position
-            UIView.animate(withDuration: 0.45, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0,
-                           options: [.allowUserInteraction]) {
-                self.position = CGFloat(gap.settle)
-                self.layoutCards()
+            if heading != nil {
+                self.startSettling(to: gap.settle, velocity: speed)
+            } else {
+                UIView.animate(withDuration: 0.45, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0,
+                               options: [.allowUserInteraction]) {
+                    self.position = CGFloat(gap.settle)
+                    self.layoutCards()
+                }
             }
             self.delegate?.tabSwitcher(self, didClose: id)
         }

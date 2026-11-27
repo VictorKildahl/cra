@@ -1046,6 +1046,27 @@ struct MobileTabRowTests {
         #expect(row.resumeIndex(heading: ids[0], position: 2.7) == 2)
         #expect(row.resumeIndex(heading: ids[0], position: -0.4) == 0)
     }
+
+    /// A card thrown, then a flick before it has flown off: the row is between cards when the
+    /// card leaves. The gap took the card nearest where the row was, so a flick heading for the
+    /// third card, still at 1.1, landed on the second (Greptile on PR #882). It goes on to the
+    /// card it was heading for, at its new place, and the row keeps its speed.
+    @Test func aFlickStillLandsOnItsCardWhenAnEarlierThrowLeaves() {
+        let ids = Self.ids
+        var row = MobileTabRow(cards: ids)
+        row.startThrow(ids[0])
+        let flicked = row.finishThrow(ids[0], position: 1.1, heading: ids[2])
+        #expect(flicked?.settle == 1 && abs((flicked?.position ?? 0) - 0.1) < 0.0001)
+        // Without a flick under way the row closes the gap around the card in focus, as before.
+        var still = MobileTabRow(cards: ids)
+        still.startThrow(ids[0])
+        let held = still.finishThrow(ids[0], position: 1.1)
+        #expect(held?.settle == 0 && abs((held?.position ?? 0) - 0.1) < 0.0001)
+        // A settle reports its speed, so the row can carry on from it.
+        let settle = MobileTabCarousel.Settle(from: 1, velocity: 15, target: 2)
+        #expect(abs(settle.velocity(after: 0) - 15) < 0.0001)
+        #expect(settle.velocity(after: 0.05) < 15 && settle.velocity(after: 0.05) > 0)
+    }
 }
 
 struct MobilePageMenuTests {

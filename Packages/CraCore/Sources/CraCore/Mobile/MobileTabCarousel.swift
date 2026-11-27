@@ -163,6 +163,11 @@ public enum MobileTabCarousel {
             target - (target - from) * CGFloat(exp(-Double(rate) * time))
         }
 
+        /// Cards a second, towards the target.
+        public func velocity(after time: Double) -> CGFloat {
+            rate * (target - position(after: time))
+        }
+
         /// Within a two-thousandth of a card: under a fifth of a point.
         public func isDone(after time: Double) -> Bool {
             abs(position(after: time) - target) < 0.0005
@@ -214,8 +219,9 @@ public struct MobileTabRow: Equatable, Sendable {
 
     /// The thrown card has flown off and leaves the row, which is at `position`. A card gone
     /// from behind the focus leaves the focus on its card; the focused card hands it to the one
-    /// after it, or to the one before when it was the newest. Nil for a card not thrown.
-    public mutating func finishThrow(_ id: UUID, position: CGFloat) -> Gap? {
+    /// after it, or to the one before when it was the newest. A row on its way to card
+    /// `heading` after a flick still goes there, at its new place. Nil for a card not thrown.
+    public mutating func finishThrow(_ id: UUID, position: CGFloat, heading: UUID? = nil) -> Gap? {
         guard thrown.remove(id) != nil, let index = cards.firstIndex(of: id) else { return nil }
         cards.remove(at: index)
         var position = position
@@ -224,6 +230,7 @@ public struct MobileTabRow: Equatable, Sendable {
             target -= 1
             position -= 1
         }
+        if let heading, let place = cards.firstIndex(of: heading) { target = CGFloat(place) }
         return Gap(position: position, settle: Int(min(max(0, target), CGFloat(max(0, cards.count - 1)))))
     }
 
