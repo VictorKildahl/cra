@@ -147,21 +147,6 @@ struct MobilePageSwipeTests {
         #expect(MobilePageSwipe.liftsPicture(settled: true, sinceNavigated: 1.5, sinceDrawn: nil))
     }
 
-    /// The page Back went to goes back where it was left, under the app's own inset at its top, within the document:
-    /// at its top it sits a status bar down, as it was, not under the status bar where WebKit put it.
-    @Test func thePageGoesBackWhereItWasLeft() {
-        func offset(_ top: CGFloat, content: CGFloat = 3000) -> CGFloat {
-            MobilePageSwipe.restoredOffset(scrollTop: top, insetTop: 59, insetBottom: 76, contentHeight: content, viewHeight: 932)
-        }
-        #expect(offset(0) == -59)
-        #expect(offset(400) == 341)
-        // No further than the document's end, with the bar's inset under it...
-        #expect(offset(5000) == CGFloat(2144))
-        // ...and a page shorter than the screen stays at its top.
-        #expect(offset(300, content: 500) == -59)
-        #expect(offset(-20) == -59)
-    }
-
     /// Arc Search's magnet going Back: the page holds back at 0.28 of the finger's way, lets go once (and only once)
     /// when it has come 21 pt, the finger 75 pt in, catches up within a few frames, and follows the finger from there.
     @Test func theMagnetHoldsThePageThenLetsGo() {

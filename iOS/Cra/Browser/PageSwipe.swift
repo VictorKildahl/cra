@@ -39,8 +39,6 @@ final class PageSwipeStage: NSObject {
     var tab: MobileTab?
     /// The tab button's front card, which a closing tab's card comes out of, and whether its slot was emptied.
     var buttonCard: CGRect = .zero
-    /// How far down its document the page Back or Forward goes to was when it was left.
-    var arrivingScrollTop: CGFloat?
     var emptiedButton = false
     /// The live page is hidden behind the closing tab's cards.
     var hidPage = false
@@ -176,12 +174,8 @@ extension BrowserViewController {
         let list = page.webView.backForwardList
         var image: UIImage?
         switch reveal {
-        case .back:
-            image = list.backItem.flatMap(page.historyPicture(for:))
-            stage.arrivingScrollTop = list.backItem.flatMap(page.historyScrollTop(for:))
-        case .forward:
-            image = list.forwardItem.flatMap(page.historyPicture(for:))
-            stage.arrivingScrollTop = list.forwardItem.flatMap(page.historyScrollTop(for:))
+        case .back: image = list.backItem.flatMap(page.historyPicture(for:))
+        case .forward: image = list.forwardItem.flatMap(page.historyPicture(for:))
         case .closingTab:
             stage.tab = store.tabShownAfterArchiving(page.tabID)
             image = stage.tab.flatMap { store.snapshot($0.id) }
@@ -550,22 +544,8 @@ extension BrowserViewController {
             }
             return
         }
-        putBackScroll(stage)
         tracePageSwipe(String(format: "lifted after %.0f ms", (now - navigatedAt) * 1000))
         endPageSwipe()
-    }
-
-    /// WebKit puts the page Back or Forward went to back without the insets the app sets itself
-    /// (`updatePageInsets`), a status bar higher than it was left: under its picture, it goes back where the picture
-    /// shows it, so nothing jumps as the picture comes off.
-    private func putBackScroll(_ stage: PageSwipeStage) {
-        guard let top = stage.arrivingScrollTop, let scroll = shownPage?.webView.scrollView else { return }
-        let offset = MobilePageSwipe.restoredOffset(scrollTop: top, insetTop: scroll.contentInset.top,
-                                                    insetBottom: scroll.contentInset.bottom,
-                                                    contentHeight: scroll.contentSize.height, viewHeight: scroll.bounds.height)
-        guard abs(scroll.contentOffset.y - offset) > 1 else { return }
-        tracePageSwipe(String(format: "scroll put back from %.0f to %.0f", scroll.contentOffset.y, offset))
-        scroll.contentOffset.y = offset
     }
 
     /// Takes everything of the swipe off the screen and gives the page back its place.

@@ -13,8 +13,6 @@ final class HistoryPictures {
     private struct Entry {
         weak var item: WKBackForwardListItem?
         let picture: UIImage
-        /// How far down its document the page was scrolled when the picture was taken.
-        let scrollTop: CGFloat
     }
 
     private var entries: [ObjectIdentifier: Entry] = [:]
@@ -26,7 +24,7 @@ final class HistoryPictures {
                                                                object: nil, queue: .main) { [weak self] _ in self?.removeAll() }
     }
 
-    func picture(for item: WKBackForwardListItem) -> (picture: UIImage, scrollTop: CGFloat)? {
+    func picture(for item: WKBackForwardListItem) -> UIImage? {
         let key = ObjectIdentifier(item)
         guard let entry = entries[key] else { return nil }
         guard entry.item === item else {
@@ -34,14 +32,14 @@ final class HistoryPictures {
             return nil
         }
         order.touch(key)
-        return (entry.picture, entry.scrollTop)
+        return entry.picture
     }
 
-    func keep(_ picture: UIImage, scrollTop: CGFloat, for item: WKBackForwardListItem) {
+    func keep(_ picture: UIImage, for item: WKBackForwardListItem) {
         // Items freed since (a closed tab, history cut off by a new navigation) make room first.
         for (key, entry) in entries where entry.item == nil { forget(key) }
         let key = ObjectIdentifier(item)
-        entries[key] = Entry(item: item, picture: picture, scrollTop: scrollTop)
+        entries[key] = Entry(item: item, picture: picture)
         for dropped in order.touch(key) { entries[dropped] = nil }
     }
 

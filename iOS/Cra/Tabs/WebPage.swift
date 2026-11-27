@@ -272,18 +272,13 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
     /// The picture kept of a history item, for the page swipe to show under the page and over the
     /// web view until the page it goes to has drawn (`HistoryPictures`).
     func historyPicture(for item: WKBackForwardListItem) -> UIImage? {
-        HistoryPictures.shared.picture(for: item)?.picture
-    }
-
-    /// How far down its document the page was scrolled when its picture was kept.
-    func historyScrollTop(for item: WKBackForwardListItem) -> CGFloat? {
-        HistoryPictures.shared.picture(for: item)?.scrollTop
+        HistoryPictures.shared.picture(for: item)
     }
 
     /// Keeps the page as it is on screen as the picture of the current history item. It draws what
     /// is already on screen, at 2× at most, without asking for a redraw, so it costs next to nothing
     /// as the page is left. It draws the page's container, the band the app puts behind the status
-    /// bar included, as the page looks when it comes back; only while the page is at rest there, not
+    /// bar included, as the page looks when it comes back; only while that container is at rest, not
     /// pushed back behind the search sheet or carried by a swipe, where the picture would be of
     /// something else. A web view that isn't on screen draws black or nothing, and that capture is
     /// dropped rather than shown as the page.
@@ -295,8 +290,7 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         }
         let page: UIView = webView.superview ?? webView
         let bounds = page.bounds
-        guard webView.window != nil, bounds.width >= 1, bounds.height >= 1, page.transform == .identity,
-              webView.frame.origin == .zero else { return }
+        guard webView.window != nil, bounds.width >= 1, bounds.height >= 1, page.transform == .identity else { return }
         let format = UIGraphicsImageRendererFormat.preferred()
         format.scale = min(format.scale, 2)
         format.opaque = true
@@ -306,12 +300,10 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
         keepPicture(picture)
     }
 
-    /// Keeps `picture`, the page as it is on screen now, for the current history item, with how far down its
-    /// document it is scrolled.
+    /// Keeps `picture`, the page as it is on screen now, for the current history item.
     func keepPicture(_ picture: UIImage) {
         guard let item = webView.backForwardList.currentItem, !picture.looksBlank else { return }
-        let scroll = webView.scrollView
-        HistoryPictures.shared.keep(picture, scrollTop: scroll.contentOffset.y + scroll.contentInset.top, for: item)
+        HistoryPictures.shared.keep(picture, for: item)
     }
 
     /// Lets a main-frame navigation go ahead, then keeps the picture of the page it leaves: that
@@ -321,8 +313,10 @@ final class WebPage: NSObject, WKNavigationDelegate, WKUIDelegate, UIScrollViewD
                                 decisionHandler: (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
         decisionHandler(.allow, preferences)
         // Back and Forward are left out: WebKit may already count the page gone to as the current item, which would
-        // file this page's picture under it, and the swipe keeps the page's picture as it starts anyway.
-        guard navigationAction.targetFrame?.isMainFrame == true, navigationAction.navigationType != .backForward,
+        // file this page's picture under it, and the swipe keeps the page's picture as it starts anyway. So is a
+        // reload, which leaves the page where it is (and a pull to refresh has it pulled down as it starts).
+        guard navigationAction.targetFrame?.isMainFrame == true,
+              navigationAction.navigationType != .backForward, navigationAction.navigationType != .reload,
               let target = navigationAction.request.url,
               !MobileHistoryPictures.isFragmentJump(from: webView.url?.absoluteString, to: target.absoluteString) else { return }
         keepPictureOfCurrentItem()

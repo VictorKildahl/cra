@@ -246,16 +246,6 @@ public enum MobilePageSwipe {
         width + width * cardScale(width: width) / 2
     }
 
-    /// Where the page Back or Forward went to belongs, as a scroll view offset: `scrollTop` down its document, as it
-    /// was left, with the app's own `insetTop` above it, and no further than the document goes. WebKit puts such a page
-    /// back without the insets the app sets itself, a status bar higher than its picture shows it.
-    public static func restoredOffset(scrollTop: CGFloat, insetTop: CGFloat, insetBottom: CGFloat, contentHeight: CGFloat,
-                                      viewHeight: CGFloat) -> CGFloat {
-        let lowest = -insetTop
-        let highest = max(lowest, contentHeight + insetBottom - viewHeight)
-        return min(highest, max(lowest, scrollTop - insetTop))
-    }
-
     // MARK: After letting go
 
     /// The arriving page's picture stays over the live page until that has drawn, and no longer than this: a page

@@ -166,8 +166,8 @@ final class PageGestureTests: BrowserTestCase {
         XCTAssertTrue(lines.contains("went back"))
         sleep(2)
         XCTAssertTrue(swipeTrace().contains { $0.hasPrefix("lifted after ") }, "the picture came off once the page drew")
-        // The page is back where it was, as its picture showed it: WebKit put it back a status bar higher, under the
-        // band, since the app sets the page's insets itself.
+        // The page is back where it was, as its picture showed it, so nothing jumps as the picture gives way. (Before
+        // the page began under the status band, WebKit put it back a status bar higher than that.)
         XCTAssertEqual(app.webViews.staticTexts["Swipe First"].frame.minY, heading, accuracy: 2,
                        "the page came back where it was left")
         keep("back")
