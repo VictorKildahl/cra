@@ -244,6 +244,10 @@ final class BlockLists {
             let candidate = AcceptedFilters(domains: CustomBlocklist.merged([base] + sources.map(\.domains)),
                                             hiding: adRegions + sources.flatMap(\.hidingRules),
                                             rules: useNetwork ? DesktopNetworkRules.compile(domains: hosts, lines: lines) : [])
+            // WebKit pages get the same network rules as content-blocker lists (WebKitContentBlocking). Chromium's
+            // limit of 30,000 isn't WebKit's, so they get the whole selection, on the CEF engine too.
+            let webKitLists = WebKitContentRules.build(from: useNetwork ? candidate.rules : DesktopNetworkRules.compile(
+                domains: lines.isEmpty ? candidate.domains : CustomBlocklist.merged([base] + sources.map(\.plainDomains)), lines: lines))
             var active = candidate
             var notice: String?
             let count = candidate.rules.count
@@ -282,6 +286,7 @@ final class BlockLists {
                 self.procedural = procedural
                 styles.removeAllObjects()
                 FilterPageScripts.install(table: scriptletTable)
+                WebKitContentBlocking.shared.set(webKitLists.lists, rules: webKitLists.rules)
                 hidingChanged?()
             }
             let rules = active.rules

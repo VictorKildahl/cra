@@ -13,10 +13,11 @@ import WebKit
 /// WebKit's own API. What WebKit can't do answers an error, and each caller already has a path
 /// for that (a page Chromium can't discard closes instead, for one).
 ///
-/// Not here: Chrome extensions (WebKit pages have none), Chromium's site settings, content
-/// blocking and HTTPS-Only (Chromium's network stack), Chrome's DevTools (WebKit's Web Inspector
-/// opens instead). Cookies are WebKit's own, per profile (WebKitStores): a service is signed into
-/// once more the first time it opens here.
+/// Not here: Chrome extensions (WebKit pages have none), Chromium's site settings and HTTPS-Only
+/// (Chromium's network stack), Chrome's DevTools (WebKit's Web Inspector opens instead). Ad
+/// blocking is WebKit's own content blocker, given Cra's lists (WebKitContentBlocking). Cookies
+/// are WebKit's own, per profile (WebKitStores): a service is signed into once more the first
+/// time it opens here.
 final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     private let container: NSView
     private(set) var webView: CraWebView?
@@ -58,6 +59,10 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
     private var findCount = 0
     private var findIndex = 0
     private var messages: ScriptMessageProxy?
+    /// The ad-blocking lists in the page now (WebKitContentBlocking).
+    private var installedRules: [WKContentRuleList] = []
+    /// ProtectedVideoHandoff's seek, kept for the page's scripts when they are installed again.
+    private var resumeScript: String?
     /// Downloads in flight, with their info for the sidebar.
     private var downloads: [ObjectIdentifier: (download: WKDownload, info: CraDownloadInfo, progress: NSKeyValueObservation?)] = [:]
     private static var nextDownloadID: UInt32 = 0x7000_0000
@@ -129,14 +134,16 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         }
         // A popup's configuration is its opener's copy: it gets its own scripts and handler.
         let content = WKUserContentController()
-        content.addUserScript(WKUserScript(source: PageScript.mediaSessionWrapper + PageScript.mainWorld, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
-        content.addUserScript(WKUserScript(source: PageScript.isolatedWorld + Self.isolatedAddOn, injectionTime: .atDocumentStart,
-                                           forMainFrameOnly: false, in: Self.world))
         if let resume, given == nil {
             let until = (Date().timeIntervalSince1970 + 60) * 1000
-            content.addUserScript(WKUserScript(source: ProtectedVideoHandoff.seekScript(url: resume.url, seconds: resume.seconds, until: until),
-                                               injectionTime: .atDocumentStart, forMainFrameOnly: true, in: Self.world))
+            resumeScript = ProtectedVideoHandoff.seekScript(url: resume.url, seconds: resume.seconds, until: until)
         }
+        addUserScripts(to: content)
+        // Ad blocking (WebKitContentBlocking): the lists go in before the first load; each main-frame navigation
+        // decides again for its site (decidePolicyFor).
+        installedRules = WebKitContentBlocking.shared.lists(for: URL(string: pendingURL))
+        installedRules.forEach(content.add)
+        WebKitContentBlocking.shared.register(self)
         let proxy = ScriptMessageProxy(owner: self)
         content.add(proxy, contentWorld: Self.world, name: "cra")
         messages = proxy
@@ -163,6 +170,39 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
         created = true
         observe(web)
         if audioMuted { setAudioMuted(true) }
+    }
+
+    /// The page world's script (PageScript's, with the filter lists' scriptlets, FilterPageScripts) and Cra's world's.
+    @MainActor
+    private func addUserScripts(to content: WKUserContentController) {
+        content.addUserScript(WKUserScript(source: PageScript.mediaSessionWrapper + FilterPageScripts.mainWorld, injectionTime: .atDocumentStart,
+                                           forMainFrameOnly: false, in: .page))
+        content.addUserScript(WKUserScript(source: PageScript.isolatedWorld + Self.isolatedAddOn, injectionTime: .atDocumentStart,
+                                           forMainFrameOnly: false, in: Self.world))
+        if let resumeScript {
+            content.addUserScript(WKUserScript(source: resumeScript, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: Self.world))
+        }
+    }
+
+    /// The filter lists' scriptlets changed: the page's next document runs the new ones, as a Chromium page's does.
+    func reinstallUserScripts() {
+        MainActor.assumeIsolated {
+            guard let content = webView?.configuration.userContentController, !closed else { return }
+            content.removeAllUserScripts()
+            addUserScripts(to: content)
+        }
+    }
+
+    /// The ad-blocking lists for the page's site (`url`, or the page's own address): none where it's paused.
+    func applyContentRules(for url: URL? = nil) {
+        MainActor.assumeIsolated {
+            guard let content = webView?.configuration.userContentController, !closed else { return }
+            let wanted = WebKitContentBlocking.shared.lists(for: url ?? webView?.url ?? URL(string: pendingURL))
+            guard wanted.map(\.identifier) != installedRules.map(\.identifier) else { return }
+            content.removeAllContentRuleLists()
+            wanted.forEach(content.add)
+            installedRules = wanted
+        }
     }
 
     /// The popup WebKit opens for window.open in an opener page: it must be a web view made with
@@ -366,7 +406,14 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
             AppLinkPrompt.handle(url.absoluteString, from: self, userGesture: asks)
             return decisionHandler(.cancel, preferences)
         }
-        guard action.navigationType == .linkActivated else { return decisionHandler(.allow, preferences) }
+        // The site's ad blocking, before its page loads: a paused site loads without the lists. Only for a load that
+        // goes ahead here (not a link that opens in a new tab, a Peek or a split).
+        let mainFrame = action.targetFrame?.isMainFrame ?? true
+        let allow = { [weak self] in
+            if mainFrame, ["http", "https"].contains(scheme) { self?.applyContentRules(for: url) }
+            decisionHandler(.allow, preferences)
+        }
+        guard action.navigationType == .linkActivated else { return allow() }
         let s = url.absoluteString
         let mods = action.modifierFlags
         // ⌘-click and middle-click: a new tab, in the background unless ⇧ is down too (Chrome).
@@ -374,7 +421,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
             delegate?.browser(self, requestsNewTabWithURL: s, inBackground: !mods.contains(.shift))
             return decisionHandler(.cancel, preferences)
         }
-        guard action.targetFrame?.isMainFrame ?? true else { return decisionHandler(.allow, preferences) }
+        guard mainFrame else { return allow() }
         // Arc's Peek, and Shift-click (Chrome's new window).
         if delegate?.browser?(self, opensPeekForURL: s, shiftClick: mods.contains(.shift), newTab: false) == true {
             return decisionHandler(.cancel, preferences)
@@ -383,7 +430,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
             delegate?.browser(self, requestsNewTabWithURL: s, inBackground: false)
             return decisionHandler(.cancel, preferences)
         }
-        decisionHandler(.allow, preferences)
+        allow()
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
@@ -1163,6 +1210,7 @@ final class WebKitBrowser: CraBrowser, WKNavigationDelegate, WKUIDelegate, WKDow
                 web.uiDelegate = nil
                 web.configuration.userContentController.removeAllScriptMessageHandlers()
                 web.configuration.userContentController.removeAllUserScripts()
+                web.configuration.userContentController.removeAllContentRuleLists()
                 web.owner = nil
                 takeDown(web)
             }

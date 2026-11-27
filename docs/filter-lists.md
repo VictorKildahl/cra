@@ -46,6 +46,10 @@ YouTube's in-stream ads arrive inside the page's own player data, and X and Inst
 
 Lists' `!#if env_chromium` blocks are read; blocks for uBlock Origin itself, AdGuard or Safari are not. Pausing a site stops its scriptlets and procedural hiding as well, from the page's next load. Pages that are already open run new or changed rules from their next load.
 
+## Pages in Safari's engine
+
+Pages that open in WebKit (the protected-media services, and sites switched to Safari's engine) block with the same lists. Their network rules go to WebKit as content-blocker lists, which WebKit compiles once per change and keeps between launches. WebKit has no 30,000-rule limit, so these pages get the whole selection; a selection over 70,000 rules is split into several lists. Scriptlets, element hiding and procedural hiding run there as on Chromium pages, and **Ad Blocking** in the site menu pauses a WebKit page's site too. Redirect rules don't apply in WebKit. [Details](protected-media.md#ad-blocking)
+
 ## Pause on a website
 
 **Ad Blocking** in the site menu (the address bar's site button) stores a choice for the exact host across ports and HTTP/HTTPS. Switch it back on to remove the exception. Reload the page after changing it so previously blocked resources and embedded frames load with the new settings. It covers the native domain lists, subscription and personal rules, element hiding and the built-in cookie-banner filter. Connection security and fingerprinting protection have separate settings. The exceptions are browser settings shared across profiles and can be included in settings sync.
