@@ -49,7 +49,7 @@ extension SecureDNS {
             return "Hostnames are looked up over an encrypted connection to \(to). If it can’t be reached, pages don’t load."
         default:
             if servers.isEmpty {
-                return "Automatic uses the network’s own resolver, encrypted when it supports it. Names only a work network knows keep working."
+                return "System DNS uses the network’s own resolver, encrypted when it supports it. Names only a work network knows keep working."
             }
             return "Hostnames are looked up over an encrypted connection to \(to) when it answers, else by the network’s own resolver."
         }
