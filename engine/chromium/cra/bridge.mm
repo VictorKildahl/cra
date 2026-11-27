@@ -256,6 +256,8 @@ std::string UTF8(NSString* s) {
 NSString* g_cache_path = nil;
 NSString* g_log_path = nil;
 NSString* g_locale = nil;
+// Features Cra turns on for the Mac it runs on (ChromiumStartFeatures, +setEnabledFeatures:).
+NSArray<NSString*>* g_start_features = nil;
 BOOL g_mock_keychain = NO;
 NSArray<NSString*>* g_extension_paths = nil;
 // Page.addScriptToEvaluateOnNewDocument params every page gets once it exists (setDocumentStartScript:…).
@@ -4186,6 +4188,10 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
   [g_ready_blocks addObject:[block copy]];
 }
 
++ (void)setEnabledFeatures:(NSArray<NSString*>*)features {
+  g_start_features = [features copy];
+}
+
 + (void)runMessageLoop {
   NSArray<NSString*>* given = NSProcessInfo.processInfo.arguments;
   std::vector<std::string> args;
@@ -4242,6 +4248,9 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
   // CraEngineMain adds AperitifHelpers to this one.
   std::vector<std::string> enabled = {"ForceWebRequestProxyForTest", "WebContentsDiscard", "InfiniteTabsFreezing",
                                       "VideoPipForceTrustedForMediaPlaybackForTesting", "HideDelegatedFrameHostMac"};
+  for (NSString* name in g_start_features) {
+    enabled.push_back(UTF8(name));
+  }
   std::erase_if(enabled, [&](const std::string& name) { return std::ranges::contains(givenDisabled, name); });
   enabled.insert(enabled.end(), givenEnabled.begin(), givenEnabled.end());
   for (const std::string& name : givenDisabled) {

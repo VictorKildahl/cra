@@ -571,6 +571,9 @@ CRA_EXPORT @interface CraCEFRuntime : NSObject
                            locale:(nullable NSString *)locale
                    useChromeStyle:(BOOL)useChromeStyle
                   useMockKeychain:(BOOL)useMockKeychain;
+/// Chromium features to turn on at start beside the engine's own (ChromiumStartFeatures), set before
+/// -runMessageLoop. The CEF bridge ignores them.
++ (void)setEnabledFeatures:(NSArray<NSString *> *)features;
 /// Runs the Chromium-integrated AppKit run loop. Returns after -quitMessageLoop.
 + (void)runMessageLoop;
 /// Runs `block` once Chromium is up and before the app finishes launching: at once with CEF (initialize

@@ -1877,8 +1877,10 @@
 #845   Tests/Scenarios/filter-page-scripts.scenario  f05e33d47933
 #847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onePasswordInstalledGetsItsManifestWithoutAnImport  6cd3a3b215da
 #847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onlyWhenInstalledAndNotAlreadyThere  1698d6458511
+#848   Packages/CraCore/Tests/CraCoreTests/ChromiumStartFeaturesTests.swift::macOS27TurnsChromesOcclusionCheckerOff  0b3e301e3c0e
 #848   Packages/CraCore/Tests/CraCoreTests/LittlePageHealthTests.swift::aPageInSightThatDoesntDrawIsStuck  2ca42b58241f
 #848   Tests/Scenarios/little-window-page-shows.scenario  57ca74a564c1
+#848   Tests/Scenarios/macos27-occlusion-shutoff.scenario  da9973da61f6
 #849   Packages/CraCore/Tests/CraCoreTests/BlockListCountsTests.swift::countsShowAndBigDomainListsStayUnderChromiumsLimit  d0a73cb6d7df
 #850   Tests/CaptureOverlayTests.swift::checkArcsColours  d24cf6ec4814
 #851   Packages/CraCore/Tests/CraCoreTests/CaptureEditorLayoutTests.swift::bigCapturesFitAndSmallOnesHoldTheToolbar  74f1fc7c5309
