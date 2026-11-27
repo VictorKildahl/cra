@@ -32,7 +32,7 @@ final class BottomBar: UIView {
     private let incognitoTint = UIView()
     /// The drawer's grey haze over the material in dark mode (`MobileNewTabDrawer.haze`).
     private let drawerHaze = UIView()
-    /// The drawer's hairline edge, a shade lighter than its fill.
+    /// The drawer's hairline edge, in the bar's edge grey (`Palette.barEdge`).
     private let drawerEdge = UIView()
     /// The white ring Arc Search draws round the menu button while its blocker tip points at it.
     private let menuRing = UIView()
@@ -194,7 +194,7 @@ final class BottomBar: UIView {
         drawerEdge.backgroundColor = .clear
         drawerEdge.alpha = 0
         drawerEdge.layer.borderWidth = 0.5
-        drawerEdge.layer.borderColor = Palette.barEdge.resolvedColor(with: traitCollection).cgColor
+        applyEdgeColour()
         addSubview(drawerEdge)
         configureDrawerSurface(drawerEdge)
         tabsButton.accessibilityIdentifier = "bar-tabs"
@@ -224,9 +224,13 @@ final class BottomBar: UIView {
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (bar: BottomBar, _) in
             bar.applyPageChrome()
             bar.applyDrawer()
-            // A layer colour, resolved for the new appearance.
-            bar.drawerEdge.layer.borderColor = Palette.barEdge.resolvedColor(with: bar.traitCollection).cgColor
+            bar.applyEdgeColour()
         }
+    }
+
+    /// The drawer edge's border is a layer colour, resolved for the bar's appearance.
+    private func applyEdgeColour() {
+        drawerEdge.layer.borderColor = Palette.barEdge.resolvedColor(with: traitCollection).cgColor
     }
 
     /// The controls' opacity, faded as the bar slides away, and whether they take touches. The

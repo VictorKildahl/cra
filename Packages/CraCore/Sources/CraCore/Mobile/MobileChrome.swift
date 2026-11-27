@@ -184,9 +184,9 @@ public enum MobileSearchSheet {
         public var isFrosted: Bool { self != .standard }
 
         /// How much white the field lays over its material, so it reads a shade lighter than the
-        /// drawer behind it, still see-through, over a light page or a dark one. Over the tab
-        /// switcher it is 0.06, whatever the app's appearance. Incognito's
-        /// dark field is the material alone. Nil keeps the sheet's own field colour.
+        /// drawer behind it, still see-through: over a light page or a dark one, and over the tab
+        /// switcher one value whatever the app's appearance. Incognito's dark field is the
+        /// material alone. Nil keeps the sheet's own field colour.
         public func whiteLift(incognito: Bool, overTabRow: Bool = false) -> CGFloat? {
             switch self {
             case .standard: nil

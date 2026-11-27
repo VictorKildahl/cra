@@ -91,12 +91,12 @@ final class SearchSheet: UIView, UITextFieldDelegate, UIScrollViewDelegate {
     /// a light page, and a softer one over a dark page.
     typealias FieldStyle = MobileSearchSheet.FieldStyle
 
-    /// How the open address field sits on the drawer.
     /// The drawer is grown over the tab switcher, where its field takes its own lift.
     var fieldOverTabRow: Bool {
         get { fieldBackground.overTabRow }
         set { fieldBackground.overTabRow = newValue }
     }
+    /// How the open address field sits on the drawer.
     var fieldStyle: FieldStyle = .standard {
         didSet {
             guard fieldStyle != oldValue else { return }
