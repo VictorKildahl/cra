@@ -1911,6 +1911,11 @@
 #869   Tests/BrowserManagerLifecycleTests.swift::boostAfterLateAddressCase  5bebee9b1ade
 #869   Tests/BrowserManagerLifecycleTests.swift::boostAfterRedirectCase  ab4f48434aa9
 #869   Tests/Scenarios/boost-linked-pages.scenario  97187a77dc15
+#870   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::aFavoriteClosedWithCmdWIsNotSomewhereToGoBackTo  2f567704e1c8
+#870   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::repeatedCmdWOnFavoritesWalksBackThroughTheOnesVisitedBefore  066a8833c6ab
+#870   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::shownTabsKeepsEachTabOnceNewestFirst  ba079f79128d
+#870   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::theWalkSkipsWhatIsNotOpen  ef546e417a9e
+#870   Tests/Scenarios/favorite-close-walks-back.scenario  645dbb578cab
 #876   Tests/Scenarios/sidebar-title-row.scenario  78019136ff4e
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::eachNewPlaceTicks  d514287a15c2
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::nowhereIsSilentAndComingBackTicks  b0622ee05ea5

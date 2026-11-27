@@ -66,6 +66,8 @@ final class SidebarStore {
     /// Per window, the tab shown before the selected one: a close goes back to it (CloseSuccessor).
     /// Not saved: after a relaunch it has no page, so Arc wouldn't go back to it either.
     @ObservationIgnored private var previousTab: [UUID: UUID] = [:]
+    /// Per window, every tab it showed before, newest first: a Favorite's ⌘W walks back through them (#870).
+    @ObservationIgnored private var shownTabs: [UUID: ShownTabs<UUID>] = [:]
     /// Per window and space, the pinned row a collapsed pinned section keeps in sight (PinnedPeek).
     /// Not saved, like Arc's peekedPinnedSidebarItemID. Observed: the collapsed list draws it.
     private var pinnedPeeks: [UUID: [UUID: UUID]] = [:]
@@ -287,7 +289,10 @@ final class SidebarStore {
         // Whatever changes what the window shows (a pick, a close, a space switch), the tab it
         // showed is the one a close goes back to (CloseSuccessor; Arc counts space switches too).
         let shown = { (s: WindowSession) in s.focusedSpaceID.flatMap { s.selectedTabPerSpace[$0] } }
-        if shown(w) != shown(prefs.windows[i]) { previousTab[w.id] = shown(prefs.windows[i]) }
+        if shown(w) != shown(prefs.windows[i]) {
+            previousTab[w.id] = shown(prefs.windows[i])
+            if let left = shown(prefs.windows[i]) { shownTabs[w.id, default: ShownTabs()].left(left) }
+        }
         // A pinned tab coming on screen is the one its collapsed section keeps in sight; a
         // favorite or a Today tab leaves the one before (Arc's peekedPinnedSidebarItemID).
         var peeks = pinnedPeeks[w.id] ?? [:]
@@ -1067,6 +1072,7 @@ final class SidebarStore {
         for (id, _) in spaces where !isStandalone(space: id) { invalidateTidySpace(id); spaces[id] = nil }
         storedThemes = [:]
         previousTab = [:]
+        shownTabs = [:]
         for s in doc.spaces { spaces[s.id] = s }
         profiles = doc.profiles ?? []
         defaultProfileName = doc.defaultProfileName
@@ -1708,6 +1714,7 @@ final class SidebarStore {
             }
             prefs.windows = windows
             for (w, tid) in previousTab { if let r = replaced[tid] { previousTab[w] = r } }
+            for w in shownTabs.keys { for (old, new) in replaced { shownTabs[w]?.replace(old, with: new) } }
         }
         if changed { touch() }
     }
@@ -2343,7 +2350,23 @@ final class SidebarStore {
     /// tabs while `id` is still among them, empty for a pinned tab.
     private func closeSuccessor(of id: UUID, in sid: UUID, window w: UUID, list: [UUID]) -> UUID? {
         let back = previousTab[w].flatMap { isInSpace($0, sid) ? $0 : nil }
-        return CloseSuccessor.next(closing: id, previous: back, hasPage: hasPage, list: list)
+        return CloseSuccessor.next(closing: id, previous: back, hasPage: isOpenToGoBackTo, list: list)
+    }
+
+    /// A tab a close can go back to: loaded, and not a Favorite closed with ⌘W, whose page runs on (#740, #870).
+    private func isOpenToGoBackTo(_ id: UUID) -> Bool {
+        CloseSuccessor.counts(hasPage: hasPage(id), closedWithCmdW: favoritesClosedWithCmdW.contains(id))
+    }
+
+    /// A Favorite ⌘W deselected while selected (#740, #804): the tab to show instead, walking back through the tabs the
+    /// window showed before, so repeated ⌘W goes F3 → F2 → F1 as in Arc, not back and forth (#870). Call it after the
+    /// Favorite's panes are in `favoritesClosedWithCmdW`.
+    func closeSuccessor(ofDeselectedFavorite id: UUID, window w: UUID) -> UUID? {
+        guard let sid = spaceID(ofItem: id, window: w) else { return nil }
+        return CloseSuccessor.afterDeselectedFavorite(closing: id, isSplit: splitContaining(id) != nil,
+                                                      shownBefore: shownTabs[w]?.newestFirst ?? []) {
+            items[$0]?.isTab == true && isInSpace($0, sid) && isOpenToGoBackTo($0)
+        }
     }
 
     /// A pinned tab, favorite or pinned split closed (unloaded) while selected: the tab to show
@@ -2351,7 +2374,7 @@ final class SidebarStore {
     func closeSuccessor(ofPinned id: UUID, window w: UUID) -> UUID? {
         guard let sid = spaceID(ofItem: id, window: w) else { return nil }
         let back = previousTab[w].flatMap { isInSpace($0, sid) ? $0 : nil }
-        return CloseSuccessor.afterPinned(closing: id, isSplit: splitContaining(id) != nil, previous: back, hasPage: hasPage)
+        return CloseSuccessor.afterPinned(closing: id, isSplit: splitContaining(id) != nil, previous: back, hasPage: isOpenToGoBackTo)
     }
 
     @discardableResult

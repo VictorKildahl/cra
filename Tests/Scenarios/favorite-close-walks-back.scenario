@@ -1,0 +1,38 @@
+# promise: #870
+# ⌘W again and again on Favorites goes back through the ones visited before, newest first, as in Arc: F1, F2, F3 opened
+# in turn, then ⌘W three times shows F2, F1, then nothing. 0.1.58 went F3 → F2 → F3: a Favorite closed with ⌘W keeps
+# its page (#740), so it still counted as the tab shown before. CloseSuccessor.afterDeselectedFavorite walks
+# SidebarStore's per-window ShownTabs and skips Favorites closed with ⌘W (favoritesClosedWithCmdW, as ⌃Tab does, #784).
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+cra://open?url=${PAGE}?n=fav1
+expect-log n=fav1 HTTP
+wait 1
+cra://action/favoriteTab
+wait 1
+cra://open?url=${PAGE}?n=fav2
+expect-log n=fav2 HTTP
+wait 1
+cra://action/favoriteTab
+wait 1
+cra://open?url=${PAGE}?n=fav3
+expect-log n=fav3 HTTP
+wait 1
+cra://action/favoriteTab
+wait 1
+cra://debug?selectedTab=start
+expect-log selected tab start: \S+n=fav3$
+cra://action/closeTab
+expect-log close tab: favorite deselected, its page kept
+wait 1
+cra://debug?selectedTab=first
+expect-log selected tab first: \S+n=fav2$
+cra://action/closeTab
+wait 1
+cra://debug?selectedTab=second
+expect-log selected tab second: \S+n=fav1$
+reject-log selected tab second: \S+n=fav3$
+cra://action/closeTab
+wait 1
+cra://debug?selectedTab=third
+expect-log selected tab third: none$

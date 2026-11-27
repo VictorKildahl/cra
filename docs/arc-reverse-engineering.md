@@ -3707,6 +3707,12 @@ doesn't pick a tab, and the selection saved in StorableWindows.json wasn't alway
   over to nothing; with the folder open (`AXDisclosing` on its row over AX), to Y, the row above inside it.
 - [O] A favorite closes like a pinned tab: back to the previous tab while it is loaded (F1 after D → D), else nothing.
   Tabs ▸ Next Tab runs through the favorites first.
+- [I] Since Arc 1.173 ⌘W only deselects a Favorite and its page runs on (#740). Repeated ⌘W then goes back through the
+  Favorites visited before, one further each time (F1, F2, F3 in turn: ⌘W → F2, ⌘W → F1), as reported on Discord
+  (26 Nov 2026, #870), not measured here. Cra: a Favorite closed with ⌘W never counts as a tab to go back to
+  (`CloseSuccessor.counts`, as ⌃Tab leaves it out, #784), and a Favorite's ⌘W walks the window's `ShownTabs`, newest
+  first, to the first tab still loaded in the space (`CloseSuccessor.afterDeselectedFavorite`). Today and pinned-tab
+  closes keep the one-step rule above.
 - [O] The tab a close hands over to loses its unread mark, as when it is picked.
 - [O] Splits (a `splitView` item needs `layoutOrientation`, `focusItemID` and `itemWidthFactors`, as Arc saves it;
   without them Arc moves the split into a pinned "Recently recovered" folder): a split row as the neighbour opens the
