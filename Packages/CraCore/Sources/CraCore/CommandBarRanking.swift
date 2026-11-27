@@ -1,8 +1,9 @@
 import Foundation
 
 /// The command bar's ranking pieces that need no store (SuggestionEngine, GitHub #617): how much a
-/// recent visit lifts a row, which switches count, and the empty bar's most recent tabs. At 5,000 tabs a
-/// keystroke built a Date() twice per matching tab and the empty bar sorted every tab to take seven.
+/// recent visit lifts a row, which switches count, the empty bar's most recent tabs, and the space the
+/// typed text names. At 5,000 tabs a keystroke built a Date() twice per matching tab and the empty bar
+/// sorted every tab to take seven.
 public enum CommandBarRanking {
     /// Switches to a tab this recent count towards its rank.
     public static let switchWindow: TimeInterval = 7 * 86400
@@ -39,5 +40,15 @@ public enum CommandBarRanking {
             if top.count > count { top.removeLast() }
         }
         return top.map(\.item)
+    }
+
+    /// Which of the ranked `rows` goes above the typed search: the first whose space's name (`spaceTitle`, nil for a row
+    /// that switches to no space) starts with the lowercased text `q`. Arc lists "Focus on FINANCE" first for "finan" and
+    /// selects it, so Return goes to the space. The start of the whole name only: a word inside it would take Return
+    /// from a search that shares a word with the space. Nil for a single letter or an address ("localhost").
+    public static func leadingSpace<T>(_ q: String, in rows: some Sequence<T>, spaceTitle: (T) -> String?) -> Int? {
+        guard q.count >= 2, !TypedURL.looksLikeURL(q) else { return nil }
+        for (i, row) in rows.enumerated() where spaceTitle(row)?.lowercased().hasPrefix(q) == true { return i }
+        return nil
     }
 }

@@ -129,6 +129,13 @@ final class SuggestionEngine {
             // Arc 1.171 lists a command the text names above it too: "sett" → Settings,
             // "clear" → Clear Cache and Refresh, "clear cook" → Clear Cookies and Refresh.
             items.insert(typed, at: 1)
+        } else if let lead = CommandBarRanking.leadingSpace(q, in: items, spaceTitle: { row in
+            if case .switchSpace(let id) = row.kind { return store.space(id)?.title }
+            return nil
+        }) {
+            // And a space whose name starts with the text, from wherever it ranked: "finan" → Focus on FINANCE.
+            items.insert(items.remove(at: lead), at: 0)
+            items.insert(typed, at: 1)
         } else {
             items.insert(typed, at: 0)
         }
