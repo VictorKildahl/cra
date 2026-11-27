@@ -83,6 +83,16 @@ public enum MobileTabCarousel {
         return raw
     }
 
+    /// Where a drag that catches the row at `position` starts from. Past either end the row is at
+    /// a third of the way the finger went (`position(start:translation:)`), so a catch there
+    /// starts from the whole way, or the row would jump towards the end under the finger.
+    public static func dragStart(caughtAt position: CGFloat, count: Int) -> CGFloat {
+        let last = CGFloat(max(0, count - 1))
+        if position < 0 { return position * 3 }
+        if position > last { return last + (position - last) * 3 }
+        return position
+    }
+
     /// How fast the row moves, in cards a second (positive: towards newer tabs), at `position`
     /// under a finger moving `velocity` points a second: a third as fast past either end.
     public static func velocity(_ velocity: CGFloat, at position: CGFloat, count: Int, in screen: CGSize, sideInsets: (left: CGFloat, right: CGFloat) = (0, 0)) -> CGFloat {

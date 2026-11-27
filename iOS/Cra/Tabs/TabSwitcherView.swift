@@ -33,6 +33,11 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     private var settle: MobileTabCarousel.Settle?
     private var settleStart: CFTimeInterval = 0
     private var settleLink: CADisplayLink?
+    /// Where the row was settling when a card was taken up from it.
+    private var heldTarget: CGFloat?
+    private let pan = UIPanGestureRecognizer()
+    /// Whether the row is under a finger or settling.
+    private var rowMoves: Bool { settle != nil || (draggedCard == nil && [.began, .changed].contains(pan.state)) }
 
     private var sideInsets: (left: CGFloat, right: CGFloat) {
         MobileSideInsets.applied(size: bounds.size, safeLeft: safeAreaInsets.left, safeRight: safeAreaInsets.right)
@@ -59,7 +64,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         applyColors()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: TabSwitcherView, _) in view.applyColors() }
 
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
+        pan.addTarget(self, action: #selector(panned(_:)))
         pan.delegate = self
         addGestureRecognizer(pan)
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
@@ -161,7 +166,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
             card.layout(frame: frame, screen: screen, bottom: bottom, bandHeight: bandHeight, fill: fills[index],
                         dim: placement.dim * (1 - expansion), headerAlpha: 1 - min(1, expansion * 2),
                         titleAlpha: MobileTabCarousel.titleAlpha(relative: CGFloat(index) - position),
-                        nextCardLeft: next, scale: placement.scale)
+                        nextCardLeft: next, scale: placement.scale, moving: rowMoves)
         }
     }
 
@@ -196,6 +201,11 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         let translation = pan.translation(in: self), velocity = pan.velocity(in: self)
         if let card = draggedCard {
             switch pan.state {
+            case .began:
+                // The row holds still under a card being taken up, and settles on where it was
+                // going once the card is let go.
+                heldTarget = settle?.target
+                stopSettling()
             case .changed:
                 draggedOffset = min(0, translation.y)
                 layoutCards()
@@ -205,6 +215,8 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
                 // before that.
                 draggedCard = nil
                 draggedOffset = 0
+                if let target = heldTarget { startSettling(to: Int(target), velocity: 0) }
+                heldTarget = nil
                 if closes, row.startThrow(card.tabID) { throwAway(card) } else { settleCards() }
             default: break
             }
@@ -214,7 +226,7 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         case .began:
             // A row still settling is caught where it is.
             stopSettling()
-            dragStart = position
+            dragStart = MobileTabCarousel.dragStart(caughtAt: position, count: cards.count)
         case .changed:
             position = MobileTabCarousel.position(start: dragStart, translation: translation.x, count: cards.count, in: bounds.size, sideInsets: sideInsets)
             layoutCards()
@@ -310,6 +322,8 @@ final class TabCardView: UIView {
     private(set) var cardFrame: CGRect = .zero
     /// The favicon and title above the card, which belong to it for a tap or a throw.
     private(set) var headerFrame: CGRect = .zero
+    /// What the shadow's path was last drawn for (`layoutShadow`).
+    private var shadowShape: (size: CGSize, radius: CGFloat)?
 
     init(tabID: UUID) {
         self.tabID = tabID
@@ -375,7 +389,7 @@ final class TabCardView: UIView {
     /// `screen` down to `bottom`, where its band takes the status bar's strip and its picture the
     /// page's own area.
     func layout(frame row: CGRect, screen: CGSize, bottom: CGFloat, bandHeight: CGFloat, fill: CGFloat, dim: CGFloat,
-                headerAlpha: CGFloat, titleAlpha: CGFloat, nextCardLeft: CGFloat?, scale: CGFloat) {
+                headerAlpha: CGFloat, titleAlpha: CGFloat, nextCardLeft: CGFloat?, scale: CGFloat, moving: Bool) {
         let full = CGRect(x: 0, y: 0, width: screen.width, height: bottom)
         let frame = CGRect(x: row.minX + (full.minX - row.minX) * fill, y: row.minY + (full.minY - row.minY) * fill,
                            width: row.width + (full.width - row.width) * fill, height: row.height + (full.height - row.height) * fill)
@@ -394,8 +408,7 @@ final class TabCardView: UIView {
         // Rounded in the row, square where it meets the page's content at the band's bottom.
         let radius = MobileTabCarousel.cornerRadius * (1 - fill)
         clip.layer.cornerRadius = radius
-        shadow.frame = frame
-        shadow.layer.shadowPath = UIBezierPath(roundedRect: shadow.bounds, cornerRadius: radius).cgPath
+        layoutShadow(frame: frame, radius: radius, scale: scale)
         shadow.alpha = 1 - fill
 
         let side = MobileTabCarousel.headerIconSide * scale
@@ -409,11 +422,26 @@ final class TabCardView: UIView {
         icon.alpha = headerAlpha
         title.alpha = headerAlpha * titleAlpha
         if Self.readsTitles {
-            accessibilityValue = title.alpha > 0.01 && titleWidth > 0 ? "title to \(Int(title.frame.maxX.rounded()))" : "favicon alone"
+            accessibilityValue = (title.alpha > 0.01 && titleWidth > 0 ? "title to \(Int(title.frame.maxX.rounded()))" : "favicon alone")
+                + (moving ? ", moving" : "")
+        }
+    }
+
+    /// The shadow is the card at scale 1, drawn larger or smaller by a transform, so its path only
+    /// changes with the card's size or corners: a moving row doesn't rebuild it every frame
+    /// (docs/reviewing.md). Its corners scale with it, within 2 % of the card's under the blur.
+    private func layoutShadow(frame: CGRect, radius: CGFloat, scale: CGFloat) {
+        let size = CGSize(width: (frame.width / scale).rounded(), height: (frame.height / scale).rounded())
+        shadow.transform = CGAffineTransform(scaleX: scale, y: scale)
+        shadow.bounds = CGRect(origin: .zero, size: size)
+        shadow.center = CGPoint(x: frame.midX, y: frame.midY)
+        if shadowShape?.size != size || shadowShape?.radius != radius {
+            shadowShape = (size, radius)
+            shadow.layer.shadowPath = UIBezierPath(roundedRect: shadow.bounds, cornerRadius: radius).cgPath
         }
     }
 
     /// `-CraReadCardTitles YES`: each card says in its accessibility value whether its title shows
-    /// and where it ends, for the UI tests (#816).
+    /// and where it ends, for the UI tests (#816), and ", moving" while the row is dragged or settles.
     private static let readsTitles = LaunchOptions.value("CraReadCardTitles") == "YES"
 }

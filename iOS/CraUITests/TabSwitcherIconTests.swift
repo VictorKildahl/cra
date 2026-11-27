@@ -109,19 +109,27 @@ final class TabSwitcherIconTests: BrowserTestCase {
         app.buttons["bar-tabs"].tap()
         let cards = (0..<5).map { app.buttons["tab-card-\($0)"] }
         XCTAssertTrue(cards[4].waitForExistence(timeout: 10))
-        sleep(1)
-        func focused() -> Int? { cards.firstIndex { ($0.value as? String ?? "").hasPrefix("title to") } }
         // The row opens on the card left of the page: the fourth. Each flick drags three quarters
         // of a card: one back, one more, then one forward.
-        XCTAssertEqual(focused(), 3)
+        waitForTheRow(toRestOn: 3, of: cards)
         for (from, to, card) in [(0.29, 0.71, 2), (0.29, 0.71, 1), (0.71, 0.29, 2)] {
-            let before = focused()
-            dragTheRow(from: from, to: to)
-            // A drag sent to a row that has just opened sometimes doesn't reach it (Cra before
-            // this change too); it goes again.
-            if focused() == before { dragTheRow(from: from, to: to) }
-            XCTAssertEqual(focused(), card, "one card from \(before ?? -1)")
+            app.coordinate(withNormalizedOffset: CGVector(dx: from, dy: 0.5))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: to, dy: 0.5)),
+                       withVelocity: .fast, thenHoldForDuration: 0)
+            waitForTheRow(toRestOn: card, of: cards)
         }
+    }
+
+    /// Waits for the row to stop moving with `index` the only titled card.
+    private func waitForTheRow(toRestOn index: Int, of cards: [XCUIElement], file: StaticString = #filePath, line: UInt = #line) {
+        let rests = NSPredicate { _, _ in
+            cards.indices.allSatisfy { i in
+                let value = cards[i].value as? String ?? ""
+                return i == index ? value.hasPrefix("title to") && !value.hasSuffix("moving") : value == "favicon alone"
+            }
+        }
+        let waited = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: rests, object: nil)], timeout: 10)
+        XCTAssertEqual(waited, .completed, "rests on card \(index): \(cards.map { $0.value as? String ?? "" })", file: file, line: line)
     }
 
     /// A flick along the row, which goes on to the next card (and stops at an end).

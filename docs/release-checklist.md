@@ -542,6 +542,13 @@ built release app with a test profile. Note anything that fails in the release's
   between them. The simulator cannot stage a system gesture taking the page's pan;
   `testFlicksLandingOnASettleLeaveTheBarAtAnEnd` covers the flicks themselves.
 
+- **The tab row's settle (PR #882):** on a real iPhone with five or more tabs, flick the tab row and
+  take a card up before the row lands: the row holds still under the held
+  card, then settles on the card it was heading to once the card is let go or thrown away. Catch the
+  row with a finger while it springs back from past either end: it stays under the finger. XCUITest
+  waits for the row to rest before its next gesture, so it can't stage either;
+  `catchingTheRowPastAnEndHoldsItWhereItIs` covers the catch's arithmetic.
+
 - **The page under the bar (iOS 26):** on a TestFlight build on a real iPhone, open a long page with
   a sticky or fixed `bottom: 0` element and drag the bar slowly both ways, then let it settle: the
   element rides on the bar's top every frame, never under it and never apart from it, the page's

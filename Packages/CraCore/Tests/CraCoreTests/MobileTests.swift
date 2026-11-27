@@ -865,6 +865,23 @@ struct MobileTabCarouselTests {
         #expect(MobileTabCarousel.velocity(-pitch * 3, at: 2.2, count: 3, in: Self.phone) == 1)
     }
 
+    /// A finger that catches the row while it settles back from past an end holds it where it
+    /// is. The catch started from the position on screen, which the drag resisted again: caught
+    /// at -0.3 and moved a hundredth of a card outwards, the row jumped to -0.1 (Greptile on
+    /// PR #882).
+    @Test func catchingTheRowPastAnEndHoldsItWhereItIs() {
+        let pitch = MobileTabCarousel.pitch(in: Self.phone)
+        for caught: CGFloat in [-0.3, 2.3] {
+            let start = MobileTabCarousel.dragStart(caughtAt: caught, count: 3)
+            let held = MobileTabCarousel.position(start: start, translation: 0, count: 3, in: Self.phone)
+            #expect(abs(held - caught) < 0.0001)
+            let outwards: CGFloat = caught < 0 ? 1 : -1
+            let moved = MobileTabCarousel.position(start: start, translation: outwards * pitch * 0.01, count: 3, in: Self.phone)
+            #expect(abs(abs(moved - caught) - 0.01 / 3) < 0.0001, "it follows a third of the finger, from where it was")
+        }
+        #expect(MobileTabCarousel.dragStart(caughtAt: 1.4, count: 3) == 1.4)
+    }
+
     @Test func aFlickGoesToTheNextCardAndStopsAtTheEnds() {
         #expect(MobileTabCarousel.restingIndex(position: 1.2, velocity: 0, count: 4, in: Self.phone) == 1)
         #expect(MobileTabCarousel.restingIndex(position: 1.2, velocity: -900, count: 4, in: Self.phone) == 2)
