@@ -22,6 +22,7 @@ cra://open?url=chrome-extension://${EXTENSION_ID}/options.html&space=A0000000-00
 wait 3
 cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.storage.local.set({shared595:'from-personal'}).then(()=>'personal-set:ok')","awaitPromise":true}
 expect-log Cra cdp Runtime.evaluate .*personal-set:ok
+cra://action/closeTab
 # Random reads it, and its own change reaches storage.onChanged there.
 cra://open?url=chrome-extension://${EXTENSION_ID}/options.html&space=A0000000-0000-0000-0000-000000000002
 wait 3
@@ -29,10 +30,13 @@ cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.storage.local.get(
 expect-log Cra cdp Runtime.evaluate .*random-get:from-personal
 cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{chrome.storage.onChanged.addListener((c,a)=>r('random-changed:'+a+':'+c.shared595.newValue));chrome.storage.local.set({shared595:'from-random'})})","awaitPromise":true}
 expect-log Cra cdp Runtime.evaluate .*random-changed:local:from-random
-# chrome://extensions in Random: Remove is there, turned off, and says where it is removed.
-cra://open?url=chrome://extensions/?id=${EXTENSION_ID}&space=A0000000-0000-0000-0000-000000000002
+cra://action/closeTab
+# chrome://extensions (in Personal): Remove is there, turned off, and says where it is removed.
+cra://open?url=${PAGE}?n=personal-again&space=A0000000-0000-0000-0000-000000000001
+wait 2
+cra://open?url=chrome://extensions/?id=${EXTENSION_ID}
 wait 3
-cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>setTimeout(()=>{const m=document.querySelector('extensions-manager');const d=m&&m.shadowRoot.querySelector('extensions-detail-view');const rm=d&&d.shadowRoot.querySelector('[id=remove-extension]');r('remove-row:'+(rm?(rm.hidden?'hidden':(rm.disabled?'disabled':'enabled'))+'/'+rm.getAttribute('sub-label'):'missing'))},1500))","awaitPromise":true}
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>setTimeout(()=>{const m=document.querySelector('extensions-manager');const d=m?m.shadowRoot.querySelector('extensions-detail-view'):null;const rm=d?d.shadowRoot.querySelector('[id=remove-extension]'):null;r('remove-row:'+(rm?(rm.hidden?'hidden':(rm.disabled?'disabled':'enabled'))+'/'+rm.getAttribute('sub-label'):'missing'))},1500))","awaitPromise":true}
 expect-log Cra cdp Runtime.evaluate .*remove-row:disabled/Cra manages this extension. Remove it, or choose its profiles, in Cra’s Settings ▸ Extensions.
 # Back in Personal, the value Random wrote is Personal's.
 cra://open?url=chrome-extension://${EXTENSION_ID}/options.html&space=A0000000-0000-0000-0000-000000000001

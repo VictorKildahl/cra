@@ -1321,9 +1321,9 @@
 #595   Packages/CraCore/Tests/CraCoreTests/SharedExtensionsTests.swift::takingAProfileOutUninstallsItThereOnce  2fe15a8dbc82
 #595   Packages/CraCore/Tests/CraCoreTests/SharedExtensionsTests.swift::theLastProfileCannotBeTakenOut  039648e8afe8
 #595   Packages/CraCore/Tests/CraCoreTests/SharedExtensionsTests.swift::theStoreIsNotAskedAgainWhereItRefused  5333b130b6ee
-#595   Tests/Scenarios/extension-shared-data.scenario  3a8a9a98f830
+#595   Tests/Scenarios/extension-shared-data.scenario  827c348b9d1e
 #595   Tests/Scenarios/extension-shared-exclude.scenario  54b6a207c8b7
-#595   Tests/Scenarios/extension-shared-managed.scenario  7cdecbe2c10c
+#595   Tests/Scenarios/extension-shared-managed.scenario  e51af7c94d32
 #596   Packages/CraCore/Tests/CraCoreTests/ArcThemeImportTests.swift::gradientsAreSeeThroughAtTheSlidersIntensity  6adbda8ba3c3
 #596   Tests/Scenarios/theme-gradient-see-through.scenario  71863f429e42
 #597   Tests/Scenarios/page-opened-tab-shows.scenario  9578d2e1e5dd
