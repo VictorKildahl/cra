@@ -1,0 +1,11 @@
+# promise: #876
+# The sidebar's top row lines up with the traffic lights, as in Arc (GitHub #876: the reporter's Arc and Cra
+# captures, measured on 2x pixels: Arc's toggle and ← → ↻ sit within half a pixel of the lights' centre, Cra's
+# 2–3 px higher). Every glyph in the lights' row is centred on them: the toggle, and ← → ↻ when the toolbar is
+# hidden (the default here).
+budget rss=600 stalls50=10
+cra://open?url=${PAGE}?n=row
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?titleRow=start
+expect-log title row start: main0 glyphs=\+0\.0,\+0\.0,\+0\.0,\+0\.0$

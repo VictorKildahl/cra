@@ -752,16 +752,17 @@ final class SidebarTopBarView: NSView {
         // Arc draws it from 20 pt in (glyph 20–38.5 pt), in the floating panel too (#315); a windowed
         // floating panel draws stand-in lights.
         // It moves left to stay 2 pt clear of ← when the sidebar is just wide enough for both.
+        // Every glyph in the row is centred on the lights, as in Arc (#876: Cra drew them 1 pt higher).
         let lights = !fullscreen
         let nav = toggleShown ? Array(rowButtons.dropFirst()) : rowButtons
         let afterLights: CGFloat = lights ? 6 + 71 + 2 : 13
         if toggleShown, let t = rowButtons.first {
             let size = t.size.width
-            t.frame = NSRect(x: afterLights, y: CraMetrics.titleRowCenter - 1 - size / 2, width: size, height: size)
+            t.frame = NSRect(x: afterLights, y: CraMetrics.titleRowCenter - size / 2, width: size, height: size)
         }
         if narrow {
             for (b, box) in zip(nav, SidebarHeaderLayout.navButtons(width: Double(w))) {
-                b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - 1 - box.size / 2, width: box.size, height: box.size)
+                b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - box.size / 2, width: box.size, height: box.size)
             }
         }
         if compact {
@@ -769,7 +770,7 @@ final class SidebarTopBarView: NSView {
             // edge, centred on the same line.
             if !narrow {
                 for (b, box) in zip(nav, SidebarHeaderLayout.navButtons(width: Double(w))) {
-                    b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - 1 - box.size / 2, width: box.size, height: box.size)
+                    b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - box.size / 2, width: box.size, height: box.size)
                 }
             }
             pill.frame = NSRect(x: 8, y: CraMetrics.titleAreaHeight + 2, width: w - 16, height: pill.height)
