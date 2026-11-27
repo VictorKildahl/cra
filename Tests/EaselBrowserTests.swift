@@ -50,6 +50,82 @@ enum EaselBrowserTests {
 
         await syncedEasels()
         print("Easel browser: synced easels on open canvases, their tabs and Library passed")
+
+        await easelOpenTwice()
+        print("Easel browser: an easel open on two canvases takes sync's change on both passed")
+    }
+
+    /// One easel open on two canvases (a tab and a Peek): sync's change, its deletion and Import's
+    /// copy reach both, so neither writes an old copy back.
+    @MainActor
+    static func easelOpenTwice() async {
+        let frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        let shape = Easel.Item(kind: .ellipse, frame: .init(x: 300, y: 180, width: 80, height: 80))
+
+        // Drawn on in the tab before the other Mac renamed it: each canvas merges from what it shows,
+        // so the tab keeps its shape and takes the new title, and its close writes both.
+        let easel = Easel(title: "Open Twice")
+        EaselFiles.store(easel.id).saveNow(easel)
+        let tab = EaselBrowser(frame: frame, url: easel.url, delegate: nil)
+        let peek = EaselBrowser(frame: frame, url: easel.url, delegate: nil)
+        tab.canvasView.sheetView.insert(shape)
+        let renamed: (Easel) -> Easel? = { here in
+            var merged = here
+            merged.title = "Renamed on the Other Mac"
+            return merged
+        }
+        var both = easel
+        both.title = "Renamed on the Other Mac"
+        both.items = [shape]
+        precondition(EaselFiles.changeOpen(easel.id, renamed), "an easel open twice changes on its canvases")
+        precondition(tab.canvasView.document.items == [shape], "the canvas drawn on before the sync keeps its shape")
+        precondition(tab.canvasView.document.title == "Renamed on the Other Mac", "the canvas drawn on before the sync takes the other Mac's change")
+        precondition(peek.canvasView.document.title == "Renamed on the Other Mac", "the other canvas takes the other Mac's change")
+        peek.close()
+        tab.close()
+        precondition(EaselFiles.load(easel.id) == both, "the canvas drawn on before the sync writes its shape and the merge on close")
+
+        // The canvas opened last closes first: the other one still takes sync's change.
+        let second = Easel(title: "Peek Closes First")
+        EaselFiles.store(second.id).saveNow(second)
+        let kept = EaselBrowser(frame: frame, url: second.url, delegate: nil)
+        let closing = EaselBrowser(frame: frame, url: second.url, delegate: nil)
+        closing.close()
+        var synced = second
+        synced.title = "Synced After Close"
+        precondition(EaselFiles.changeOpen(second.id) { _ in synced }, "an easel still open on a canvas changes on it")
+        precondition(kept.canvasView.document == synced, "the canvas left open shows the merged easel")
+        kept.canvasView.sheetView.insert(shape)
+        precondition(EaselFiles.load(second.id).title == "Synced After Close", "an edit after the sync saves on top of the merge")
+        kept.close()
+
+        // Deleted on the other Mac while open twice: neither canvas writes it back.
+        let gone = Easel(title: "Deleted While Open Twice")
+        EaselFiles.store(gone.id).saveNow(gone)
+        let goneTab = EaselBrowser(frame: frame, url: gone.url, delegate: nil)
+        let gonePeek = EaselBrowser(frame: frame, url: gone.url, delegate: nil)
+        goneTab.canvasView.sheetView.insert(shape)
+        gonePeek.canvasView.sheetView.insert(shape)
+        precondition(EaselFiles.changeOpen(gone.id) { _ in nil }, "an easel open twice and deleted on the other Mac is handled on its canvases")
+        try? FileManager.default.removeItem(at: EaselFiles.store(gone.id).url)
+        goneTab.close()
+        precondition(!FileManager.default.fileExists(atPath: EaselFiles.store(gone.id).url.path), "the first canvas of a deleted easel writes nothing on close")
+        gonePeek.close()
+        precondition(!FileManager.default.fileExists(atPath: EaselFiles.store(gone.id).url.path), "the last canvas of a deleted easel writes nothing on close")
+
+        // Deleted here, then Import brings it back: both canvases still loaded show Import's copy.
+        let back = Easel(title: "Before Delete, Twice")
+        EaselFiles.store(back.id).saveNow(back)
+        let first = EaselBrowser(frame: frame, url: back.url, delegate: nil)
+        let last = EaselBrowser(frame: frame, url: back.url, delegate: nil)
+        EaselFiles.delete(back.id)
+        let imported = Easel(id: back.id, title: "From Import, Twice")
+        EaselFiles.store(back.id).saveNow(imported)
+        EaselFiles.synced()
+        precondition(first.canvasView.document == imported, "the canvas opened first shows the easel Import brought back")
+        precondition(last.canvasView.document == imported, "the canvas opened last shows the easel Import brought back")
+        first.close()
+        last.close()
     }
 
     /// What sync does to easels here: an open canvas takes the merged easel, a deleted one's tabs close.

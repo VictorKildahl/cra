@@ -148,21 +148,26 @@ enum EaselFiles {
 
     /// A canvas holds what its easel is now; its file follows 0.4 s after an edit (JSONStore.save)
     /// and, after an edit, is written again when the tab closes. So whatever reads or changes an easel that is open
-    /// goes through its canvas.
+    /// goes through its canvas. One easel can be open on several (a tab and a Peek).
     private final class Open { weak var canvas: EaselCanvasView? }
-    private static var open: [UUID: Open] = [:]
+    private static var open: [UUID: [Open]] = [:]
 
     static func opened(_ canvas: EaselCanvasView) {
         let entry = Open()
         entry.canvas = canvas
-        open[canvas.document.id] = entry
+        open[canvas.document.id] = (open[canvas.document.id] ?? []).filter { $0.canvas != nil } + [entry]
     }
 
     static func closed(_ canvas: EaselCanvasView) {
-        if open[canvas.document.id]?.canvas === canvas { open[canvas.document.id] = nil }
+        let id = canvas.document.id
+        open[id]?.removeAll { $0.canvas == nil || $0.canvas === canvas }
+        if open[id]?.isEmpty == true { open[id] = nil }
     }
 
-    static func canvas(for id: UUID) -> EaselCanvasView? { open[id]?.canvas }
+    /// Every canvas showing the easel, the one opened last at the end.
+    static func canvases(for id: UUID) -> [EaselCanvasView] { open[id]?.compactMap(\.canvas) ?? [] }
+
+    static func canvas(for id: UUID) -> EaselCanvasView? { canvases(for: id).last }
 
     /// The easel as it is now: its canvas's, or its file's.
     static func current(_ id: UUID) -> Easel { canvas(for: id)?.document ?? load(id) }
@@ -176,23 +181,30 @@ enum EaselFiles {
 
     static func listChanged() { Changes.shared.count += 1 }
 
-    /// Sync's change to an easel open in a tab, made on its canvas: `change` gets what the canvas
-    /// shows and returns the easel to show, nil to delete it. False when no tab has it open, or it
+    /// Sync's change to an easel open in a tab, made on each of its canvases: `change` gets what that canvas
+    /// shows and returns the easel it shows next, nil to delete it. False when no tab has it open, or it
     /// was deleted here: that canvas saves nothing, so the service writes the file.
     static func changeOpen(_ id: UUID, _ change: (Easel) -> Easel?) -> Bool {
-        guard !deleted.contains(id), let canvas = canvas(for: id) else { return false }
-        // Deleted, the closing canvas writes nothing back; its tabs close with `closeTabs`.
-        guard let new = change(canvas.document) else { delete(id); return true }
-        if new != canvas.document { canvas.replace(with: new) }
+        let shown = canvases(for: id)
+        guard !deleted.contains(id), !shown.isEmpty else { return false }
+        for each in shown {
+            // Deleted on the other Mac (nil for every canvas): the closing canvases write nothing back;
+            // their tabs close with `closeTabs`.
+            guard let new = change(each.document) else { delete(id); return true }
+            if new != each.document { each.replace(with: new) }
+        }
         return true
     }
 
     /// After sync changed the easels: Library lists them again, and one deleted here that a bundle
-    /// brought back (Import) saves again, its canvas still loaded (a Favorite) showing Import's copy.
+    /// brought back (Import) saves again, its canvases still loaded (a Favorite) showing Import's copy.
     static func synced() {
         let back = deleted.filter { FileManager.default.fileExists(atPath: store($0).url.path) }
         deleted.subtract(back)
-        for id in back { canvas(for: id)?.replace(with: load(id)) }
+        for id in back {
+            let easel = load(id)
+            for canvas in canvases(for: id) { canvas.replace(with: easel) }
+        }
         listChanged()
     }
 
@@ -263,8 +275,8 @@ enum EaselFiles {
             // An easel open in a tab has the name on its canvas; its file gets it a moment later.
             return (e.id, canvas(for: e.id)?.document.title ?? e.title, date)
         }
-        for (id, entry) in open where !deleted.contains(id) && !listed.contains(where: { $0.id == id }) {
-            if let canvas = entry.canvas { listed.append((id, canvas.document.title, Date())) }
+        for id in open.keys where !deleted.contains(id) && !listed.contains(where: { $0.id == id }) {
+            if let canvas = canvas(for: id) { listed.append((id, canvas.document.title, Date())) }
         }
         return listed.sorted { $0.edited > $1.edited }
     }
