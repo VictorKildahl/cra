@@ -4715,6 +4715,36 @@ unless noted.
   Light and B over black at the top, C within 7, and B over white 6–10 darker than Arc's. An imported vibrant theme keeps its baked stops and the
   light-vibrant calibration below.
 
+## An inactive window's sidebar on macOS Dark (Arc 1.174.3, 27 Nov 2026, #876, offline Arc on a fake home)
+
+Arc 1.174.3 on a fake home (network denied, Victor's Arc not running), every space set to one theme per run, macOS 26.7
+on Dark, the window left inactive with Finder in front (grey traffic lights) and captured with `screencapture -l` on a 1x
+display (HP profile, no different from sRGB here); a `-R` region capture of the same window read the same values.
+Sidebar sampled 5 pt in, 6 × 6 px means.
+
+| Theme | Arc's View ▸ Appearance | inactive, top | grey under the colour |
+|---|---|---|---|
+| one colour #26456B at 0.8, content dark | Automatic | 33/53/77 | 25 |
+| the same, content light | Automatic | 33/53/77 | 25 |
+| the same | Dark | 33/53/77 | 25 |
+| gradient #666789 / #7F6589, `translucencyStyle` dark, 0.8 | Automatic and Dark | 75/75/96 | 27.5 |
+| the same at 0.3 | Automatic | 54/54/67 | 27.5 |
+| gradient #6CBAD9 / #7F7EDC, `translucencyStyle` light, 0.8 | Automatic and Dark | 146/193/215 | 209 |
+
+- [O] Inactive, the colour sits at `solidAlpha(intensity)` over a flat grey, as before, but on macOS Dark that grey is
+  about 25 under one colour and 27.5 under a dark gradient: the sidebar goes darker when the window loses focus. The
+  reporter's recording of Arc shows the same (a dark purple space 30/25/42 in front, 17/10/28 behind). A light
+  gradient keeps about 210. The 17 Nov 207 (one colour, View ▸ Appearance ▸ Dark) was then most likely taken with macOS
+  on Light; not re-checked, since Victor's macOS stays on Dark.
+- Cra (#876): `SidebarBackdrop.solidInactiveDark` (lift 0.10) and `solidInactiveDarkGradient` (0.108) while macOS
+  shows Dark (`SystemAppearance.macOSDark`); `solidInactive` (212) and `solidInactiveLight` (252) otherwise. Pinned by
+  `inactiveDarkThemesGoDarkOnMacOSDark` and the `theme-inactive-ground` scenario (`themeShown` prints `ground=`).
+  The Translucent sidebar glass (not in Arc) stays see-through while inactive, Victor's call on #876.
+- The fake-home generator and burst scripts of this run: one `StorableSidebar.json` per theme from Victor's own
+  (sync states dropped), `CFFIXED_USER_HOME` + `sandbox-exec` denying remote ip + `--no-sandbox`, the real
+  `company.thebrowser.Browser` defaults exported first and imported back (View ▸ Appearance writes `appearance` =
+  `NSAppearanceNameDarkAqua` there).
+
 ## Theme editor hover, tab-on-tab drops, Download location (Arc 1.171, static, 5 Nov 2026, #189–#191)
 Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and field names only; no numbers).
 - [O metadata] SpaceStyleEditor module: `ColorPillButtonStyle { colorSet, _isHovered, addComplimentary }` (the preset

@@ -60,6 +60,13 @@ public struct SidebarBackdrop: Equatable, Sendable {
     /// pastel, 207 under Dark).
     public static let solidInactiveLight = SidebarBackdrop(source: .none, dim: 1, liftTop: 0.99, liftBottom: 0.99)
     public static let solidInactive = SidebarBackdrop(source: .none, dim: 1, liftTop: 0.83, liftBottom: 0.83)
+    /// The inactive look on macOS Dark (#876). Arc 1.174.3 offline, 27 Nov 2026, macOS 26.7 on Dark, View ▸ Appearance
+    /// on Automatic and on Dark alike, another app in front: a one-colour space sits on a flat 25 (navy #26456B at 0.8
+    /// read 33/53/77, with dark or light content alike), so it goes darker when the window loses focus, not lighter.
+    public static let solidInactiveDark = SidebarBackdrop(source: .none, dim: 1, liftTop: 0.10, liftBottom: 0.10)
+    /// The same for a gradient whose colours read dark: a flat 27.5 (#666789 / #7F6589 read 75/75/96 at 0.8 and 54/54/67
+    /// at 0.3). A light gradient stays on about 210 there (#6CBAD9 / #7F7EDC: 146/193/215), as `solidInactive`.
+    public static let solidInactiveDarkGradient = SidebarBackdrop(source: .none, dim: 1, liftTop: 0.108, liftBottom: 0.108)
     /// Solid themes with Reduce Transparency: Arc's flat grey under the space colour, active or not
     /// (GitHub #156: 160 in both of the reporter's solid spaces, windowed and fullscreen, and the
     /// same through a Space swipe, where the app is inactive until it lands).
@@ -67,11 +74,18 @@ public struct SidebarBackdrop: Equatable, Sendable {
 
     public static func resolve(
         solid: Bool, active: Bool, fullscreen: Bool, reduceTransparency: Bool,
-        tintAvailable: Bool, vibrant: Vibrant, lightMaterial: Bool = false, darkGradient: Bool = false
+        tintAvailable: Bool, vibrant: Vibrant, lightMaterial: Bool = false, darkGradient: Bool = false,
+        oneColour: Bool = false, macOSDark: Bool = false
     ) -> SidebarBackdrop {
         if solid {
             if reduceTransparency { return solidReduced }
-            guard active else { return lightMaterial ? solidInactiveLight : solidInactive }
+            // On macOS Light, Arc's inactive fills are the 252 and 207 measured on 17 Nov; on macOS Dark a one-colour
+            // space and a dark gradient go to a dark grey instead, whatever Arc's own appearance says (#876).
+            guard active else {
+                if lightMaterial { return solidInactiveLight }
+                if macOSDark && darkGradient { return solidInactiveDarkGradient }
+                return macOSDark && oneColour ? solidInactiveDark : solidInactive
+            }
             var b = lightMaterial ? solidActiveLight : darkGradient ? solidActiveDarkGradient : solidActive
             if fullscreen && tintAvailable { b.source = .desktopTint }
             return b

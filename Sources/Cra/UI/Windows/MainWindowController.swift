@@ -71,6 +71,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Settings ▸ Tabs ▸ "Translucent sidebar" as the window last drew it (#366).
     private var shownGlass: Bool?
     private var shownLightMaterial: Bool?
+    /// macOS's own Dark, which picks an inactive window's grey under the sidebar (#876).
+    private var shownMacOSDark: Bool?
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
     /// The sidebar address the open bar hangs from (#663), nil while it is the centred bar.
@@ -681,10 +683,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // every view, so all of these follow the theme only when it changes. What the root
         // views show beyond the palette they observe themselves.
         // The material too: View ▸ Appearance picks it for every space without changing the theme (#700).
-        if shownTheme != space.theme.shown || shownGlass != palette.glass || shownLightMaterial != palette.lightMaterial {
+        if shownTheme != space.theme.shown || shownGlass != palette.glass || shownLightMaterial != palette.lightMaterial
+            || shownMacOSDark != palette.macOSDark {
             shownTheme = space.theme.shown
             shownGlass = palette.glass
             shownLightMaterial = palette.lightMaterial
+            shownMacOSDark = palette.macOSDark
             // A swipe in the floating sidebar changes space under it (issue #12).
             floatingSidebar?.refreshBackdrop()
             shell.isDarkTheme = palette.isDark
@@ -701,7 +705,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             shell.vibrancy.isHidden = !palette.vibrant
             shell.vibrancyLift.isHidden = !palette.vibrant
             shell.setTheme(vibrantDark: palette.isDark, vibrantLight: palette.vibrant && !palette.isDark, solid: palette.solid,
-                           lightMaterial: palette.lightMaterial, darkGradient: palette.darkGradient, glass: palette.glass)
+                           lightMaterial: palette.lightMaterial, darkGradient: palette.darkGradient, glass: palette.glass,
+                           oneColour: palette.oneColour, macOSDark: palette.macOSDark)
             window?.isOpaque = !palette.vibrant
             window?.backgroundColor = palette.vibrant ? .clear : NSColor(palette.gradientColors.first ?? .gray)
         }

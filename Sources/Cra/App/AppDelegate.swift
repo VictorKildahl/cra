@@ -2547,11 +2547,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                         : m.shell.solidBackdrop ? (m.shell.solidDarkGradient && !m.shell.solidLightMaterial ? "dark-gradient" : side(!m.shell.solidLightMaterial)) : "-"
                     // seeThrough: the window shows the blurred desktop under the sidebar, through the material
                     // (dark vibrant) or the backdrop layer (light vibrant, one colour), not an opaque fill (#643).
-                    NSLog("Cra theme shown %@: space=%@ follows=%d theme=%@ shell=%@ sidebar=%@ library=%@ material=%@ seeThrough=%d vibrant=%d intensity=%.2f",
+                    // ground: the backdrop layer's flat grey (0–255) while it draws no capture, an inactive window's (#876);
+                    // "blur" or "tint" while it does, "-" off the layer path.
+                    let ground = m.shell.drawnBackdrop.map { $0.source == .none ? String(format: "%.0f", 255 * $0.liftTop) : $0.source == .blur ? "blur" : "tint" } ?? "-"
+                    NSLog("Cra theme shown %@: space=%@ follows=%d theme=%@ shell=%@ sidebar=%@ library=%@ material=%@ seeThrough=%d vibrant=%d intensity=%.2f active=%d ground=%@",
                           label, space.title, space.theme.followsSystem ? 1 : 0,
                           side(space.theme.shown.isDark), side(m.shell.isDarkTheme), drawn, m.sidebarUI.libraryPage.map { "\($0)" } ?? "-", material,
                           m.window?.isOpaque == false && !(m.shell.vibrancy.isHidden && m.shell.backdropHost.isHidden) ? 1 : 0,
-                          space.theme.shown.vibrant ? 1 : 0, space.theme.shown.intensity)
+                          space.theme.shown.vibrant ? 1 : 0, space.theme.shown.intensity, m.shell.windowActive ? 1 : 0, ground)
                 }
                 return
             }
