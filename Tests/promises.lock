@@ -1906,8 +1906,14 @@
 #864   Tests/Scenarios/command-bar-typed-routed-profile.scenario  1bd12d58f336
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::theSegmentsTileIsTheIconTheDockShows  fa64d566596d
 #865   Packages/CraCore/Tests/CraCoreTests/AppIconGridTests.swift::theGlassSegmentsTileSitsOnTheGrid  69a07833b8a8
-#868   Tests/BrowserManagerLifecycleTests.swift::linkRouteCase  6a57e785d51f
+#868   Packages/CraCore/Tests/CraCoreTests/LinkRoutingTests.swift::inAppLinkRoutesToTargetSpace  9c274a2f46e0
+#868   Packages/CraCore/Tests/CraCoreTests/LinkRoutingTests.swift::settledPinnedFavoriteAndSplitTabsNeverMoveAndAvoidSearchFalseRoutes  9f9adf0e5d37
+#868   Packages/CraCore/Tests/CraCoreTests/LinkRoutingTests.swift::transientTabMovesOnRedirectAndGuardedAgainstLoops  d21409d20bde
+#868   Tests/BrowserManagerLifecycleTests.swift::linkAndRedirectSpaceRoutingCase  437009bd7be2
+#868   Tests/BrowserManagerLifecycleTests.swift::linkRouteCase  192adb23aed8
+#868   Tests/Scenarios/link-redirect-route.scenario  6713a08bba0f
 #868   Tests/Scenarios/link-route.scenario  0c95be0b1574
+#868   Tests/StoreTests.swift::rerouteTabKeepsOriginSelection  fa1c7975a398
 #869   Tests/BrowserManagerLifecycleTests.swift::boostAfterLateAddressCase  5bebee9b1ade
 #869   Tests/BrowserManagerLifecycleTests.swift::boostAfterRedirectCase  ab4f48434aa9
 #869   Tests/Scenarios/boost-linked-pages.scenario  97187a77dc15

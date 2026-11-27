@@ -196,8 +196,6 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     let container: NSView
     weak var delegate: BrowserManagerDelegate?
     private(set) var runtimes: [UUID: TabRuntime] = [:]
-    /// Tabs a page's link opened whose first page hasn't loaded yet: Air Traffic Control may still move them (#868).
-    private var linkTabsToRoute: Set<UUID> = []
     /// The focused pane's tab (the one toolbar actions and DevTools apply to).
     private(set) var visibleTabID: UUID?
     /// Stops an Ask snapshot from surviving a focus switch away and back to the same document.
@@ -232,6 +230,8 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     private var permissionSheet: (request: PermissionRequest, dialog: PermissionPopover)?
     /// CEF's client holds its owner weakly; keep retired browsers alive until teardown finishes.
     private var closingBrowsers: [ObjectIdentifier: CraBrowser] = [:]
+    /// Per-tab Air Traffic Control link/redirect routing state (#868).
+    private var redirectStates: [UUID: LinkRedirectState] = [:]
 
     /// Tab sleeping's clock: a test advances it instead of waiting out the idle threshold.
     let clock: Scheduler
@@ -356,6 +356,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             // A slept or restored page's toolbar keeps its colour while it loads (Arc).
             rt.themeColor = t.themeColor ?? ""
         }
+        if redirectStates[tabID] == nil {
+            redirectStates[tabID] = defaultRedirectState(for: tabID)
+        }
         add(rt)
         return rt
     }
@@ -378,7 +381,6 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     func release(_ tabID: UUID) -> TabRuntime? {
         invalidateAskOnPageDocument(for: tabID)
         if findOwner?.tabID == tabID { stopFinding(false) }
-        linkTabsToRoute.remove(tabID)
         guard let rt = runtimes.removeValue(forKey: tabID) else { return nil }
         nowPlaying?.remove(tabID)
         nowPlaying?.pictureInPicture.remove(tabID)
@@ -463,6 +465,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             let made = runtimes[id] == nil ? Perf.now() : nil
             guard let rt = ensureRuntime(for: id) else { shown.append(id); continue }
             if let made { creating += Perf.ms(since: made) }
+            redirectStates[id]?.openedInBackground = false
             rt.lastShownSpaceID = currentSpace
             if !wasVisible.contains(id) {
                 wake(id, rt)
@@ -689,6 +692,7 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         // CEF closes asynchronously. Retire ownership first so reopening the tab
         // creates a new browser, and late callbacks cannot mutate its replacement.
         guard let rt = release(tabID) else { return }
+        redirectStates[tabID] = nil
         log(tabID, "closes its page")
         Perf.cancel(.pageLoad, tabID.uuidString)
         Perf.cancel(.tabWake, tabID.uuidString)
@@ -1042,6 +1046,9 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             PageEngines.videoPages.forget(tab: id)
         }
         sleptTabs = sleptTabs.filter { store.item($0)?.isTab == true }
+        for id in Array(redirectStates.keys) where store.item(id)?.isTab != true {
+            redirectStates[id] = nil
+        }
         for (id, rt) in runtimes where store.item(id)?.isTab == true && !inRightProfile(rt) {
             release(id)?.browser.close()
         }
@@ -1051,7 +1058,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         rt.browser.isIncognito || rt.browser.profilePath == store.profilePath(item: rt.tabID)
     }
 
-    func closeAll() { for id in Array(runtimes.keys) { unload(id) } }
+    func closeAll() {
+        for id in Array(runtimes.keys) { unload(id) }
+        redirectStates.removeAll()
+    }
 
     func layoutVisible() {
         for id in visibleTabIDs {
@@ -1622,24 +1632,25 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         if let runtime = runtimes[id] { restyleCommittedPage(runtime, url: url) }
         // A restored page has no address yet when it is shown.
         if id == visibleTabID { Perf.visibleSite(browser.isIncognito ? nil : SiteNames.siteHost(of: url)) }
+        switch evaluateLinkRouting(id, browser: browser, url: url) {
+        case .openNewTab:
+            delegate?.browserManagerDidUpdate(id)
+            return
+        case .moved:
+            scheduleHistorySave(id)
+            if !browser.isIncognito { LiveFolderManager.shared.pageChanged(tab: id, to: url) }
+            protectedVideoPageChanged(id, browser, url: url)
+            delegate?.browserManagerDidUpdate(id)
+            return
+        case .none:
+            break
+        }
         store.updateTab(id, url: url)
         // A page's own address change (pushState) adds an entry without a load.
         scheduleHistorySave(id)
         if !browser.isIncognito { LiveFolderManager.shared.pageChanged(tab: id, to: url) }
         protectedVideoPageChanged(id, browser, url: url)
-        routeLinkTab(id, incognito: browser.isIncognito, url: url)
         delegate?.browserManagerDidUpdate(id)
-    }
-
-    /// Air Traffic Control for a link opened in a new tab, as for one from another app: when the new page's
-    /// address (after Google's /url?q= hop or a redirect, too) matches a route to another space, the tab
-    /// goes there, the window with it when it's in front. The page that opened the link stays (#868).
-    /// A link straight to the routed site is checked as its tab is made: no address change follows it.
-    private func routeLinkTab(_ id: UUID, incognito: Bool, url: String) {
-        guard linkTabsToRoute.contains(id), !incognito,
-              let space = store.settings.space(forTypedURL: url), space != store.spaceID(ofItem: id) else { return }
-        linkTabsToRoute.remove(id)
-        store.moveTab(id, toSpace: space, window: windowID)
     }
 
     func browser(_ browser: CraBrowser, didChangeLoading loading: Bool, canGoBack: Bool, canGoForward: Bool) {
@@ -1654,9 +1665,14 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             Perf.end(.pageLoad, id.uuidString)
             Perf.end(.tabWake, id.uuidString)
         }
-        if !loading { runtimes[id]?.progress = 0 }
-        // A link's tab is routed only on its way to its first page.
-        if !loading, linkTabsToRoute.contains(id), browser.currentURL.hasPrefix("http") { linkTabsToRoute.remove(id) }
+        if !loading {
+            runtimes[id]?.progress = 0
+            if var state = redirectStates[id] {
+                state.noteLoadFinished(at: clock.now)
+                state.suppressNextRoute = false
+                redirectStates[id] = state
+            }
+        }
         if !loading { scheduleHistorySave(id) }
         // Two seconds on, the page (a video player especially) has settled before it is captured.
         if !loading { scheduleSnapshot(id, after: 2) }
@@ -1674,6 +1690,10 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         // Start-up phases: firstPageShown, then the page's navigation committed, then loaded.
         if committed, id == visibleTabID { Perf.phase("firstPageCommitted") }
         if committed {
+            if var state = redirectStates[id] {
+                state.noteLoaded(url: browser.currentURL, at: clock.now)
+                redirectStates[id] = state
+            }
             if let runtime = runtimes[id] {
                 runtime.hasElementHidingStyle = false
                 runtime.recoveryOptions = 0
@@ -2064,12 +2084,145 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         return true
     }
 
+    /// Enrolls a newly created tab in Air Traffic Control redirect routing (#868).
+    func beginRedirectRouting(for tabID: UUID, space: UUID?, alreadyRouted: Bool = false,
+                              originSpace: UUID? = nil, openedInBackground: Bool = false) {
+        guard let space, !store.isStandalone(window: windowID), !store.isStandalone(space: space),
+              !store.isPinned(tabID) else { return }
+        let stable = store.item(tabID)?.tab?.url ?? ""
+        if alreadyRouted {
+            redirectStates[tabID] = LinkRedirectState(isTransient: false, originSpaceID: originSpace,
+                                                      routedToSpaceID: space, openedInBackground: openedInBackground,
+                                                      stableURL: stable)
+        } else {
+            redirectStates[tabID] = LinkRedirectState(isTransient: true, originSpaceID: originSpace ?? space,
+                                                      openedInBackground: openedInBackground, stableURL: stable)
+        }
+    }
+
+    /// Marks an explicit user navigation (e.g. ⌘L) so it stays in the current space (#868).
+    func noteExplicitNavigation(_ tabID: UUID, to url: String? = nil) {
+        var state = redirectStates[tabID] ?? defaultRedirectState(for: tabID)
+        state.retireTransient()
+        state.clearPending()
+        if let url {
+            if url != runtimes[tabID]?.browser.currentURL { state.suppressNextRoute = true }
+            if LinkRedirectRouting.normalizedHost(of: url) != nil { state.stableURL = url }
+        } else {
+            state.suppressNextRoute = true
+        }
+        redirectStates[tabID] = state
+    }
+
+    private func defaultRedirectState(for tabID: UUID) -> LinkRedirectState {
+        LinkRedirectState(isTransient: false, originSpaceID: store.spaceID(ofItem: tabID),
+                          stableURL: store.item(tabID)?.tab?.url ?? "")
+    }
+
+    private func isRouteSpaceAvailable(_ sid: UUID) -> Bool {
+        store.space(sid) != nil && !store.isStandalone(space: sid)
+    }
+
+    private enum RouteOutcome { case none, moved, openNewTab }
+
+    private func evaluateLinkRouting(_ id: UUID, browser: CraBrowser, url: String) -> RouteOutcome {
+        var state = redirectStates[id] ?? defaultRedirectState(for: id)
+        let currentSpace = store.spaceID(ofItem: id) ?? store.focusedSpaceID(window: windowID)
+        let standalone = browser.isIncognito || store.isStandalone(window: windowID) || store.isStandalone(space: currentSpace)
+        let pinnedOrFavorite = store.isPinned(id) || store.isFavorite(id)
+        let inSplit = store.splitContaining(id) != nil
+        let decision = LinkRedirectRouting.decision(
+            for: url,
+            currentSpaceID: currentSpace,
+            isStandalone: standalone,
+            isPinnedOrFavorite: pinnedOrFavorite,
+            inSplit: inSplit,
+            state: &state,
+            routes: store.settings.linkRoutes,
+            spaceAvailable: { self.isRouteSpaceAvailable($0) },
+            now: clock.now
+        )
+        redirectStates[id] = state
+        switch decision {
+        case .none:
+            return .none
+        case .moveTab(let targetSpace, let follow):
+            state.stableURL = url
+            redirectStates[id] = state
+            let oldProfile = browser.profilePath
+            store.updateTab(id, url: url)
+            if follow {
+                store.rerouteTab(id, toSpace: targetSpace, window: windowID)
+            } else {
+                store.moveTab(id, toSpace: targetSpace)
+                store.markUnread(id, true)
+            }
+            let profileChanged = store.profilePath(item: id) != oldProfile
+            if profileChanged || follow {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.store.item(id)?.isTab == true else { return }
+                    self.pruneMissingTabs()
+                    if follow {
+                        self.show(id, focus: true)
+                    } else if profileChanged {
+                        self.loadBehind(id)
+                    }
+                }
+            }
+            return .moved
+        case .openNewTab(let targetSpace, let restoreURL):
+            let newTab = store.createTab(url: url, in: targetSpace, select: true, window: windowID, referrer: id)
+            beginRedirectRouting(for: newTab.id, space: targetSpace, alreadyRouted: true, originSpace: currentSpace)
+            if !restoreURL.isEmpty {
+                store.updateTab(id, url: restoreURL)
+                state.stableURL = restoreURL
+                redirectStates[id] = state
+                DispatchQueue.main.async { [weak self, weak browser] in
+                    guard let self, let browser, self.runtimes[id]?.browser === browser else { return }
+                    if browser.currentURL != restoreURL {
+                        if !browser.hasCommittedLoad && browser.isLoading {
+                            browser.stopLoading()
+                        } else {
+                            if var currentState = self.redirectStates[id] {
+                                currentState.suppressNextRoute = true
+                                self.redirectStates[id] = currentState
+                            }
+                            browser.loadURL(restoreURL)
+                        }
+                    }
+                }
+            } else {
+                DispatchQueue.main.async { [weak browser] in
+                    browser?.stopLoading()
+                }
+            }
+            return .openNewTab
+        }
+    }
+
     /// A link that asks for a new tab, from `source`'s page or from a Peek over it (#202): a
-    /// Today tab in `source`'s space, else the window's.
+    /// Today tab in `source`'s space, else the window's (or an ATC space route, #868).
     func openLinkTab(_ url: String, from source: UUID?, inBackground background: Bool) {
         // cra:// is Cra's scripting scheme (DevTools Protocol, key presses); a page must not drive it.
         if url.lowercased().hasPrefix("cra:") { return }
         let sourceSpace = source.flatMap { store.spaceID(ofItem: $0) }
+        let effectiveSourceSpace = sourceSpace ?? store.focusedSpaceID(window: windowID)
+        let sourceIncognito = source.flatMap { runtimes[$0]?.browser.isIncognito ?? store.isIncognito(item: $0) } ?? false
+        let standalone = sourceIncognito || store.isStandalone(window: windowID) || store.isStandalone(space: effectiveSourceSpace)
+        let targetSpace = store.settings.space(forLinkURL: url, currentSpaceID: effectiveSourceSpace,
+                                               isStandalone: standalone, spaceAvailable: { self.isRouteSpaceAvailable($0) })
+        if let targetSpace {
+            let tab = store.createTab(url: url, in: targetSpace, select: !background,
+                                      parent: nil, index: nil, window: windowID, referrer: source)
+            beginRedirectRouting(for: tab.id, space: targetSpace, alreadyRouted: true,
+                                 originSpace: effectiveSourceSpace, openedInBackground: background)
+            if background {
+                store.markUnread(tab.id, true)
+                loadBehind(tab.id)  // load it so the title and favicon fill in
+                delegate?.browserManagerOpenedInBackground(tab.id)
+            }
+            return
+        }
         // Links from a today tab open right below it (Arc), a split's below the split; otherwise at
         // the top. With "Open background tabs below the current tab" on, one behind the page goes
         // after the tabs `source` opened before (#532). Back on the new tab, with no page behind,
@@ -2079,13 +2232,15 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
         }
         let tab = store.createTab(url: url, in: sourceSpace, select: !background,
                                   parent: slot?.parent, index: slot?.index, window: windowID, referrer: source)
-        linkTabsToRoute.insert(tab.id)
+        if !standalone {
+            beginRedirectRouting(for: tab.id, space: effectiveSourceSpace, alreadyRouted: false,
+                                 openedInBackground: background)
+        }
         if background {
             store.markUnread(tab.id, true)
             loadBehind(tab.id)  // load it so the title and favicon fill in
             delegate?.browserManagerOpenedInBackground(tab.id)
         }
-        routeLinkTab(tab.id, incognito: source.flatMap { runtimes[$0]?.browser.isIncognito } ?? false, url: url)
     }
 
     func browser(_ browser: CraBrowser, popupHostForURL url: String, inBackground background: Bool) -> CraBrowser? {
@@ -2103,17 +2258,44 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
             return host
         }
         let sourceSpace = source.flatMap { store.spaceID(ofItem: $0) }
+        let effectiveSourceSpace = sourceSpace ?? store.focusedSpaceID(window: windowID)
+        let standalone = browser.isIncognito || store.isStandalone(window: windowID) || store.isStandalone(space: effectiveSourceSpace)
+        if let targetSpace = store.settings.space(forLinkURL: url, currentSpaceID: effectiveSourceSpace,
+                                                  isStandalone: standalone, spaceAvailable: { self.isRouteSpaceAvailable($0) }) {
+            let tab = store.createTab(url: url, in: targetSpace, select: !background, parent: nil, index: nil,
+                                      window: windowID, referrer: source)
+            beginRedirectRouting(for: tab.id, space: targetSpace, alreadyRouted: true,
+                                 originSpace: effectiveSourceSpace, openedInBackground: background)
+            if store.profilePath(space: targetSpace) != browser.profilePath {
+                // Returning nil lets PageHost::Adopt close the source-profile WebContents cleanly so
+                // mismatched profiles are never paired (#868).
+                if background {
+                    store.markUnread(tab.id, true)
+                    loadBehind(tab.id)
+                    delegate?.browserManagerOpenedInBackground(tab.id)
+                } else {
+                    show(tab.id, focus: true)
+                }
+                return nil
+            }
+            if background { store.markUnread(tab.id, true) }
+            let host = makePopupHost(for: tab.id, opener: browser)
+            if background { delegate?.browserManagerOpenedInBackground(tab.id) } else { show(tab.id, focus: true) }
+            return host
+        }
         // A ⌘-click or middle click goes where new tabs go, or with "Open background tabs below the
         // current tab" on right below `source`, after the tabs it opened before (#532).
         let slot = background && store.settings.backgroundTabsBelowCurrent
             ? source.flatMap { store.linkTabSlot(below: $0, afterEarlierLinks: true) } : nil
         let tab = store.createTab(url: url, in: sourceSpace, select: !background, parent: slot?.parent, index: slot?.index,
                                   window: windowID, referrer: source)
+        if !standalone {
+            beginRedirectRouting(for: tab.id, space: effectiveSourceSpace, alreadyRouted: false,
+                                 openedInBackground: background)
+        }
         if background { store.markUnread(tab.id, true) }
-        linkTabsToRoute.insert(tab.id)
         let host = makePopupHost(for: tab.id, opener: browser)
         if background { delegate?.browserManagerOpenedInBackground(tab.id) } else { show(tab.id, focus: true) }
-        routeLinkTab(tab.id, incognito: browser.isIncognito, url: url)
         return host
     }
 

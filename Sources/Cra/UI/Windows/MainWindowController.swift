@@ -5640,8 +5640,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             if entered { store.recordTyped(url: url, profile: store.profileID(space: destination.space(focused: focusedSpaceID))) }
             switch destination {
             case .selectedTab: loadInSelectedTab(url)
-            case .routed(let space): store.createTab(url: url, in: space, window: windowID)
-            case .newTab: store.createTab(url: url, window: windowID)
+            case .routed(let space):
+                let tab = store.createTab(url: url, in: space, window: windowID)
+                if !isStandalone { browsers.beginRedirectRouting(for: tab.id, space: space, alreadyRouted: true, originSpace: focusedSpaceID) }
+            case .newTab:
+                let tab = store.createTab(url: url, window: windowID)
+                if !isStandalone { browsers.beginRedirectRouting(for: tab.id, space: focusedSpaceID) }
             }
         }
         guard let s else {
@@ -5935,6 +5939,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         let wasEmpty = store.item(id)?.isEmptyTab == true
         store.updateTab(id, url: url)
+        browsers.noteExplicitNavigation(id, to: url)
         if let rt = browsers.ensureRuntime(for: id), !wasEmpty { rt.browser.loadURL(url) }
         refresh()
         browsers.show(store.visiblePaneTabIDs(in: focusedSpaceID, window: windowID), focused: id, focus: true)

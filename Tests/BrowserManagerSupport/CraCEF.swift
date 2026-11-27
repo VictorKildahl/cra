@@ -47,6 +47,8 @@ open class CraBrowser {
     public var isCreated = true
     public var isClosed = false
     public var isLoading = false
+    public var hasCommittedLoad = false
+    public var canGoBack = false
     public var isInPictureInPicture = false
     public var isPictureInPicturePlaying = false
     public var isCapturingMedia = false
@@ -181,6 +183,10 @@ open class CraBrowser {
     /// Addresses Cra asked to load, in order.
     public private(set) var loads: [String] = []
     public func loadURL(_ url: String) { loads.append(url) }
+    public private(set) var stopLoadingRequests = 0
+    public func stopLoading() { stopLoadingRequests += 1; isLoading = false }
+    public private(set) var goBackRequests = 0
+    public func goBack() { goBackRequests += 1 }
     public func navigate(to url: String) {
         currentURL = url
         delegate?.browser(self, didChangeURL: url)

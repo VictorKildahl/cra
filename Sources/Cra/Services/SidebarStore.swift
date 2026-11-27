@@ -1819,6 +1819,22 @@ final class SidebarStore {
         }
     }
 
+    /// Air Traffic Control redirect routing (#868): moves a newly opened non-pinned tab to `sid`,
+    /// following with `window` when it was in front while restoring `activeTabBeforeCreationID` in the
+    /// originating space so switching back keeps the originating tab selected.
+    func rerouteTab(_ id: UUID, toSpace sid: UUID, window: UUID?) {
+        guard items[id]?.isTab == true, !isPinned(id), spaces[sid] != nil, !isStandalone(space: sid) else { return }
+        let from = spaceID(ofItem: id)
+        let previous = items[id]?.tab?.activeTabBeforeCreationID
+        moveTab(id, toSpace: sid, window: window)
+        guard let from, from != sid, let previous, items[previous]?.isTab == true, isInSpace(previous, from) else { return }
+        let w = self.window(window).id
+        if prefs.windows.first(where: { $0.id == w })?.selectedTabPerSpace[from] == nil {
+            updateWindow(w) { $0.selectedTabPerSpace[from] = previous }
+            touch()
+        }
+    }
+
     // MARK: Folders
 
     @discardableResult
