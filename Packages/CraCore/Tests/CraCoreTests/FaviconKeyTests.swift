@@ -100,6 +100,23 @@ struct FaviconSectionTests {
         #expect(fetch.host == "docs.google.com/presentation" && fetch.origin.absoluteString == "https://docs.google.com/presentation")
     }
 
+    /// A section's icon comes from the section's own page, even when its key had to change the segment.
+    @Test(arguments: [
+        ("https://docs.google.com/spreadsheets/d/1/edit?x#y", "https://docs.google.com/spreadsheets"),
+        ("https://example.org/%23odd/page", "https://example.org/%23odd"),
+        ("https://example.org/" + String(repeating: "a", count: 80) + "/b", "https://example.org/" + String(repeating: "a", count: 80)),
+        ("https://user:pw@Example.org:8443/app", "https://example.org:8443/app"),
+        ("https://example.org/", "https://example.org/"),
+    ])
+    func aSectionIsFetchedFromItsOwnPage(url: String, origin: String) throws {
+        var queue = SiteIconQueue()
+        queue.want(.init(url: url, iconKey: FaviconKey.sectionKey(for: url), incognito: false))
+        let next = queue.next()
+        let fetch = try #require(next)
+        #expect(fetch.origin.absoluteString == origin)
+        #expect(fetch.host == FaviconKey.sectionKey(for: url))
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/909"))
     func appsOnOneAddressKeepTheirOwnIcons() {
         var stored: [String: String] = [:]

@@ -312,7 +312,8 @@ final class CommandBarView: NSView {
             r.isHidden = false
             let s = items[i]
             let icon = s.faviconKey.flatMap { favicons.image(forKey: $0) }
-            if icon == nil, let url = s.url {
+            // No icon, or only its host's, which another app on the host may have left (#909): ask for its section's.
+            if !favicons.hasOwnImage(forKey: s.faviconKey), let url = s.url {
                 let incognito = c.store.window().isIncognito || s.tabID.map(c.store.isIncognito(item:)) == true
                 SiteIconLoader.shared.want(.init(url: url, iconKey: s.faviconKey, preset: s.isPresetSite, incognito: incognito), into: favicons)
             }

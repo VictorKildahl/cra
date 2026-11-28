@@ -84,8 +84,10 @@ public struct SiteIconQueue {
         parts.host = host
         parts.user = nil
         parts.password = nil
-        // A section's page: "https://docs.google.com/spreadsheets" for "docs.google.com/spreadsheets".
-        parts.path = key.firstIndex(of: "/").map { String(key[$0...]) } ?? "/"
+        // A section's page: "https://docs.google.com/spreadsheets" for "docs.google.com/spreadsheets", from the
+        // address's own first segment, which the key may have shortened or had "#" and "/" replaced in.
+        let segment = URLComponents(string: url)?.percentEncodedPath.split(separator: "/").first.map(String.init) ?? ""
+        parts.percentEncodedPath = key.contains("/") && !segment.isEmpty ? "/" + segment : "/"
         parts.query = nil
         parts.fragment = nil
         return parts.url.map { Fetch(host: key, origin: $0) }
