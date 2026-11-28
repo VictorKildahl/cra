@@ -59,10 +59,11 @@ final class PageSwipeStage: NSObject {
     lazy var magnet = MobilePageSwipe.magnet(for: reveal)
     var lastStep: CFTimeInterval = 0
     let letGoTick = UIImpactFeedbackGenerator(style: .medium)
-    /// The closing tab's cards, out while the magnet doesn't hold the page (it let go, or a quick finger took the hold
-    /// off) and back in while it does, each on its own spring: the page's, and the tab's, which overshoots.
+    /// A closing or reopening tab's cards, out while the magnet doesn't hold the page (it let go, or a quick finger took
+    /// the hold off) and back in while it does, each on its own spring: the page's, and the tab's, which overshoots
+    /// coming out of the tab button.
     var cards = MobilePageSwipe.Cards.page
-    var tabCards = MobilePageSwipe.Cards.tab
+    lazy var tabCards = MobilePageSwipe.Cards.tab(for: reveal)
     var progress: CGFloat { cards.progress }
     var tabProgress: CGFloat { tabCards.progress }
     /// Whether the tab's card comes out over the bar, or from behind a bar that slid away.
@@ -221,11 +222,11 @@ extension BrowserViewController {
         case .back:
             view.insertSubview(stage.arriving, belowSubview: pageContainer)
             view.insertSubview(stage.shadow, belowSubview: pageContainer)
-        case .forward, .reopeningTab:
+        case .forward:
             view.insertSubview(stage.shadow, aboveSubview: pageContainer)
             view.insertSubview(stage.arriving, aboveSubview: stage.shadow)
-        case .closingTab:
-            startClosingTab(stage, picture: image)
+        case .closingTab, .reopeningTab:
+            startTabCards(stage)
         }
         pageSwipe = stage
         tracePageSwipe("\(reveal) picture \(image == nil ? "none" : "kept")", restart: true)
@@ -260,16 +261,17 @@ extension BrowserViewController {
         } else if !held, stage.magnet.holds {
             tracePageSwipe(String(format: "held again with the finger at %.0f", abs(stage.translation)))
         }
-        if stage.reveal == .closingTab {
+        if MobilePageSwipe.showsCards(stage.reveal) {
             _ = stage.cards.step(out: !stage.magnet.holds, dt: dt)
             _ = stage.tabCards.step(out: !stage.magnet.holds, dt: dt)
         }
     }
 
-    /// The tab closing: the page on screen, as its picture, slides with the finger; once the magnet stops holding it
-    /// (at once for a quick finger) it is cut down to the bar and shrinks into a card while the tab shown next lifts
-    /// off the tab button's front card and grows into one beside it, both on their own clock (`stepPageSwipe`).
-    private func startClosingTab(_ stage: PageSwipeStage, picture image: UIImage?) {
+    /// The tab closing or coming back: the page on screen, as its picture, slides with the finger; once the magnet
+    /// stops holding it (at once for a quick finger) it shrinks into a card while the tab shown next lifts off the tab
+    /// button's front card and grows into one beside it, or the closed tab comes in beside it from the right, both on
+    /// their own clock (`stepPageSwipe`).
+    private func startTabCards(_ stage: PageSwipeStage) {
         let bounds = view.bounds
         let leaving = UIView()
         leaving.isUserInteractionEnabled = false
@@ -292,7 +294,6 @@ extension BrowserViewController {
         stage.hidPage = true
         stage.leaving = leaving
 
-        stage.buttonCard = bar.tabsButton.frontCard(in: view)
         stage.arriving.layer.borderWidth = 1 / max(1, view.traitCollection.displayScale)
         stage.arriving.layer.borderColor = UIColor(white: 0, alpha: 0.12).cgColor
         // Its band under the status bar, as the tab will look on screen, and its page's own background under a
@@ -302,8 +303,15 @@ extension BrowserViewController {
             stage.arriving.backgroundColor = pageBackground(for: tab.id)
         }
         splitCardPicture(stage)
+        guard stage.reveal == .closingTab else {
+            // The closed tab coming back beside the page, under the bar as the page is.
+            stage.cardOverBar = false
+            view.insertSubview(stage.arriving, belowSubview: bar)
+            return
+        }
         // Lifted off the button, so over the bar while it is there, and from behind a bar that has slid away; the slot
         // it left is empty while it is out.
+        stage.buttonCard = bar.tabsButton.frontCard(in: view)
         stage.cardOverBar = MobilePageSwipe.tabCardOverBar(barCollapse: barCollapse.progress)
         if stage.cardOverBar {
             view.insertSubview(stage.arriving, aboveSubview: bar)
@@ -318,8 +326,8 @@ extension BrowserViewController {
 
     private func placePageSwipe(_ stage: PageSwipeStage) {
         let width = view.bounds.width
-        if stage.reveal == .closingTab {
-            layOutClosingTab(stage, progress: stage.progress, tab: stage.tabProgress, translation: stage.pageTranslation)
+        if MobilePageSwipe.showsCards(stage.reveal) {
+            layOutTabCards(stage, progress: stage.progress, tab: stage.tabProgress, translation: stage.pageTranslation)
             let card = stage.arriving.frame
             let leaving = stage.leaving.map { ($0.frame.height, $0.layer.cornerRadius * $0.transform.a) } ?? (0, 0)
             let strip = (stage.leavingStrip?.frame.height ?? 0) * (stage.leaving?.transform.a ?? 1)
@@ -350,15 +358,18 @@ extension BrowserViewController {
         stage.shadow.frame = CGRect(x: edge - shadow, y: 0, width: shadow, height: bounds.height)
     }
 
-    /// The closing tab's two cards, the page's `progress` and the tab's `tab` of the way into cards, with the finger
-    /// `translation` across. Out of a bar that has slid away, the tab's card comes out of nothing.
-    private func layOutClosingTab(_ stage: PageSwipeStage, progress: CGFloat, tab: CGFloat, translation: CGFloat) {
+    /// A closing or reopening tab's two cards, the page's `progress` and the tab's `tab` of the way into cards, with the
+    /// finger `translation` across: the tab shown next out of the tab button, or the closed tab beside the page, to
+    /// its right.
+    private func layOutTabCards(_ stage: PageSwipeStage, progress: CGFloat, tab: CGFloat, translation: CGFloat) {
         let width = view.bounds.width, barTop = tabArea.maxY
         let place = leavingPlace(progress: progress, translation: translation)
         placeLeaving(stage, place)
-        let card = MobilePageSwipe.arrivingCard(progress: tab, from: stage.buttonCard, tilt: MobileMotion.frontCardTilt,
-                                                buttonCorner: 5, leavingCenterX: place.center.x, width: width,
-                                                band: view.safeAreaInsets.top, barTop: barTop)
+        let card = stage.reveal == .reopeningTab
+            ? MobilePageSwipe.reopeningCard(beside: leavingPlace(progress: tab, translation: translation), progress: tab)
+            : MobilePageSwipe.arrivingCard(progress: tab, from: stage.buttonCard, tilt: MobileMotion.frontCardTilt,
+                                           buttonCorner: 5, leavingCenterX: place.center.x, width: width,
+                                           band: view.safeAreaInsets.top, barTop: barTop)
         // Bounds and centre: a frame set through the lean would not be the card's size.
         stage.arriving.transform = CGAffineTransform(rotationAngle: card.angle)
         stage.arriving.bounds = CGRect(origin: .zero, size: card.size)
@@ -438,7 +449,7 @@ extension BrowserViewController {
     private func commitPageSwipe(_ stage: PageSwipeStage, _ navigation: MobileSwipe.Navigation, velocity: CGFloat) {
         guard let page = shownPage else { return endPageSwipe() }
         stage.stopClock()
-        if stage.reveal != .closingTab {
+        if !MobilePageSwipe.showsCards(stage.reveal) {
             // The page on screen as it is, in its place, so the live page can go on underneath.
             let leaving = pageContainer.snapshotView(afterScreenUpdates: false) ?? UIView()
             leaving.isUserInteractionEnabled = false
@@ -457,8 +468,8 @@ extension BrowserViewController {
 
         // The motion first, handed to the render server now: going where the swipe leads below can hold the main
         // thread for a frame or more (a tab's page put on screen, its history saved), and the release stuttered on it.
-        if stage.reveal == .closingTab {
-            settleClosingTab(stage, velocity: velocity)
+        if MobilePageSwipe.showsCards(stage.reveal) {
+            settleTabCards(stage, velocity: velocity)
         } else {
             let width = view.bounds.width
             let edge = MobilePageSwipe.topEdge(translation: stage.pageTranslation, width: width, reveal: stage.reveal)
@@ -505,29 +516,13 @@ extension BrowserViewController {
             // The card is the page now: the button shows the tabs behind it again.
             if stage.emptiedButton { bar.tabsButton.setFrontEmpty(false) }
             stage.emptiedButton = false
-            // The live page goes on underneath at once, so it can draw while the cards settle, behind the backdrop
-            // the cards are on.
-            let curtain = backdrop.snapshotView(afterScreenUpdates: false) ?? UIView()
-            curtain.frame = view.bounds
-            curtain.backgroundColor = view.backgroundColor
-            curtain.isUserInteractionEnabled = false
-            if let leaving = stage.leaving {
-                view.insertSubview(curtain, belowSubview: leaving)
-            } else {
-                view.insertSubview(curtain, belowSubview: stage.arriving)
-            }
-            stage.curtain = curtain
-            if let tab = store.selected { show(tab) }
-            refreshTabStack()
-            pageContainer.isHidden = false
-            stage.hidPage = false
+            showUnderCards(stage)
         case .reopenTab:
             if let id = tabArchivedBySwipe {
                 store.restore(id)
                 tabArchivedBySwipe = nil
                 tabArchivedBySwipePicture = nil
-                if let tab = store.selected { show(tab) }
-                refreshTabStack()
+                showUnderCards(stage)
             }
         case .none: break
         }
@@ -537,13 +532,33 @@ extension BrowserViewController {
         liftPageSwipePictureIfDue()
     }
 
-    /// The closing tab let go: its card springs off to the right, still a card, while the tab shown next grows from
-    /// its card to the whole screen under the bar, over its live page until that has drawn.
-    private func settleClosingTab(_ stage: PageSwipeStage, velocity: CGFloat) {
+    /// The tab the cards led to on screen, its live page going on underneath at once so it can draw while the cards
+    /// settle, behind the backdrop the cards are on.
+    private func showUnderCards(_ stage: PageSwipeStage) {
+        let curtain = backdrop.snapshotView(afterScreenUpdates: false) ?? UIView()
+        curtain.frame = view.bounds
+        curtain.backgroundColor = view.backgroundColor
+        curtain.isUserInteractionEnabled = false
+        if let leaving = stage.leaving {
+            view.insertSubview(curtain, belowSubview: leaving)
+        } else {
+            view.insertSubview(curtain, belowSubview: stage.arriving)
+        }
+        stage.curtain = curtain
+        if let tab = store.selected { show(tab) }
+        refreshTabStack()
+        pageContainer.isHidden = false
+        stage.hidPage = false
+    }
+
+    /// The tab closing or coming back, let go: the page's card springs off to the right (or the left, bringing the
+    /// closed tab back), still a card, while the tab it leads to grows from its card to the whole screen under the bar,
+    /// over its live page until that has drawn.
+    private func settleTabCards(_ stage: PageSwipeStage, velocity: CGFloat) {
         guard let leaving = stage.leaving else { return }
         let bounds = view.bounds, width = bounds.width
         view.insertSubview(stage.arriving, belowSubview: bar)
-        let goneX = MobilePageSwipe.leavingCardGoneX(width: width)
+        let goneX = MobilePageSwipe.leavingCardGoneX(width: width, reveal: stage.reveal)
         let speed = MobilePageSwipe.initialVelocity(velocity: velocity, from: leaving.center.x, to: goneX)
         // A card by now, even when a quick release comes before the cards are all the way out, shrinking a little
         // further on its way off.
@@ -592,7 +607,7 @@ extension BrowserViewController {
             self.tracePageSwipe("back in place")
             self.endPageSwipe()
         }
-        if stage.reveal == .closingTab {
+        if MobilePageSwipe.showsCards(stage.reveal) {
             // Back the way they came, a frame at a time: the tab's card down the screen's edge into the button along the
             // path it came up, the page's card back to the page. A spring between the two layouts would take the card
             // there in a straight line.
@@ -602,7 +617,7 @@ extension BrowserViewController {
                 guard let self, let stage, self.pageSwipe === stage else { return }
                 let back = MobilePageSwipe.cardsReturn(after: time - start)
                 let left = back.home ? 0 : 1 - back.share
-                self.layOutClosingTab(stage, progress: progress * left, tab: tab * left, translation: translation * left)
+                self.layOutTabCards(stage, progress: progress * left, tab: tab * left, translation: translation * left)
                 let card = stage.arriving.frame
                 self.tracePageSwipe(String(format: "down %.3f card %.1f %.1f %.1f %.1f page %.1f", tab * left,
                                            card.minX, card.minY, card.width, card.height, translation * left))

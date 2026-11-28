@@ -90,7 +90,7 @@ struct MobilePageSwipeTests {
     /// The tab's card comes out with a slight overshoot and settles on its place; going back in it doesn't overshoot
     /// into the button, and the page beside it never overshoots.
     @Test func theTabsCardOvershootsALittleOnTheWayOut() {
-        var tab = MobilePageSwipe.Cards.tab, page = MobilePageSwipe.Cards.page
+        var tab = MobilePageSwipe.Cards.tab(for: .closingTab), page = MobilePageSwipe.Cards.page
         var furthest: CGFloat = 0, pageFurthest: CGFloat = 0
         for _ in 0..<120 {
             furthest = max(furthest, tab.step(out: true, dt: 1.0 / 120))
@@ -228,10 +228,32 @@ struct MobilePageSwipeTests {
         #expect(abs(half.angle - tilt / 2) < 0.0001)
     }
 
-    /// Let go, the page's card leaves off the right edge, whole.
+    /// The closed tab comes back beside the page, to its right: the page's own size all the way, 20 pt from it, its
+    /// strip squashing as the page's does, and with nothing of the tab button's lean, arc or overshoot.
+    @Test func theClosedTabComesBackBesideThePageAtItsSize() {
+        #expect(MobilePageSwipe.showsCards(.closingTab) && MobilePageSwipe.showsCards(.reopeningTab))
+        #expect(!MobilePageSwipe.showsCards(.back) && !MobilePageSwipe.showsCards(.forward))
+        for (progress, translation) in [(CGFloat(0), CGFloat(-40)), (0.5, -120), (1, -200)] {
+            let page = MobilePageSwipe.leavingPage(progress: progress, translation: translation, width: width, height: height,
+                                                   band: band, barTop: barTop, displayCorner: 55)
+            let card = MobilePageSwipe.reopeningCard(beside: page, progress: progress)
+            let pageWidth = page.size.width * page.scale
+            #expect(abs(card.size.width - pageWidth) < 0.01 && abs(card.size.height - page.size.height * page.scale) < 0.01)
+            #expect(abs((card.center.x - card.size.width / 2) - (page.center.x + pageWidth / 2) - 20) < 0.01, "20 pt to its right")
+            #expect(card.center.y == page.center.y)
+            #expect(card.angle == 0 && card.cornerRadius == page.cornerRadius && card.strip == 1 - progress)
+        }
+        // On the page's spring, without the tab button's overshoot.
+        var cards = MobilePageSwipe.Cards.tab(for: .reopeningTab), furthest: CGFloat = 0
+        for _ in 0..<120 { furthest = max(furthest, cards.step(out: true, dt: 1.0 / 120)) }
+        #expect(furthest == 1)
+    }
+
+    /// Let go, the page's card leaves off the right edge, whole; bringing the closed tab back, off the left.
     @Test func thePagesCardLeavesOffTheRightEdge() {
         let gone = MobilePageSwipe.leavingCardGoneX(width: width)
         #expect(abs(gone - (430 + 195)) < 0.01)
+        #expect(abs(MobilePageSwipe.leavingCardGoneX(width: width, reveal: .reopeningTab) + 195) < 0.01)
         #expect(MobilePageSwipe.cardLeave.remaining(after: 0.3) < 0.01)
         #expect(MobilePageSwipe.cardArrive.remaining(after: 0.26) < 0.01)
     }

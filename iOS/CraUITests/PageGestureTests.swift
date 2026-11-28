@@ -220,6 +220,34 @@ final class PageGestureTests: BrowserTestCase {
         XCTAssertEqual(rowTitles(), ["First"], "the swiped tab went to the archive")
     }
 
+    /// Swiping the other way right after a tab closed brings it back the same way: the page slides, then shrinks into
+    /// its card while the closed tab comes in beside it from the right, the same size, 20 pt from it, tops level; let
+    /// go, it is back.
+    func testSwipingForwardBringsTheClosedTabBackBesideThePage() {
+        launch(["-CraOpenURL", Self.page("First", color: "gold"), "-CraSearch", "NO", "-CraTracePageSwipe", "YES"])
+        waitForPage("First")
+        openTab(Self.page("Second"), title: "Second")
+        drag(fromX: 0.15, toX: 0.85, y: 0.5, settle: true)
+        waitForPage("First")
+        waitForTrace("lifted after ")
+        drag(fromX: 0.85, toX: 0.15, y: 0.5, settle: true)
+        waitForPage("Second")
+        let lines = swipeTrace()
+        XCTAssertEqual(lines.first, "reopeningTab picture kept", "\(lines)")
+        // page, x, y, width, height, finger, the page's height, its rounding, its strip.
+        let cards = lines.filter { $0.hasPrefix("page ") }.map(numbers).filter { $0.count == 9 }
+        guard let first = cards.first, let last = cards.last else { return XCTFail("no card frames: \(lines)") }
+        let width = app.windows.firstMatch.frame.width
+        XCTAssertEqual(first[3], width, accuracy: 1, "the page's size while held: \(first)")
+        XCTAssertEqual(last[3], width - 40, accuracy: 1.5, "the page's card's size by the end: \(last)")
+        XCTAssertEqual(last[4], last[6], accuracy: 1.5, "as tall as the page's card: \(last)")
+        XCTAssertEqual(last[2], first[8], accuracy: 1.5, "its top on the safe area's, level with the page's card: \(last)")
+        let pageRight = width / 2 + last[0] + (width - 40) / 2
+        XCTAssertEqual(last[1], pageRight + 20, accuracy: 1.5, "20 pt to the right of the page's card: \(last)")
+        XCTAssertTrue(lines.contains("went reopeningTab"), "\(lines)")
+        XCTAssertEqual(rowTitles(), ["First", "Second"], "the closed tab came back")
+    }
+
     /// With the bar slid away, the tab's card sweeps out from behind it, where its tab button was; with the bar there,
     /// it lifts off the button over it.
     func testTheTabsCardComesFromBehindABarThatSlidAway() {

@@ -35,6 +35,12 @@ public enum MobilePageSwipe {
         reveal == .forward || reveal == .reopeningTab
     }
 
+    /// Whether the swipe takes the page into a card beside the tab it leads to: a tab closing, or the closed tab
+    /// coming back.
+    public static func showsCards(_ reveal: Reveal) -> Bool {
+        reveal == .closingTab || reveal == .reopeningTab
+    }
+
     // MARK: The magnet
 
     /// Arc Search holds the page as a swipe across it starts: past a dead zone the page moves at a share of the
@@ -239,8 +245,9 @@ public enum MobilePageSwipe {
 
         /// The page's: in and out on `cardSpring`.
         public static var page: Cards { Cards() }
-        /// The tab's: out with a little overshoot, back in on `cardSpring`.
-        public static var tab: Cards { Cards(out: tabCardOut) }
+        /// The tab's: out of the tab button with a little overshoot, back in on `cardSpring`; the closed tab coming
+        /// back beside the page goes as the page does.
+        public static func tab(for reveal: Reveal) -> Cards { reveal == .closingTab ? Cards(out: tabCardOut) : page }
 
         /// `dt` seconds on, heading out into cards when `out`, back to the page otherwise.
         public mutating func step(out: Bool, dt: Double) -> CGFloat {
@@ -338,6 +345,15 @@ public enum MobilePageSwipe {
                     angle: tilt * (1 - q), cornerRadius: mix(buttonCorner, cardCornerRadius, q), strip: 1 - q)
     }
 
+    /// The closed tab coming back, beside the page `leaving` on its way into its card, `progress` of the way: the
+    /// page's own size, `cardGap` to its right, its strip squashing away as the page's does; no lean, no arc, no
+    /// overshoot (asked for on Nov 28; Arc Search's came in as Forward does).
+    public static func reopeningCard(beside leaving: LeavingPage, progress: CGFloat) -> Card {
+        let size = CGSize(width: leaving.size.width * leaving.scale, height: leaving.size.height * leaving.scale)
+        return Card(center: CGPoint(x: leaving.center.x + size.width + cardGap, y: leaving.center.y), size: size,
+                    angle: 0, cornerRadius: leaving.cornerRadius, strip: 1 - min(1, max(0, progress)))
+    }
+
     /// Whether the tab's card comes out over the bar: lifted off the button while the bar is there; with the bar
     /// slid away (`barCollapse` 0 there to 1 gone) more than half way, it sweeps out from behind it, and back in.
     public static func tabCardOverBar(barCollapse: CGFloat) -> Bool { barCollapse < 0.5 }
@@ -357,9 +373,11 @@ public enum MobilePageSwipe {
     public static let cardLeave = MobileMotion.Spring(response: 0.28, dampingRatio: 1)
     public static let cardArrive = MobileMotion.Spring(response: 0.24, dampingRatio: 1)
 
-    /// Where the page's card goes once let go: off the right edge, centred at this x.
-    public static func leavingCardGoneX(width: CGFloat) -> CGFloat {
-        width + width * cardScale(width: width) / 2
+    /// Where the page's card goes once let go, centred at this x: off the right edge as a tab closes, off the left as
+    /// the closed tab comes back.
+    public static func leavingCardGoneX(width: CGFloat, reveal: Reveal = .closingTab) -> CGFloat {
+        let half = width * cardScale(width: width) / 2
+        return reveal == .reopeningTab ? -half : width + half
     }
 
     /// Let go short of closing, the cards go back the way they came, on the spring they came out on: the tab's card down
