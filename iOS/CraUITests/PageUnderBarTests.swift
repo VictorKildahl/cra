@@ -59,36 +59,6 @@ final class PageUnderBarTests: BrowserTestCase {
         keep("sticky footer")
     }
 
-    /// A tab a swipe along the bar brings in shows its bottom on the bar's top as it slides in, not
-    /// at the screen's edge under the bar until it lands. Here it has no page yet, after a
-    /// relaunch: the swipe makes one, which has no insets of its own.
-    func testASwipedInPageShowsItsBottomOnTheBarsTop() {
-        let data = FileManager.default.temporaryDirectory.appendingPathComponent("Cra-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: data) }
-        app.launchArguments = ["-CraDataDir", data.path, "-CraOpenURL", Self.stickyPage("One"), "-CraSearch", "NO"]
-        app.launch()
-        waitForPage("One")
-        app.buttons["bar-search"].tap()
-        app.textFields["search-field"].typeText(Self.stickyPage("Two") + "\n")
-        waitForPage("Two")
-        XCUIDevice.shared.press(.home)
-        sleep(2)
-        app.terminate()
-
-        app.launchArguments = ["-CraDataDir", data.path, "-CraSearch", "NO", "-CraTraceTabOpen", "YES"]
-        app.launch()
-        waitForPage("Two")
-        let top = barTop
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.95))
-            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.95)),
-                   withVelocity: .fast, thenHoldForDuration: 0)
-        waitForPage("One")
-        let value = app.descendants(matching: .any)["swipe-page-trace"].value as? String ?? ""
-        let bottom = value.split(separator: " ").last.flatMap { Double($0) }
-        XCTAssertNotNil(bottom, "the swipe brought in the live page: \(value)")
-        XCTAssertEqual(CGFloat(bottom ?? 0), top, accuracy: 4, "the page's bottom sat on the bar's top as it came in: \(value)")
-    }
-
     /// An app sized to the screen with `100vh` keeps its bottom strip above the bar, not under it,
     /// as Excel for the web's sheet tabs were: WebKit measures `vh` from the view's frame, so a
     /// page the bar never leaves ends at the bar's top.

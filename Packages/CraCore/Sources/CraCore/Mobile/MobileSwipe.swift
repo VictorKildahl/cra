@@ -17,26 +17,6 @@ public enum MobileSwipe {
         return translation > 0 ? 1 : -1
     }
 
-    /// A swipe along the bottom bar moves between tabs as the tab row has them: a drag to the
-    /// right brings the older tab in from the left, a drag to the left the newer one. Returns the
-    /// step in the row (-1 older, 1 newer, 0 stay).
-    public static func tabStep(translation: CGFloat, velocity: CGFloat, width: CGFloat, hasOlder: Bool, hasNewer: Bool) -> Int {
-        switch direction(translation: translation, velocity: velocity, width: width) {
-        case 1: return hasOlder ? -1 : 0
-        case -1: return hasNewer ? 1 : 0
-        default: return 0
-        }
-    }
-
-    /// How far beside the page the tab `step` along the row rides in a bar swipe: a screen and a
-    /// gap (`tabGap`), on the side it comes in from.
-    public static func neighbourOffset(step: Int, width: CGFloat) -> CGFloat {
-        CGFloat(step) * (width + tabGap)
-    }
-
-    /// The gap between the page and the neighbouring tab beside it in a bar swipe.
-    public static let tabGap: CGFloat = 20
-
     /// What a drag on the bottom bar does, decided as it starts.
     public enum BarDrag: Equatable {
         /// Along the bar: the neighbouring tab in the row.

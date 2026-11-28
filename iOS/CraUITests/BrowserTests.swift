@@ -974,23 +974,18 @@ final class GestureTests: BrowserTestCase {
         XCTAssertFalse(app.webViews.staticTexts["First"].exists)
     }
 
-    /// A swipe along the bar brings the neighbouring tab in as its live page, beside the page,
-    /// rather than as its picture; the page works once it is in place.
-    func testSwipingTheBarBringsTheNeighboursLivePage() {
+    /// A swipe along the bar brings the tab beside in as a page swipe's tabs come: to the right the older tab, to the
+    /// left the newer, and the page works once it is in place.
+    func testSwipingTheBarBringsTheTabBeside() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTraceTabOpen", "YES"])
         waitForPage("First")
         openSecondTab()
         drag(fromX: 0.3, toX: 0.9, y: 0.95)
         waitForPage("First")
-        XCTAssertEqual(app.descendants(matching: .any)["tab-open-trace"].value as? String, "swiped live")
-        // The status bar and the bar took the arriving tab's colour as it let go.
-        let fill = app.descendants(matching: .any)["swipe-status-trace"].value as? String
-        XCTAssertNotNil(fill)
-        XCTAssertNotEqual(fill, "none")
+        XCTAssertEqual(app.descendants(matching: .any)["tab-open-trace"].value as? String, "swiped along the bar")
         XCTAssertFalse(app.webViews.staticTexts["Second"].exists)
         drag(fromX: 0.8, toX: 0.2, y: 0.95)
         waitForPage("Second")
-        XCTAssertEqual(app.descendants(matching: .any)["tab-open-trace"].value as? String, "swiped live")
         XCTAssertFalse(app.webViews.staticTexts["First"].exists)
     }
 
