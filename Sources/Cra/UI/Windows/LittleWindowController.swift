@@ -2271,7 +2271,10 @@ final class LittleWindowController: NSWindowController, NSWindowDelegate, @preco
 
     func browser(_ browser: CraBrowser, didLoadFavicon image: NSImage, forURL iconURL: String) {
         favicon = image
-        if let key = FaviconKey.key(for: browser.currentURL) { app.favicons.store(image, forKey: key) }
+        // Its section's and its host's, as a tab's (#909): the badge on the tab it came from reads the section's.
+        if let key = FaviconKey.sectionKey(for: browser.currentURL) {
+            for k in FaviconKey.chain(of: key).reversed() { app.favicons.store(image, forKey: k) }
+        }
     }
 
     func browser(_ browser: CraBrowser, didReportThemeColor hex: String) {

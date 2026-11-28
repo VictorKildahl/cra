@@ -737,7 +737,7 @@ final class FavoritesGridView: NSView {
                 let cells = panes.map { p in
                     let key = p.tab?.iconKey
                     let icon = favicons.image(forKey: key)
-                    if icon == nil, let tab = p.tab {
+                    if !favicons.hasOwnImage(forKey: key), let tab = p.tab {
                         // A favorite that never loaded here: its site's icon, after those of the space on screen
                         // when this space is paged out of view.
                         SiteIconLoader.shared.want(.init(

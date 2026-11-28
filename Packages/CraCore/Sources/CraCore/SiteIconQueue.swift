@@ -25,7 +25,8 @@ public struct SiteIconQueue {
         }
     }
 
-    /// A site to fetch: its favicon key (the host) and the origin its home page is at.
+    /// A site to fetch: the favicon key it is stored under (the host, or a section of it such as
+    /// "docs.google.com/spreadsheets", #909) and the page its icons are declared on.
     public struct Fetch: Equatable {
         public let host: String
         public let origin: URL
@@ -39,13 +40,12 @@ public struct SiteIconQueue {
 
     public init(cap: Int = 3) { self.cap = cap }
 
-    /// Queues the row's site when it may ask: not a preset, not from incognito, and read under that site's
-    /// key, so a custom icon or another site's never asks. A visible row goes before the rest. True while that site's fetch is still to come or running.
+    /// Queues the row's site when it may ask: not a preset, not from incognito, and read under a key of
+    /// that site, so a custom icon or another site's never asks. A visible row goes before the rest. True while that site's fetch is still to come or running.
     @discardableResult
     public mutating func want(_ row: Row) -> Bool {
         // Rows ask on every redraw: a site asked before costs one address parse.
-        guard !row.preset, !row.incognito, let host = FaviconKey.key(for: row.url),
-              row.iconKey.map(FaviconKey.siteKey(of:)) == host else { return false }
+        guard !row.preset, !row.incognito, let host = Self.key(for: row) else { return false }
         let isVisible = row.visible
         guard !asked.contains(host) else {
             if isVisible, let i = margin.firstIndex(where: { $0.host == host }) { visible.append(margin.remove(at: i)) }
@@ -69,15 +69,27 @@ public struct SiteIconQueue {
     /// A fetch ended, stored or not: its site is not asked again this launch.
     public mutating func finished(_ host: String) { inFlight.remove(host) }
 
-    private static func fetch(for url: String, host: String) -> Fetch? {
-        guard var parts = URLComponents(string: url), let scheme = parts.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+    /// The key the row's icon is fetched for: what its key falls back to short of a tab's own (the host,
+    /// or the section the row reads, #909), when that is a key of the row's host; nil otherwise.
+    public static func key(for row: Row) -> String? {
+        guard let host = FaviconKey.key(for: row.url), let iconKey = row.iconKey else { return nil }
+        let site = FaviconKey.siteKey(of: iconKey)
+        return FaviconKey.hostKey(of: site) == host ? site : nil
+    }
+
+    private static func fetch(for url: String, host key: String) -> Fetch? {
+        guard var parts = URLComponents(string: url), let scheme = parts.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = FaviconKey.key(for: url) else { return nil }
         parts.scheme = scheme
         parts.host = host
         parts.user = nil
         parts.password = nil
-        parts.path = "/"
+        // A section's page: "https://docs.google.com/spreadsheets" for "docs.google.com/spreadsheets", from the
+        // address's own first segment, which the key may have shortened or had "#" and "/" replaced in.
+        let segment = URLComponents(string: url)?.percentEncodedPath.split(separator: "/").first.map(String.init) ?? ""
+        parts.percentEncodedPath = key.contains("/") && !segment.isEmpty ? "/" + segment : "/"
         parts.query = nil
         parts.fragment = nil
-        return parts.url.map { Fetch(host: host, origin: $0) }
+        return parts.url.map { Fetch(host: key, origin: $0) }
     }
 }

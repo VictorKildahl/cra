@@ -259,7 +259,7 @@ final class CommandBarView: NSView {
         let glyph = CommandBarGlyph.resolve(
             editingURL: c.mode == .editURL && scope == nil, untouched: !previewing && (typed.isEmpty || typed == c.openedPrefill),
             // Actions run the row, not a search: Arc shows the row's glyph once something is typed.
-            scoped: scope != nil && scope != .actions, pageFaviconKey: c.openedPrefill.flatMap(FaviconKey.key(for:)),
+            scoped: scope != nil && scope != .actions, pageFaviconKey: c.openedPrefill.flatMap(FaviconKey.sectionKey(for:)),
             row: row.map { ($0.faviconKey, $0.symbol) }, hasFavicon: { [favicons] in favicons.image(forKey: $0) != nil })
         if let developer {
             // The developer bar's own glyph, where the bar draws it: the address is edited in place (#663 follow-up).
@@ -312,7 +312,8 @@ final class CommandBarView: NSView {
             r.isHidden = false
             let s = items[i]
             let icon = s.faviconKey.flatMap { favicons.image(forKey: $0) }
-            if icon == nil, let url = s.url {
+            // No icon, or only its host's, which another app on the host may have left (#909): ask for its section's.
+            if !favicons.hasOwnImage(forKey: s.faviconKey), let url = s.url {
                 let incognito = c.store.window().isIncognito || s.tabID.map(c.store.isIncognito(item:)) == true
                 SiteIconLoader.shared.want(.init(url: url, iconKey: s.faviconKey, preset: s.isPresetSite, incognito: incognito), into: favicons)
             }

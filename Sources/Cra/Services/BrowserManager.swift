@@ -1972,11 +1972,12 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
 
     func browser(_ browser: CraBrowser, didLoadFavicon image: NSImage, forURL iconURL: String) {
         guard let id = tabID(of: browser), let tab = store.item(id)?.tab else { return }
-        guard let site = FaviconKey.key(for: tab.url) ?? tab.faviconKey.map(FaviconKey.siteKey(of:)) else { return }
+        guard let site = FaviconKey.sectionKey(for: tab.url) ?? tab.faviconKey.map(FaviconKey.siteKey(of:)) else { return }
         let key = FaviconKey.key(site: site, tabID: id)
         let persist = !browser.isIncognito
-        favicons.store(image, forKey: site, persist: persist)
-        favicons.store(image, forKey: key, persist: persist)
+        // The tab's own, its section's and its host's: a row elsewhere in the section borrows the
+        // section's, and only a section never seen falls back to the host's (#909).
+        for k in FaviconKey.chain(of: key).reversed() { favicons.store(image, forKey: k, persist: persist) }
         store.setFaviconKey(id, key)
     }
 
