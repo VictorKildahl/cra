@@ -1,13 +1,12 @@
 import Foundation
 
-/// The iPhone and Mac share their presets. Gilad S. designed the native icons in Icon Composer.
+/// Gilad S. designed the app icons shared by iPhone and Mac.
 public enum MobileAppIcon: String, CaseIterable, Identifiable {
-    // Cra's own four first: the sheet is one row that scrolls sideways, and the icons onboarding offered stay in
-    // reach without scrolling. Arc's set follows in the Mac's order.
-    case segments, midnight, mono, violet
-    case original, candy, hologram, neon
+    // The onboarding choices come first in the scrolling Settings picker.
+    case segments, original, mono, colorful
+    case candy, hologram, neon
     case flutedGlass = "fluted-glass"
-    case schoolbook, colorful, canary
+    case schoolbook, canary
     case earlyBirds = "early-birds"
 
     public var id: String { rawValue }
@@ -28,12 +27,20 @@ public enum MobileAppIcon: String, CaseIterable, Identifiable {
     /// The picture the picker shows.
     public var previewName: String { (alternateName ?? "AppIcon") + "-Preview" }
 
-    /// Onboarding's icon step keeps Arc Search's two-by-two grid: Cra's own four. Settings ▸ App Icon and the
-    /// App Icon sheet offer every icon.
-    public static let onboardingChoices: [MobileAppIcon] = [.segments, .midnight, .mono, .violet]
+    /// Onboarding keeps a two-by-two grid. Settings offers every icon.
+    public static let onboardingChoices: [MobileAppIcon] = [.segments, .original, .mono, .colorful]
+
+    public static func replacement(forRetiredAlternateName name: String?) -> Self? {
+        switch name {
+        case "AppIcon-Midnight": return .segments
+        case "AppIcon-Violet": return .colorful
+        default: return nil
+        }
+    }
 
     public init(alternateName: String?) {
-        self = Self.allCases.first { $0.alternateName == alternateName } ?? .segments
+        self = Self.replacement(forRetiredAlternateName: alternateName)
+            ?? Self.allCases.first { $0.alternateName == alternateName } ?? .segments
     }
 }
 

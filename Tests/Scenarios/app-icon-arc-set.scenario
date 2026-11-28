@@ -1,4 +1,4 @@
-# The Icon tab offers Gilad S.'s native alternates and Provok's Canary and Early Birds (mat-up/cra-icons).
+# The Icon tab offers Gilad S.'s native alternates.
 # For each preset, "given=<id>" confirms Cra loaded the artwork for the Dock.
 # The pick never goes on Cra.app itself (#724). appIcon= picks without remembering,
 # so the run never writes the defaults the installed Cra reads.

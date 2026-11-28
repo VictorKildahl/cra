@@ -5,7 +5,7 @@ import Testing
 
 /// The .icns Cra.app is bundled with (its icon on macOS 14 and 15, the Alerts helper's and the DMG's) sits on Apple's icon
 /// grid: the tile 824 of 1024 px, centred, with a transparent margin, like the Dock's other icons (EzraNz on #739,
-/// 0.1.57). Since Gilad's Icon Composer icon became Cra's (27 Nov), actool renders it from resources/AppIcon.icon
+/// 0.1.57). Since Cra adopted Gilad S.'s icon (27 Nov), actool renders it from resources/AppIcon.icon
 /// (scripts/compile-app-icon.sh, as scripts/build.sh does); macOS 26 and later draw the catalog (AppIconCatalogTests).
 struct AppIconGridTests {
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/739")) func theBundledIconSitsOnApplesGrid() throws {

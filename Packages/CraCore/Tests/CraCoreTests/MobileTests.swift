@@ -2009,35 +2009,42 @@ struct MobileOnboardingTests {
 
     @Test func iconsMapToTheirAlternateNames() {
         #expect(MobileAppIcon.allCases.map(\.alternateName) == [
-            nil, "AppIcon-Midnight", "AppIcon-Mono", "AppIcon-Violet", "AppIcon-Original", "AppIcon-Candy", "AppIcon-Hologram",
-            "AppIcon-Neon", "AppIcon-FlutedGlass", "AppIcon-Schoolbook", "AppIcon-Colorful", "AppIcon-Canary", "AppIcon-EarlyBirds",
+            nil, "AppIcon-Original", "AppIcon-Mono", "AppIcon-Colorful", "AppIcon-Candy", "AppIcon-Hologram",
+            "AppIcon-Neon", "AppIcon-FlutedGlass", "AppIcon-Schoolbook", "AppIcon-Canary", "AppIcon-EarlyBirds",
         ])
-        #expect(MobileAppIcon(alternateName: "AppIcon-Violet") == .violet)
         #expect(MobileAppIcon(alternateName: nil) == .segments)
         #expect(MobileAppIcon(alternateName: "Gone") == .segments)
         #expect(MobileAppIcon.mono.previewName == "AppIcon-Mono-Preview")
         #expect(MobileAppIcon(alternateName: "AppIcon-FlutedGlass") == .flutedGlass)
     }
 
-    /// The iPhone offers the Mac's icons under the Mac's names (Settings ▸ Icon): Arc's set by Provok came to the Mac
-    /// on 23 Nov 2026 and was asked for on the iPhone on X (Chanan Krivisky). Cra's own four come first, so the ones
-    /// onboarding offers are in reach on the sheet's sideways row; Arc's set follows in the Mac's order.
-    @Test func iPhoneHasTheMacsIconsWithCrasOwnFirst() {
+    @Test func retiredIconSelectionsMigrateToCurrentAlternates() {
+        for (name, replacement) in [("AppIcon-Midnight", MobileAppIcon.segments), ("AppIcon-Violet", .colorful)] {
+            #expect(MobileAppIcon.replacement(forRetiredAlternateName: name) == replacement)
+            #expect(MobileAppIcon(alternateName: name) == replacement)
+        }
+        for name in MobileAppIcon.allCases.map(\.alternateName) + ["Unknown"] {
+            #expect(MobileAppIcon.replacement(forRetiredAlternateName: name) == nil)
+        }
+    }
+
+    /// The Settings sheet puts the onboarding icons first so they are in reach without scrolling.
+    @Test func iPhoneHasTheMacsIconsWithOnboardingChoicesFirst() {
         #expect(MobileAppIcon.allCases.map(\.rawValue) == [
-            "segments", "midnight", "mono", "violet", "original", "candy", "hologram", "neon", "fluted-glass",
-            "schoolbook", "colorful", "canary", "early-birds",
+            "segments", "original", "mono", "colorful", "candy", "hologram", "neon", "fluted-glass",
+            "schoolbook", "canary", "early-birds",
         ])
         #expect(MobileAppIcon.allCases.map(\.label) == [
-            "Segments", "Midnight", "Mono", "Violet", "Original", "Candy", "Hologram", "Neon", "Fluted Glass", "Schoolbook",
-            "Colorful", "Canary", "Early Birds",
+            "Segments", "Original", "Mono", "Colorful", "Candy", "Hologram", "Neon", "Fluted Glass", "Schoolbook",
+            "Canary", "Early Birds",
         ])
         #expect(Array(MobileAppIcon.allCases.prefix(4)) == MobileAppIcon.onboardingChoices)
         #expect(MobileAppIcon.earlyBirds.previewName == "AppIcon-EarlyBirds-Preview")
     }
 
-    /// Onboarding's icon step keeps its two-by-two grid of Cra's own icons; the pickers in Settings have all of them.
-    @Test func onboardingOffersCrasOwnFour() {
-        #expect(MobileAppIcon.onboardingChoices == [.segments, .midnight, .mono, .violet])
+    /// Onboarding keeps its two-by-two grid.
+    @Test func onboardingOffersFourCurrentIcons() {
+        #expect(MobileAppIcon.onboardingChoices == [.segments, .original, .mono, .colorful])
         #expect(Set(MobileAppIcon.onboardingChoices).isSubset(of: MobileAppIcon.allCases))
     }
 }

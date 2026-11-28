@@ -17,12 +17,16 @@
 		C0A0000000000000000000C0 /* CraCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0A0000000000000000000C1 /* CraCore */; };
 		C0A000000000000000000059 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000057 /* AppIcon.icon */; };
 		C0A00000000000000000005A /* AppIcon-Original.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000058 /* AppIcon-Original.icon */; };
+		C0A000000000000000000070 /* AppIcon-Mono.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A00000000000000000006F /* AppIcon-Mono.icon */; };
 		C0A000000000000000000065 /* AppIcon-Candy.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000060 /* AppIcon-Candy.icon */; };
 		C0A000000000000000000066 /* AppIcon-Hologram.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000061 /* AppIcon-Hologram.icon */; };
 		C0A000000000000000000067 /* AppIcon-Neon.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000062 /* AppIcon-Neon.icon */; };
 		C0A00000000000000000006B /* AppIcon-FlutedGlass.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A00000000000000000006A /* AppIcon-FlutedGlass.icon */; };
 		C0A000000000000000000068 /* AppIcon-Schoolbook.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000063 /* AppIcon-Schoolbook.icon */; };
 		C0A000000000000000000069 /* AppIcon-Colorful.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000064 /* AppIcon-Colorful.icon */; };
+		C0A000000000000000000072 /* AppIcon-Canary.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000071 /* AppIcon-Canary.icon */; };
+		C0A000000000000000000074 /* AppIcon-EarlyBirds.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A000000000000000000073 /* AppIcon-EarlyBirds.icon */; };
+		C0A00000000000000000006D /* AppIcon-Violet.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0A00000000000000000006C /* AppIcon-Violet.icon */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,12 +79,16 @@
 		C0A0000000000000000000B0 /* CraShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CraShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0A000000000000000000057 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/AppIcon.icon"; sourceTree = "<group>"; };
 		C0A000000000000000000058 /* AppIcon-Original.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-Original.icon"; sourceTree = "<group>"; };
+		C0A00000000000000000006F /* AppIcon-Mono.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-Mono.icon"; sourceTree = "<group>"; };
 		C0A000000000000000000060 /* AppIcon-Candy.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-Candy.icon"; sourceTree = "<group>"; };
 		C0A000000000000000000061 /* AppIcon-Hologram.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-Hologram.icon"; sourceTree = "<group>"; };
 		C0A000000000000000000062 /* AppIcon-Neon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-Neon.icon"; sourceTree = "<group>"; };
 		C0A00000000000000000006A /* AppIcon-FlutedGlass.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-FlutedGlass.icon"; sourceTree = "<group>"; };
 		C0A000000000000000000063 /* AppIcon-Schoolbook.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-Schoolbook.icon"; sourceTree = "<group>"; };
 		C0A000000000000000000064 /* AppIcon-Colorful.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-Colorful.icon"; sourceTree = "<group>"; };
+		C0A000000000000000000071 /* AppIcon-Canary.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-Canary.icon"; sourceTree = "<group>"; };
+		C0A000000000000000000073 /* AppIcon-EarlyBirds.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "../resources/app-icons/AppIcon-EarlyBirds.icon"; sourceTree = "<group>"; };
+		C0A00000000000000000006C /* AppIcon-Violet.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "AppIcon-Violet.icon"; sourceTree = DERIVED_FILE_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -151,12 +159,16 @@
 				C0A000000000000000000005 /* Support */,
 				C0A000000000000000000057 /* AppIcon.icon */,
 				C0A000000000000000000058 /* AppIcon-Original.icon */,
+				C0A00000000000000000006F /* AppIcon-Mono.icon */,
 				C0A000000000000000000060 /* AppIcon-Candy.icon */,
 				C0A000000000000000000061 /* AppIcon-Hologram.icon */,
 				C0A000000000000000000062 /* AppIcon-Neon.icon */,
 				C0A00000000000000000006A /* AppIcon-FlutedGlass.icon */,
 				C0A000000000000000000063 /* AppIcon-Schoolbook.icon */,
 				C0A000000000000000000064 /* AppIcon-Colorful.icon */,
+				C0A000000000000000000071 /* AppIcon-Canary.icon */,
+				C0A000000000000000000073 /* AppIcon-EarlyBirds.icon */,
+				C0A00000000000000000006C /* AppIcon-Violet.icon */,
 				C0A000000000000000000054 /* Blocklist */,
 				C0A000000000000000000006 /* Products */,
 			);
@@ -190,6 +202,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = C0A000000000000000000015 /* Build configuration list for PBXNativeTarget "Cra" */;
 			buildPhases = (
+				C0A00000000000000000006E /* Prepare legacy Violet icon name */,
 				C0A000000000000000000012 /* Sources */,
 				C0A000000000000000000013 /* Frameworks */,
 				C0A000000000000000000014 /* Resources */,
@@ -337,12 +350,16 @@
 			files = (
 				C0A000000000000000000059 /* AppIcon.icon in Resources */,
 				C0A00000000000000000005A /* AppIcon-Original.icon in Resources */,
+				C0A000000000000000000070 /* AppIcon-Mono.icon in Resources */,
 				C0A000000000000000000065 /* AppIcon-Candy.icon in Resources */,
 				C0A000000000000000000066 /* AppIcon-Hologram.icon in Resources */,
 				C0A000000000000000000067 /* AppIcon-Neon.icon in Resources */,
 				C0A00000000000000000006B /* AppIcon-FlutedGlass.icon in Resources */,
 				C0A000000000000000000068 /* AppIcon-Schoolbook.icon in Resources */,
 				C0A000000000000000000069 /* AppIcon-Colorful.icon in Resources */,
+				C0A000000000000000000072 /* AppIcon-Canary.icon in Resources */,
+				C0A000000000000000000074 /* AppIcon-EarlyBirds.icon in Resources */,
+				C0A00000000000000000006D /* AppIcon-Violet.icon in Resources */,
 				C0A000000000000000000052 /* domains.txt in Resources */,
 				C0A000000000000000000053 /* NOTICE.txt in Resources */,
 				C0A000000000000000000056 /* filters.txt in Resources */,
@@ -373,6 +390,17 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		C0A00000000000000000006E /* Prepare legacy Violet icon name */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ("$(SRCROOT)/../resources/app-icons/AppIcon-Colorful.icon");
+			name = "Prepare legacy Violet icon name";
+			outputPaths = ("$(DERIVED_FILE_DIR)/AppIcon-Violet.icon");
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "rsync -a --delete \"$SCRIPT_INPUT_FILE_0/\" \"$SCRIPT_OUTPUT_FILE_0/\"\n";
+		};
 		C0A00000000000000000005B /* Icon picker previews */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -386,12 +414,15 @@
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Preview.png",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Original-Preview.png",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Mono-Preview.png",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Candy-Preview.png",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Hologram-Preview.png",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Neon-Preview.png",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-FlutedGlass-Preview.png",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Schoolbook-Preview.png",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Colorful-Preview.png",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-Canary-Preview.png",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AppIcon-EarlyBirds-Preview.png",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;

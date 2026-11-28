@@ -24,8 +24,8 @@ gains a finding fails, one that loses one is reported so the baseline can come d
       An importer (enum …Importer) without a checked-in profile under Tests/Fixtures/<Name>:
       parsers are tested against files in the source browser's format, not dictionaries.
   app-icon-without-source
-      An AppIconManager preset without a PNG or Icon Composer source (scripts/make-app-icons.swift
-      writes them): the picker would show an empty tile and the Dock would keep the old icon.
+      An AppIconManager preset without a PNG or Icon Composer document would show an empty
+      tile in the picker and leave the old icon in the Dock.
   app-icon-size
       A resources/app-icons PNG that isn't 512×512 px. The generator once followed the display's
       scale and wrote 256 px icons on a 1x screen, which the Dock would draw blurry.

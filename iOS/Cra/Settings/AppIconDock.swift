@@ -23,9 +23,7 @@ extension MobileAppIcon {
 struct AppIconDock: View {
     var done: () -> Void = {}
     @State private var selected = MobileAppIcon(alternateName: UIApplication.shared.alternateIconName)
-    /// The sheet's width. A sheet wider than the row keeps it still in the middle; a narrower one, an iPhone's
-    /// and, since Arc's icon set made the row 13 icons long, an iPad's too, scrolls it from the left edge as in
-    /// Arc Search.
+    /// Center the row when it fits. Narrower sheets scroll from the left edge as in Arc Search.
     @State private var width: CGFloat = 0
 
     private static let icon: CGFloat = 78

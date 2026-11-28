@@ -2,13 +2,13 @@
 # Finder's custom icon (an Icon\r file and a com.apple.FinderInfo flag), as Arc does, so Finder showed it. That
 # attribute on the bundle breaks the app's signature: `codesign --strict` refuses it, and lsd kept registering the
 # app launch-disabled. The Dock tile shows the pick (app-icon-segments-dock); the bundle stays as it was signed.
-# Midnight comes in through the argument domain and appIcon= picks without remembering, so the run never writes the
+# Canary comes in through the argument domain and appIcon= picks without remembering, so the run never writes the
 # defaults the installed Cra reads. strict= is what `codesign --verify --strict` says of the app.
 # promise: #724
 home
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
 arg -appIcon
-arg midnight
+arg canary
 cra://debug?bundleIcon=launch
 expect-log bundle icon launch: custom=0 file=0 strict=valid$
 cra://debug?appIcon=mono
@@ -17,8 +17,8 @@ expect-log bundle icon mono: custom=0 file=0 strict=valid$
 reject-log put on the app$
 
 # A Finder icon 0.1.54 or 0.1.55 left on the app comes off at the next launch, and the signature holds again.
-cra://debug?bundleIconPut=midnight
-expect-log app icon: midnight put on the app for a test
+cra://debug?bundleIconPut=canary
+expect-log app icon: canary put on the app for a test
 cra://debug?bundleIcon=leftover
 expect-log bundle icon leftover: custom=1 file=1 strict=-66999$
 relaunch

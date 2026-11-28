@@ -349,7 +349,7 @@ private struct HowToSheet: View {
     }
 }
 
-/// The app's icons in a grid with a radio mark under each: onboarding's step (Cra's own four) and Settings'
+/// The app's icons in a grid with a radio mark under each: onboarding's step (four choices) and Settings'
 /// picker (every icon, scrolling).
 struct AppIconGrid: View {
     var icons = MobileAppIcon.allCases

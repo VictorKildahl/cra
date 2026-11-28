@@ -48,7 +48,9 @@ final class CraDockTilePlugIn: NSObject, NSDockTilePlugIn {
     private func selectedImage() -> NSImage? {
         guard let app, let id = app.bundleIdentifier as CFString? else { return nil }
         CFPreferencesAppSynchronize(id)
-        guard let selected = CFPreferencesCopyAppValue("appIcon" as CFString, id) as? String, selected != "segments" else { return nil }
+        guard let stored = CFPreferencesCopyAppValue("appIcon" as CFString, id) as? String else { return nil }
+        let selected = AppIconResources.currentID(for: stored)
+        guard selected != "segments" else { return nil }
         if selected == "custom" {
             return (CFPreferencesCopyAppValue("appIconCustomPath" as CFString, id) as? String).flatMap(NSImage.init(contentsOfFile:))
         }

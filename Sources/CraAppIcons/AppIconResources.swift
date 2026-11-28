@@ -2,7 +2,15 @@ import AppKit
 import simd
 
 public enum AppIconResources {
-    public static let nativeAlternateIDs: Set<String> = ["original", "candy", "hologram", "neon", "fluted-glass", "schoolbook", "colorful"]
+    public static let nativeAlternateIDs: Set<String> = ["original", "mono", "candy", "hologram", "neon", "fluted-glass", "schoolbook", "colorful", "canary", "early-birds"]
+
+    public static func currentID(for savedID: String) -> String {
+        switch savedID {
+        case "midnight": return "segments"
+        case "violet": return "colorful"
+        default: return savedID
+        }
+    }
 
     /// Each native alternate has its own bundle so IconServices supplies the current system rendition.
     public static func image(named id: String, in app: Bundle) -> NSImage? {

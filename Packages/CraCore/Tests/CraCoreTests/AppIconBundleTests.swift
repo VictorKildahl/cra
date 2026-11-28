@@ -50,7 +50,7 @@ struct AppIconBundleTests {
     /// macOS draws the primary icon itself. For a native alternate Cra refreshes the image it gives the Dock
     /// when the system appearance changes (AppIconResourcesTests).
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/884")) func onlyThePrimaryIconIsDrawnByTheDockItself() {
-        for picked in ["segments", "original", "midnight", "custom"] {
+        for picked in ["segments", "canary", "early-birds", "custom"] {
             let drawnByDock = AppIconBundle.dockImage(picked: picked, defaultID: "segments", bundleIconStale: false) == nil
             #expect(drawnByDock == (picked == "segments"), "\(picked)")
         }

@@ -22,8 +22,7 @@ final class AppIconManager {
 
     static let defaultID = "segments"
     static let customID = "custom"
-    /// Gilad S. designed Segments and the native alternates in Icon Composer.
-    /// Canary and Early Birds use Provok's SVG artwork (MIT, in brand/arc-icons).
+    /// Gilad S. designed these app icons.
     static let presets = [
         Option(id: defaultID, name: "Segments"),
         Option(id: "original", name: "Original"),
@@ -35,9 +34,7 @@ final class AppIconManager {
         Option(id: "colorful", name: "Colorful"),
         Option(id: "canary", name: "Canary"),
         Option(id: "early-birds", name: "Early Birds"),
-        Option(id: "midnight", name: "Midnight"),
         Option(id: "mono", name: "Mono"),
-        Option(id: "violet", name: "Violet"),
     ]
 
     // Shared with Sources/CraDockTile.
@@ -59,10 +56,16 @@ final class AppIconManager {
     private static var customURL: URL { AppPaths.file("AppIcon.png") }
 
     private init() {
-        let stored = UserDefaults.standard.string(forKey: Keys.selected) ?? Self.defaultID
+        let defaults = UserDefaults.standard
+        let stored = defaults.string(forKey: Keys.selected) ?? Self.defaultID
+        let current = AppIconResources.currentID(for: stored)
+        if current != stored, let domain = Bundle.main.bundleIdentifier,
+           defaults.persistentDomain(forName: domain)?[Keys.selected] as? String == stored {
+            defaults.set(current, forKey: Keys.selected)
+        }
         let custom = NSImage(contentsOf: Self.customURL)
-        let known = Self.presets.contains { $0.id == stored } || (stored == Self.customID && custom != nil)
-        selectedID = known ? stored : Self.defaultID
+        let known = Self.presets.contains { $0.id == current } || (current == Self.customID && custom != nil)
+        selectedID = known ? current : Self.defaultID
         customImage = custom
         if #available(macOS 26, *) {
             appearanceObservation = AppIconAppearanceObservation { [weak self] in

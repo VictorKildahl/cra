@@ -4,7 +4,12 @@ import AppKit
 struct AppIconResourcesTests {
     static func main() {
         guard let app = Bundle(path: CommandLine.arguments[1]) else { fatalError("Missing test app bundle") }
-        let icons = ["segments", "original", "candy", "hologram", "neon", "fluted-glass", "schoolbook", "colorful"].map { id in
+        precondition(AppIconResources.currentID(for: "midnight") == "segments")
+        precondition(AppIconResources.currentID(for: "violet") == "colorful")
+        for id in ["segments", "colorful", "mono", "custom"] {
+            precondition(AppIconResources.currentID(for: id) == id)
+        }
+        let icons = ["segments", "original", "mono", "candy", "hologram", "neon", "fluted-glass", "schoolbook", "colorful", "canary", "early-birds"].map { id in
             guard let image = AppIconResources.image(named: id, in: app) else {
                 fatalError("Could not load app icon \(id)")
             }

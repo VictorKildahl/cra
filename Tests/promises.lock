@@ -570,7 +570,7 @@
 #317   Packages/CraCore/Tests/CraCoreTests/SidebarSlidePageTests.swift::thePictureFromBeforeTheSlideIsNotMovement  84e7b8b52fd7
 #317   Tests/Scenarios/sidebar-slide.scenario  82fe5223e29a
 #319   Tests/Scenarios/app-icon-dock-return.scenario  32316d80e199
-#319   Tests/Scenarios/app-icon-download.scenario  55c47e7e0e5b
+#319   Tests/Scenarios/app-icon-download.scenario  db7f642127bd
 #322   Packages/CraCore/Tests/CraCoreTests/CleanURLTests.swift::noPicksCopyTheOpenTab  d5ac544933e5
 #322   Packages/CraCore/Tests/CraCoreTests/CleanURLTests.swift::picksNoLongerListedFollowTheListedOnes  f5f06c74b1da
 #322   Packages/CraCore/Tests/CraCoreTests/CleanURLTests.swift::severalPicksCopyEveryPickInSidebarOrder  ac1ca14492fd
@@ -1594,7 +1594,7 @@
 #685   Tests/Scenarios/toolbar-double-click-zoom-edge-to-edge.scenario  f3d687966ae7
 #685   Tests/Scenarios/toolbar-double-click-zoom.scenario  e5a054fce232
 #685   Tests/WindowContentGrabberTests.swift::checkEdgeToEdgeDoubleClick  bb8ee9288aec
-#686   iOS/CraUITests/BrowserTests.swift::testChangeIconQuickActionOpensTallOnIPadAndHalfOnIPhone  66bd77fe0f20
+#686   iOS/CraUITests/BrowserTests.swift::testChangeIconQuickActionOpensTallOnIPadAndHalfOnIPhone  d1d6eed56006
 #688   Tests/Scenarios/crest-import.scenario  1f12d0e1f934
 #688   Tests/StoreTests.swift::crestImport  28fcb56b5b9b
 #689   Packages/CraCore/Tests/CraCoreTests/LinkPreviewTests.swift::aHeldKeySaysWhatAClickWillDo  2c24d1b0aa7b
@@ -1687,7 +1687,7 @@
 #724   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::anIconAnEarlierCraPutOnTheAppComesOff  6f7da080e196
 #724   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::anythingOfAFinderIconCounts  fe4242760f79
 #724   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::theAppNeverPutsAnIconOnItself  2b74fc6f15fa
-#724   Tests/Scenarios/app-icon-signature.scenario  aafcd593a237
+#724   Tests/Scenarios/app-icon-signature.scenario  21ae720061d4
 #726   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::theButtonSlidesTheLibraryFromAHiddenSidebarAndBack  1521c105318e
 #726   Packages/CraCore/Tests/CraCoreTests/LibrarySwipeTests.swift::theButtonsSlideEasesOutInAboutAThirdOfASecond  39fad79abe89
 #726   Tests/Scenarios/library-button-slides.scenario  ddcde828c462
@@ -1964,7 +1964,7 @@
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::nowhereIsSilentAndComingBackTicks  b0622ee05ea5
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::theSamePlaceTicksOnce  20e7ead609e3
 #883   Tests/Scenarios/sidebar-reorder-haptics.scenario  a67cbf7b9082
-#884   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::onlyThePrimaryIconIsDrawnByTheDockItself  720a5c46cd19
+#884   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::onlyThePrimaryIconIsDrawnByTheDockItself  bbdc905ea00b
 #885   Packages/CraCore/Tests/CraCoreTests/MobileSpaceBarTests.swift::eightSpacesScrollOnAMini  e6cb437f094e
 #885   Packages/CraCore/Tests/CraCoreTests/MobileSpaceBarTests.swift::whatFitsStaysStill  c3c40ac4d337
 #885   iOS/CraUITests/BrowserTests.swift::testManySpacesKeepTheSheetOnScreen  983d85777c2d
