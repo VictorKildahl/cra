@@ -33,8 +33,11 @@ cracore_build() {
       rm -rf "$tmp"
       return 1
     fi
-    rm -rf "$cache/$tag"-*  # the older CraCore built with these flags
-    mv "$tmp" "$dir" 2>/dev/null || rm -rf "$tmp"  # another harness got there first
+    # The older CraCore built with these flags; never this one, which a harness started alongside
+    # may have put in place and be linking or running against right now.
+    for old in "$cache/$tag"-*; do [ "$old" = "$dir" ] || rm -rf "$old"; done
+    # Another harness got there first: keep its copy (mv onto a folder would move this one inside it).
+    if [ -d "$dir" ]; then rm -rf "$tmp"; else mv "$tmp" "$dir" 2>/dev/null || rm -rf "$tmp"; fi
   fi
   CRACORE=(-j "$jobs" -I "$dir" -L "$dir" -lCraCore
            -Xlinker -rpath -Xlinker "$dir" -Xlinker -rpath -Xlinker @executable_path
