@@ -1,0 +1,24 @@
+# A file dragged onto the tab list by itself (out of the downloads tray, or from the Finder) opens
+# as a new tab where it is let go, as a link does (drop-link), when Chromium shows it in a tab: a
+# PDF, an image, a page, text, audio or video. A file it would only download again (an archive, a
+# disk image, one with no extension) is refused. As in Arc (reported 27 Nov 2026; Arc's exact list
+# of types unmeasured). `dropLink` with a file:// address writes it as the tray's drag does.
+budget rss=800 stalls50=30
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=shown
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+# Real files: the PDF's tab, below the page and loaded when picked as a dropped link's is, is seen
+# loading (nothing else here loads a file), not only the drop.
+cra://debug?dropLink=file://${FIXTURES}/Pages/drop-file.pdf
+expect-log dropLink: opened file://\S+/drop-file\.pdf in Today at 1
+cra://action/nextTab
+expect-log loaded file:
+cra://debug?dropLink=file://${FIXTURES}/Pages/icon-blue.png
+expect-log dropLink: opened file://\S+/icon-blue\.png in Today
+cra://debug?dropLink=file:///tmp/cra-drop-file.zip
+expect-log dropLink: refused file:///tmp/cra-drop-file\.zip
+cra://debug?dropLink=file:///etc/hosts
+expect-log dropLink: refused file:///etc/hosts

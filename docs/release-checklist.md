@@ -473,6 +473,10 @@ built release app with a test profile. Note anything that fails in the release's
     screen. (`page-fullscreen-keyboard-lock` presses it; a scenario can't hold a key.)
   - web feature: SaveFrame. Open a PDF (any link to one) and press the viewer's Save button: the file
     saves as a download (or into the save panel with Ask Where to Save Each File on) and shows in the bin.
+  - Download a PDF and an image, open the downloads tray at the sidebar's bottom left and drag each row
+    onto the tab list: the insertion line shows, and let go it opens as a tab there (the PDF in the PDF
+    viewer), behind the page you're on, as in Arc. A .zip dragged the same way is refused. (`drop-file`
+    drops them through `cra://debug`; a scenario can't drive a real drag.)
 - **#272:** download a large file. The bin over the Library button keeps a ring that fills as it
   downloads; right-clicking its row in the tray and on Library ▸ Downloads offers Pause Download and
   Cancel Download, and a paused row reads "Paused". ⌘Q while it runs asks "Downloads in progress";

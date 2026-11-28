@@ -203,8 +203,9 @@ final class SpaceListView: NSView, NSDraggingSource {
         dropLine.zPosition = 5
         dropLine.opacity = 0
         document.layer?.addSublayer(dropLine)
-        // A link from a page or another app opens as a tab where it is let go (#419).
-        document.registerForDraggedTypes([.craSidebarItem, .URL, .string])
+        // A link from a page or another app opens as a tab where it is let go (#419), and so does a
+        // file Chromium shows (an image, a PDF) dragged out of the downloads tray or the Finder.
+        document.registerForDraggedTypes([.craSidebarItem, .URL, .string, .fileURL])
         autoscroller.anchor = document
         edgePager.anchor = self
         edgePager.onPage = { [weak self] in self?.pageSpace($0) }
@@ -1316,7 +1317,8 @@ final class SpaceListView: NSView, NSDraggingSource {
     static func link(on pb: NSPasteboard) -> SidebarLinkDrop.Tab? {
         guard pb.availableType(from: [.craSidebarItem]) == nil else { return nil }
         return SidebarLinkDrop.tab(from: (pb.pasteboardItems ?? []).map {
-            SidebarLinkDrop.Item(url: $0.string(forType: .URL), name: $0.string(forType: .urlName), text: $0.string(forType: .string))
+            SidebarLinkDrop.Item(url: $0.string(forType: .URL), name: $0.string(forType: .urlName), text: $0.string(forType: .string),
+                                 file: $0.string(forType: .fileURL))
         })
     }
 

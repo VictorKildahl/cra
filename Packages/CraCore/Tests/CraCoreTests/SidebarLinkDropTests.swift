@@ -38,4 +38,37 @@ import Testing
         let (name, items, tab) = Self.cases[i]
         #expect(SidebarLinkDrop.tab(from: items) == tab, "\(name)")
     }
+
+    /// A file dragged out of the downloads tray (or the Finder) carries its file URL
+    /// (`public.file-url`); let go on the list, one Chromium shows in a tab (an image, a PDF, a
+    /// page, text, audio or video) opens as a tab there, as in Arc. Others would only download again.
+    static let fileCases: [(String, [Item], SidebarLinkDrop.Tab?)] = [
+        ("downloaded pdf", [Item(file: "file:///Users/me/Downloads/Report.pdf")],
+         .init(url: "file:///Users/me/Downloads/Report.pdf", title: "")),
+        ("upper-case extension", [Item(file: "file:///tmp/SCAN.PDF")], .init(url: "file:///tmp/SCAN.PDF", title: "")),
+        ("png", [Item(file: "file:///tmp/shot.png")], .init(url: "file:///tmp/shot.png", title: "")),
+        ("jpeg", [Item(file: "file:///tmp/a%20photo.JPEG")], .init(url: "file:///tmp/a%20photo.JPEG", title: "")),
+        ("gif", [Item(file: "file:///tmp/a.gif")], .init(url: "file:///tmp/a.gif", title: "")),
+        ("webp", [Item(file: "file:///tmp/a.webp")], .init(url: "file:///tmp/a.webp", title: "")),
+        ("svg", [Item(file: "file:///tmp/a.svg")], .init(url: "file:///tmp/a.svg", title: "")),
+        ("html file", [Item(file: "file:///Users/me/a.html")], .init(url: "file:///Users/me/a.html", title: "")),
+        ("text", [Item(file: "file:///tmp/notes.txt")], .init(url: "file:///tmp/notes.txt", title: "")),
+        ("json", [Item(file: "file:///tmp/data.json")], .init(url: "file:///tmp/data.json", title: "")),
+        ("video", [Item(file: "file:///tmp/clip.mp4")], .init(url: "file:///tmp/clip.mp4", title: "")),
+        ("audio", [Item(file: "file:///tmp/song.mp3")], .init(url: "file:///tmp/song.mp3", title: "")),
+        ("zip", [Item(file: "file:///Users/me/Downloads/a.zip")], nil),
+        ("disk image", [Item(file: "file:///Users/me/Downloads/App.dmg")], nil),
+        ("no extension", [Item(file: "file:///etc/hosts")], nil),
+        ("folder named .png", [Item(file: "file:///tmp/x.png/")], nil),
+        ("not a file url", [Item(file: "/tmp/a.pdf")], nil),
+        // Only a file's own drag: a page's link to a file stays refused (#419, above).
+        ("pdf as a link", [Item(url: "file:///tmp/a.pdf")], nil),
+        ("web link first", [Item(url: "https://a.org"), Item(file: "file:///tmp/a.pdf")], .init(url: "https://a.org", title: "")),
+    ]
+
+    @Test(arguments: fileCases.indices)
+    func aDroppedFileChromiumShowsOpensAsATab(_ i: Int) {
+        let (name, items, tab) = Self.fileCases[i]
+        #expect(SidebarLinkDrop.tab(from: items) == tab, "\(name)")
+    }
 }

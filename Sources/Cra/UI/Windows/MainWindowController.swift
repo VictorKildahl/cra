@@ -883,7 +883,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// `cra://debug?dropLink`: a link from a page or another app let go on the focused space's list
     /// (#419), from a pasteboard holding what Mail or a page's link drag holds: its address and,
-    /// with `name`, its text. It goes through the drop's own pasteboard read, placement and tab.
+    /// with `name`, its text; a file:// address as the downloads tray writes a file. It goes through the drop's own pasteboard read, placement and tab.
     func testDropLink(_ url: String, name: String?, row text: String?, onto: Bool) {
         func list(in v: NSView) -> SpaceListView? {
             if let l = v as? SpaceListView, l.spaceID == focusedSpaceID { return l }
@@ -894,7 +894,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         defer { pb.releaseGlobally() }
         pb.clearContents()
         let item = NSPasteboardItem()
-        item.setString(url, forType: .URL)
+        // A file:// address goes as the downloads tray's drag writes it: `public.file-url`.
+        item.setString(url, forType: url.hasPrefix("file:") ? .fileURL : .URL)
         if let name { item.setString(name, forType: .urlName) }
         pb.writeObjects([item])
         guard let link = SpaceListView.link(on: pb) else { CraLog.note("dropLink: refused \(url)"); return }
