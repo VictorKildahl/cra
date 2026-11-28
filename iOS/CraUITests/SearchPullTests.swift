@@ -201,6 +201,8 @@ final class SearchPullTests: BrowserTestCase {
         sleep(1)
         let value = app.descendants(matching: .any)["new-tab-drawer-trace"].value as? String ?? ""
         XCTAssertTrue(value.contains("base 0.00"), "the bar has no material over the tab row: \(value)")
+        // Only the drawer's background goes: its field and buttons sink into the bar whole.
+        XCTAssertTrue(value.contains("sheet 1.00"), "the drawer itself did not fade as it closed: \(value)")
     }
 
     /// Dragging the open drawer down keeps its colour until the finger lifts; the bar's own

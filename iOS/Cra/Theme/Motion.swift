@@ -4,8 +4,10 @@ import UIKit
 extension UIView {
     /// Animates with one of the springs fitted to Arc Search (`MobileMotion`), optionally
     /// carrying a velocity into it: the components are fractions of the whole distance a second.
+    /// Returns the animator, for a caller that ends it early (`finishAnimation(at:)`).
+    @discardableResult
     static func animate(spring: MobileMotion.Spring, initialVelocity: CGVector = .zero,
-                        animations: @escaping () -> Void, completion: (() -> Void)? = nil) {
+                        animations: @escaping () -> Void, completion: (() -> Void)? = nil) -> UIViewPropertyAnimator {
         let timing = UISpringTimingParameters(mass: 1, stiffness: spring.stiffness, damping: spring.damping,
                                               initialVelocity: initialVelocity)
         let animator = UIViewPropertyAnimator(duration: 0, timingParameters: timing)
@@ -13,6 +15,7 @@ extension UIView {
         animator.addAnimations(animations)
         if let completion { animator.addCompletion { _ in completion() } }
         animator.startAnimation()
+        return animator
     }
 }
 
@@ -55,4 +58,16 @@ extension UIView {
     }
 
     static let flickLandingKey = "flick-landing"
+}
+
+extension UIView {
+    /// Fades the view out, eased in, from wherever its fade is, while the views around it keep
+    /// taking touches: a tab's picture leaving its live page (`MobileTabCarousel.pictureFade`).
+    func fadeOut(over duration: TimeInterval, completion: @escaping () -> Void) {
+        UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseIn, .allowUserInteraction, .beginFromCurrentState]) {
+            self.alpha = 0
+        } completion: { _ in
+            completion()
+        }
+    }
 }

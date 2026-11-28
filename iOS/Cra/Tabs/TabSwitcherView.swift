@@ -2,6 +2,8 @@ import CraCore
 import UIKit
 
 protocol TabSwitcherDelegate: AnyObject {
+    /// A finger came down on `id`'s card: it may be picked when the finger lifts.
+    func tabSwitcher(_ switcher: TabSwitcherView, mayPick id: UUID)
     func tabSwitcher(_ switcher: TabSwitcherView, didSelect id: UUID)
     func tabSwitcher(_ switcher: TabSwitcherView, didClose id: UUID)
     /// A tap on the row's background, away from the cards.
@@ -110,6 +112,21 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         setNeedsLayout()
     }
 
+    /// Grows `id`'s card with the live page (`LivePageCard`): the page's container, above the
+    /// row, takes the card's place and shape. The cards that lie over this one in the row move to
+    /// `front`, a layer above the page, after the card's own overlay; they are still laid out here.
+    func growLive(_ live: LivePageCard, for id: UUID, front: UIView) {
+        guard let card = views[id], let index = cards.firstIndex(where: { $0 === card }) else { return }
+        card.live = live
+        live.overlayPicture.image = card.pictureImage
+        front.addSubview(live.overlay)
+        for later in cards[(index + 1)...] { front.addSubview(later) }
+        setNeedsLayout()
+    }
+
+    /// Where `id`'s card is on screen now.
+    func cardFrame(for id: UUID) -> CGRect? { views[id]?.cardFrame }
+
     // MARK: Layout
 
     override func layoutSubviews() {
@@ -129,6 +146,9 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
         bottomFill.backgroundColor = colour
         bottomFill.alpha = alpha
     }
+
+    /// For the tab row's UI test: whether the strip below the page shows, or is on its way to.
+    var bottomFillShows: Bool { bottomFill.alpha > 0 }
 
     private func layoutCards() {
         let screen = bounds.size
@@ -173,6 +193,12 @@ final class TabSwitcherView: UIView, UIGestureRecognizerDelegate {
     }
 
     // MARK: Gestures
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        guard isUserInteractionEnabled, let touch = touches.first, let card = card(at: touch.location(in: self)) else { return }
+        delegate?.tabSwitcher(self, mayPick: card.tabID)
+    }
 
     private func card(at point: CGPoint) -> TabCardView? {
         // Newer cards are on top. One flying off is out of reach.
@@ -328,6 +354,11 @@ final class TabCardView: UIView {
     private let dimmer = UIView()
     private let icon = UIImageView()
     private let title = UILabel()
+    /// What dims a card further back in the row, over its picture or its live page.
+    static let dimColour = Palette.rgb(0x1a1a3a)
+    /// The live page that takes this card's place as it grows (`TabSwitcherView.growLive`).
+    var live: LivePageCard?
+    var pictureImage: UIImage? { picture.image }
     private(set) var cardFrame: CGRect = .zero
     /// The favicon and title above the card, which belong to it for a tap or a throw.
     private(set) var headerFrame: CGRect = .zero
@@ -349,7 +380,7 @@ final class TabCardView: UIView {
         addSubview(clip)
         picture.contentMode = .scaleToFill
         clip.addSubview(picture)
-        dimmer.backgroundColor = Palette.rgb(0x1a1a3a)
+        dimmer.backgroundColor = Self.dimColour
         dimmer.alpha = 0
         clip.addSubview(dimmer)
         band.isHidden = true
@@ -412,6 +443,8 @@ final class TabCardView: UIView {
         band.frame = CGRect(x: 0, y: 0, width: frame.width, height: cardBand)
         let area = CGRect(x: 0, y: cardBand, width: frame.width, height: max(0, frame.height - cardBand))
         picture.frame = MobileTabCarousel.pictureFrame(image: picture.image?.size ?? .zero, in: area)
+        live?.layout(card: frame, area: area, picture: picture.frame, radius: MobileTabCarousel.cornerRadius * (1 - fill),
+                     screen: screen, dim: dim)
         dimmer.frame = clip.bounds
         dimmer.alpha = dim
         // Rounded in the row, square where it meets the page's content at the band's bottom.
@@ -453,4 +486,74 @@ final class TabCardView: UIView {
     /// `-CraReadCardTitles YES`: each card says in its accessibility value whether its title shows
     /// and where it ends, for the UI tests (#816), and ", moving" while the row is dragged or settles.
     private static let readsTitles = LaunchOptions.value("CraReadCardTitles") == "YES"
+}
+
+/// A picked card's live page as it grows: the page's own container, never moved out of its place
+/// in the view tree (moving a web view blanks it for a frame and drops its touches), is scaled
+/// and moved so its page view sits exactly where the card's picture does, and masked to the
+/// card's page area, under the card's band. The page takes touches all the way. `overlay`, in the
+/// layer above the page, carries the card's dimming and its picture, which fades off the page
+/// (`fadePicture`).
+final class LivePageCard {
+    let container: UIView
+    /// The page view's frame in the container: the shape the tab's picture is taken in.
+    let page: CGRect
+    let overlay = UIView()
+    let overlayPicture = UIImageView()
+    private let overlayDim = UIView()
+    private let mask = UIView()
+    private let maskCard = UIView()
+    private let maskArea = UIView()
+
+    init(container: UIView, page: CGRect) {
+        self.container = container
+        self.page = page
+        overlay.isUserInteractionEnabled = false
+        overlay.clipsToBounds = true
+        overlay.layer.cornerCurve = .continuous
+        overlayPicture.contentMode = .scaleToFill
+        overlay.addSubview(overlayPicture)
+        overlayDim.backgroundColor = TabCardView.dimColour
+        overlay.addSubview(overlayDim)
+        maskCard.clipsToBounds = true
+        maskCard.layer.cornerCurve = .continuous
+        maskArea.backgroundColor = .black
+        maskCard.addSubview(maskArea)
+        mask.addSubview(maskCard)
+        container.mask = mask
+    }
+
+    /// `card` is the card's frame on screen; `area` and `picture` are its page area and picture
+    /// in the card.
+    func layout(card: CGRect, area: CGRect, picture: CGRect, radius: CGFloat, screen: CGSize, dim: CGFloat) {
+        let placed = MobileTabCarousel.livePage(page: page, screen: screen, area: area.offsetBy(dx: card.minX, dy: card.minY))
+        container.transform = CGAffineTransform(translationX: placed.center.x - screen.width / 2, y: placed.center.y - screen.height / 2)
+            .scaledBy(x: placed.scale, y: placed.scale)
+        mask.frame = CGRect(origin: .zero, size: screen)
+        maskCard.frame = MobileTabCarousel.containerRect(card, placed: placed, screen: screen)
+        maskCard.layer.cornerRadius = radius / max(placed.scale, 0.001)
+        maskArea.frame = CGRect(x: area.minX / placed.scale, y: area.minY / placed.scale,
+                                width: area.width / placed.scale, height: area.height / placed.scale)
+        overlay.frame = card
+        overlay.layer.cornerRadius = radius
+        overlayPicture.frame = picture
+        overlayDim.frame = area
+        overlayDim.alpha = dim
+    }
+
+    /// Fades the picture off the page over `duration`, eased in (`MobileTabCarousel.pictureFade`).
+    /// It may run on past the grow; `done` follows it.
+    func fadePicture(over duration: TimeInterval, done: @escaping () -> Void) {
+        overlayPicture.fadeOut(over: duration) {
+            self.overlay.removeFromSuperview()
+            done()
+        }
+    }
+
+    /// The page is in place: its container is itself again. A picture still fading over it stays
+    /// until its fade is done.
+    func end() {
+        container.transform = .identity
+        container.mask = nil
+    }
 }

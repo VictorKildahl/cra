@@ -34,7 +34,9 @@ enum AppPaths {
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent(folder, isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base
+        // Through any symbolic link, as Chromium names its user data folder: a folder moved to another disk with a
+        // link left in its place made every profile but Default fail to load (#906).
+        return DataFolderPath.resolved(base)
     }()
     static var chromiumCache: URL { supportDir.appendingPathComponent("Chromium", isDirectory: true) }
     static var favicons: URL {
