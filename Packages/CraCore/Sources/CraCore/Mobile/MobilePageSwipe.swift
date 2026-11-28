@@ -45,7 +45,8 @@ public enum MobilePageSwipe {
     /// the finger is 185 pt in as it lets go; it catches up in 0.26 s to 30 pt behind the finger. Going Back it holds
     /// at 0.28 of the finger's travel and caught up in about 0.16 s (the finger not seen yet). Let go while held, the
     /// swipe goes nowhere; once let go, it goes. Taken back under `holdAgainShare` of the finger's way to letting go,
-    /// the magnet holds the page again (Arc Search's was not seen).
+    /// the magnet holds the page again (Arc Search's was not seen), a quick finger's page too once the finger has
+    /// turned back `turnBack` points from the furthest it came.
     ///
     /// Those closing swipes were slow, about 80 pt a second from mid-page. Arc Search's quick ones on a tab's first page
     /// (Nov 27, finger not shown) were not held: from their first moving frame the cards came out and the page followed
@@ -53,6 +54,7 @@ public enum MobilePageSwipe {
     /// Let go there, the page's card 60 to 95 pt along, they went back, as the finger short of where the slow swipes let
     /// go says (`quickSpeed`).
     public static let holdAgainShare: CGFloat = 0.6
+    public static let turnBack: CGFloat = 20
 
     /// The magnet's hold on the page through one swipe, stepped once a frame.
     public struct Magnet: Equatable, Sendable {
@@ -78,6 +80,8 @@ public enum MobilePageSwipe {
         public private(set) var lag: CGFloat = 0
         private var lagSpeed: CGFloat = 0
         private var springing = false
+        /// The furthest the finger has come since the magnet last took hold.
+        private var furthest: CGFloat = 0
 
         public init(deadZone: CGFloat = 0, share: CGFloat, letGoAt: CGFloat, catchUp: MobileMotion.Spring, gap: CGFloat = 0,
                     quickSpeed: CGFloat? = nil) {
@@ -112,6 +116,12 @@ public enum MobilePageSwipe {
             } else if letGo, finger < letGoFinger * holdAgainShare {
                 letGo = false
                 springing = true
+            }
+            furthest = max(furthest, finger)
+            if quick, !letGo, finger < letGoFinger * holdAgainShare, finger < furthest - turnBack {
+                quick = false
+                springing = true
+                furthest = finger
             }
             let target = holds ? finger - held(finger) : gap
             if springing {
@@ -204,20 +214,54 @@ public enum MobilePageSwipe {
 
     // MARK: Back on the tab's first page
 
-    /// As the swipe starts, the page shrinks into a card and the tab before it comes out of the tab button into one
-    /// the same size beside it: one timed critically damped spring from the moment the swipe is recognised, not the
-    /// finger's travel. Arc Search's was 99 % there 13 frames in (0.26 s response, fitted within 0.01).
+    /// As the magnet stops holding the page, the page shrinks into a card and the tab before it comes out of the tab
+    /// button into one the same size beside it: one critically damped spring on its own clock, not the finger's
+    /// travel. Arc Search's was 99 % there 13 frames in (0.26 s response, fitted within 0.01). Held again, both go
+    /// back on the same spring from wherever they are, so a finger going back and forth takes them out and in.
     public static let cardSpring = MobileMotion.Spring(response: 0.26, dampingRatio: 1)
 
-    /// How far into cards both pages are `time` seconds after the swipe started, 0 to 1.
-    public static func cardProgress(after time: Double) -> CGFloat {
-        guard time > 0 else { return 0 }
-        return min(1, max(0, CGFloat(1 - cardSpring.remaining(after: time))))
+    /// The tab's card coming out overshoots its place a little and settles back; it goes back in, and the page in and
+    /// out, without (Arc Search's tab came out on `cardSpring`; the overshoot was asked for on Nov 28).
+    public static let tabCardOut = MobileMotion.Spring(response: 0.35, dampingRatio: 0.85)
+
+    /// How far into a card a page or the tab is, 0 to 1 (past 1 overshooting), stepped once a frame: `outSpring` on
+    /// the way out, `inSpring` on the way back.
+    public struct Cards: Equatable, Sendable {
+        public let outSpring: MobileMotion.Spring
+        public let inSpring: MobileMotion.Spring
+        public private(set) var progress: CGFloat = 0
+        private var speed: Double = 0
+
+        public init(out: MobileMotion.Spring = cardSpring, in back: MobileMotion.Spring = cardSpring) {
+            outSpring = out
+            inSpring = back
+        }
+
+        /// The page's: in and out on `cardSpring`.
+        public static var page: Cards { Cards() }
+        /// The tab's: out with a little overshoot, back in on `cardSpring`.
+        public static var tab: Cards { Cards(out: tabCardOut) }
+
+        /// `dt` seconds on, heading out into cards when `out`, back to the page otherwise.
+        public mutating func step(out: Bool, dt: Double) -> CGFloat {
+            let target: Double = out ? 1 : 0
+            let next = (out ? outSpring : inSpring).step(offset: Double(progress) - target, velocity: speed, after: dt)
+            let x = next.offset
+            speed = next.velocity
+            if abs(x) < 0.001, abs(speed) < 0.01 {
+                progress = CGFloat(target)
+                speed = 0
+            } else {
+                progress = CGFloat(target + x)
+            }
+            return progress
+        }
     }
 
-    /// The cards: `cardInset` from the screen's sides, their bottom `cardInset` above the bar, the page above the bar
-    /// scaled to fit, rounded `cardCornerRadius`, and `cardGap` apart. Arc Search's were 390 × 777 at y 59 on a
-    /// 430 pt screen with its bar's top at 856.
+    /// The cards: `cardInset` from the screen's sides, from the top of the screen's safe area (under the status bar)
+    /// down to `cardInset` above the bar, the page in them scaled to their width with its strip under the status bar
+    /// squashed away, rounded `cardCornerRadius`, and `cardGap` apart, their tops level. Arc Search's were 390 × 777 at
+    /// y 59 on a 430 pt screen with its safe area's top at 59 and its bar's top at 856.
     public static let cardInset: CGFloat = 20
     public static let cardCornerRadius: CGFloat = 20
     public static let cardGap: CGFloat = 20
@@ -228,45 +272,83 @@ public enum MobilePageSwipe {
         return max(0, width - 2 * cardInset) / width
     }
 
-    /// The page's card in its place, with the page above the bar (`barTop` high) in it.
-    public static func cardFrame(width: CGFloat, barTop: CGFloat) -> CGRect {
-        let scale = cardScale(width: width)
-        let height = barTop * scale
-        return CGRect(x: cardInset, y: barTop - cardInset - height, width: width * scale, height: height)
+    /// The page's card in its place, on a screen whose safe area starts `band` down and whose bar starts at `barTop`.
+    public static func cardFrame(width: CGFloat, band: CGFloat, barTop: CGFloat) -> CGRect {
+        CGRect(x: cardInset, y: band, width: width * cardScale(width: width), height: max(0, barTop - cardInset - band))
     }
 
-    /// Where the page on screen is, `progress` of the way into its card, the finger `translation` across: it follows
-    /// the finger one to one, shrinking about its centre, and comes down to the card's place.
-    public static func leavingPage(progress: CGFloat, translation: CGFloat, width: CGFloat, barTop: CGFloat)
-        -> (center: CGPoint, scale: CGFloat) {
+    /// The page on screen on its way into its card: its centre on screen, its size before scaling, its scale and its
+    /// rounding as seen, and how high the strip under the status bar is in it, before scaling.
+    public struct LeavingPage: Equatable, Sendable {
+        public var center: CGPoint
+        public var size: CGSize
+        public var scale: CGFloat
+        public var cornerRadius: CGFloat
+        public var band: CGFloat
+    }
+
+    /// Where the page on screen is, `progress` of the way into its card, the finger `translation` across, on a screen
+    /// `height` high with the status bar's strip `band` high at its top and its corners rounded `displayCorner`. It
+    /// follows the finger one to one. Held, before the cards come out, it is the whole screen, rounded as the display
+    /// is, so the page slides as it is. As they come out it shrinks into its card, rounded as the card: the strip
+    /// squashes to nothing, and the page under it, shrunk as the card is, is cut off at the card's bottom. Arc Search's
+    /// page was a card at once, strip and all; Cra's waits for the cards and leaves the strip behind (asked for on
+    /// Nov 28).
+    public static func leavingPage(progress: CGFloat, translation: CGFloat, width: CGFloat, height: CGFloat, band: CGFloat,
+                                   barTop: CGFloat, displayCorner: CGFloat) -> LeavingPage {
         let p = min(1, max(0, progress))
-        let card = cardFrame(width: width, barTop: barTop)
-        let scale = 1 + (cardScale(width: width) - 1) * p
-        return (CGPoint(x: width / 2 + translation, y: barTop / 2 + (card.midY - barTop / 2) * p), scale)
+        let card = cardFrame(width: width, band: band, barTop: barTop)
+        func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * p }
+        let scale = mix(1, cardScale(width: width))
+        let strip = band * (1 - p)
+        let size = CGSize(width: width, height: strip + mix(height - band, card.height / cardScale(width: width)))
+        let bottom = mix(height, card.maxY)
+        return LeavingPage(center: CGPoint(x: width / 2 + translation, y: bottom - size.height * scale / 2), size: size,
+                           scale: scale, cornerRadius: mix(displayCorner, cardCornerRadius), band: strip)
     }
 
-    /// The arriving tab's card: its centre, size, lean and rounding.
+    /// The arriving tab's card: its centre, size, lean and rounding, and how much of its strip under the status bar
+    /// shows, 1 (all of it, as on screen) to 0 (squashed away).
     public struct Card: Equatable, Sendable {
         public var center: CGPoint
         public var size: CGSize
         public var angle: CGFloat
         public var cornerRadius: CGFloat
+        public var strip: CGFloat
     }
 
+    /// How far the tab's card bows out to the left on its way up, at its widest half way.
+    public static let tabCardArc: CGFloat = 32
+
     /// The tab before this one coming out of the tab button's front card (`button`, leaning `tilt`, rounded
-    /// `buttonCorner`), `progress` of the way, beside the page whose card is centred at `leavingCenterX`. It rises
-    /// straight away and moves out to the left later (its sideways way on the square of the progress), so it flies
-    /// up off the button and then out to its place, the page's card width and `cardGap` to the page's left, its lean
-    /// letting go as it comes.
+    /// `buttonCorner`), `progress` of the way (a little past 1 as it overshoots), beside the page whose card is centred
+    /// at `leavingCenterX`. It rises straight away and moves out to the left later (its sideways way on the square of
+    /// the progress), bowing `tabCardArc` further left on the way, so it flies up off the button in an arc and out to
+    /// its place, the page's card width and `cardGap` to the page's left, its lean letting go and its strip squashing
+    /// away as it comes, as the page's does. Made the page once let go, its strip comes back as it grows to the screen.
     public static func arrivingCard(progress: CGFloat, from button: CGRect, tilt: CGFloat, buttonCorner: CGFloat,
-                                    leavingCenterX: CGFloat, width: CGFloat, barTop: CGFloat) -> Card {
-        let p = min(1, max(0, progress))
-        let card = cardFrame(width: width, barTop: barTop)
+                                    leavingCenterX: CGFloat, width: CGFloat, band: CGFloat, barTop: CGFloat) -> Card {
+        let p = max(0, progress), q = min(1, p)
+        let card = cardFrame(width: width, band: band, barTop: barTop)
         let targetX = leavingCenterX - (card.width + cardGap)
         func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
-        return Card(center: CGPoint(x: mix(button.midX, targetX, p * p), y: mix(button.midY, card.midY, p)),
+        return Card(center: CGPoint(x: mix(button.midX, targetX, p * p) - tabCardArc * sin(.pi * q),
+                                    y: mix(button.midY, card.midY, p)),
                     size: CGSize(width: mix(button.width, card.width, p), height: mix(button.height, card.height, p)),
-                    angle: tilt * (1 - p), cornerRadius: mix(buttonCorner, cardCornerRadius, p))
+                    angle: tilt * (1 - q), cornerRadius: mix(buttonCorner, cardCornerRadius, q), strip: 1 - q)
+    }
+
+    /// Whether the tab's card comes out over the bar: lifted off the button while the bar is there; with the bar
+    /// slid away (`barCollapse` 0 there to 1 gone) more than half way, it sweeps out from behind it, and back in.
+    public static func tabCardOverBar(barCollapse: CGFloat) -> Bool { barCollapse < 0.5 }
+
+    /// How far out the tab's card from behind a slid-away bar is before it is wholly there: out of sight while it is
+    /// still where the button was, it fades in quickly as it leaves, and out as it goes back.
+    public static let tabCardFadeIn: CGFloat = 0.12
+
+    /// How opaque the tab's card is `progress` of the way out: always wholly there over the bar.
+    public static func tabCardAlpha(progress: CGFloat, overBar: Bool) -> CGFloat {
+        overBar ? 1 : min(1, max(0, progress) / tabCardFadeIn)
     }
 
     /// Let go, the page's card springs off to the right, shrinking a little further, and the arriving card grows to

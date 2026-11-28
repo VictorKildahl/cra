@@ -28,12 +28,18 @@ final class PageSwipeStage: NSObject {
     /// The page the swipe leads to, as its picture: the page Back or Forward goes to, or the tab's card.
     let arriving = UIView()
     let picture = UIImageView()
-    /// A closing tab's band under the status bar, over a picture of its web view only (`layOutCardPicture`).
+    /// A closing tab's band under the status bar, over a picture of its web view only, or the strip of a picture of
+    /// the whole page, cut off it, so it can squash while the card is out (`layOutCardPicture`).
     let band = UIView()
+    let stripPicture = UIImageView()
     let shadow = PageEdgeShadow()
     /// The page on screen as a picture: from the start when the tab closes (it shrinks into its card), from letting
     /// go otherwise, so the live page underneath can already go where the swipe leads.
     var leaving: UIView?
+    /// A closing tab's page in two: the strip under the status bar, which squashes as it goes into its card, and the
+    /// page under it.
+    var leavingStrip: UIView?
+    var leavingBody: UIView?
     /// Over the live page while the closing tab's cards settle: the backdrop the cards were on, so the page they
     /// lead to is not seen around the card growing into it.
     var curtain: UIView?
@@ -53,10 +59,14 @@ final class PageSwipeStage: NSObject {
     lazy var magnet = MobilePageSwipe.magnet(for: reveal)
     var lastStep: CFTimeInterval = 0
     let letGoTick = UIImpactFeedbackGenerator(style: .medium)
-    /// The closing tab's cards' own clock: from the moment the magnet stops holding the page (it lets go, or a quick
-    /// finger takes the hold off).
-    var cardsAt: CFTimeInterval?
-    var progress: CGFloat = 0
+    /// The closing tab's cards, out while the magnet doesn't hold the page (it let go, or a quick finger took the hold
+    /// off) and back in while it does, each on its own spring: the page's, and the tab's, which overshoots.
+    var cards = MobilePageSwipe.Cards.page
+    var tabCards = MobilePageSwipe.Cards.tab
+    var progress: CGFloat { cards.progress }
+    var tabProgress: CGFloat { tabCards.progress }
+    /// Whether the tab's card comes out over the bar, or from behind a bar that slid away.
+    var cardOverBar = true
     private var link: CADisplayLink?
     private var onFrame: ((CFTimeInterval) -> Void)?
     var animators: [UIViewPropertyAnimator] = []
@@ -81,6 +91,9 @@ final class PageSwipeStage: NSObject {
         arriving.addSubview(picture)
         band.isHidden = true
         arriving.addSubview(band)
+        stripPicture.isHidden = true
+        stripPicture.contentMode = .scaleToFill
+        arriving.addSubview(stripPicture)
     }
 
     /// 1 when the swipe leads by dragging right (Back, a tab closing), -1 when it leads by dragging left (Forward).
@@ -111,6 +124,8 @@ final class PageSwipeStage: NSObject {
         animators = []
         for view in [arriving, shadow, leaving, curtain] { view?.removeFromSuperview() }
         leaving = nil
+        leavingStrip = nil
+        leavingBody = nil
         curtain = nil
     }
 }
@@ -214,6 +229,7 @@ extension BrowserViewController {
         }
         pageSwipe = stage
         tracePageSwipe("\(reveal) picture \(image == nil ? "none" : "kept")", restart: true)
+        if reveal == .closingTab { tracePageSwipe(stage.cardOverBar ? "card over the bar" : "card behind the bar") }
         // The magnet's own clock: the page catches up with a still finger too.
         stage.letGoTick.prepare()
         stage.lastStep = CACurrentMediaTime()
@@ -226,38 +242,50 @@ extension BrowserViewController {
     }
 
     /// Moves the magnet on to now, the finger moving at `speed` the way the swipe leads: how far the page has come
-    /// behind the finger. As it lets the page go it ticks; once it holds the page no more, a closing tab's cards set off.
+    /// behind the finger. Each time it stops holding the page it ticks; while it holds the page no more, a closing
+    /// tab's cards are on their way out, and while it holds it, back in.
     private func stepPageSwipe(_ stage: PageSwipeStage, at now: CFTimeInterval, speed: CGFloat = 0) {
-        let wasQuick = stage.magnet.quick
-        let step = stage.magnet.step(distance: stage.translation * stage.direction, dt: max(0, now - stage.lastStep),
-                                     speed: speed)
+        let wasQuick = stage.magnet.quick, held = stage.magnet.holds
+        let dt = max(0, now - stage.lastStep)
+        let step = stage.magnet.step(distance: stage.translation * stage.direction, dt: dt, speed: speed)
         stage.lastStep = max(stage.lastStep, now)
         stage.pageTranslation = step.page * stage.direction
         if stage.magnet.quick, !wasQuick {
             tracePageSwipe(String(format: "quick with the finger at %.0f moving %.0f", abs(stage.translation), speed))
         }
-        if step.letGoNow {
+        if step.letGoNow { tracePageSwipe(String(format: "let go with the finger at %.0f", abs(stage.translation))) }
+        if held, !stage.magnet.holds {
             stage.letGoTick.impactOccurred()
-            tracePageSwipe(String(format: "let go with the finger at %.0f", abs(stage.translation)))
+            stage.letGoTick.prepare()
+        } else if !held, stage.magnet.holds {
+            tracePageSwipe(String(format: "held again with the finger at %.0f", abs(stage.translation)))
         }
-        if stage.reveal == .closingTab, stage.cardsAt == nil, !stage.magnet.holds { stage.cardsAt = now }
-        if let at = stage.cardsAt { stage.progress = MobilePageSwipe.cardProgress(after: now - at) }
+        if stage.reveal == .closingTab {
+            _ = stage.cards.step(out: !stage.magnet.holds, dt: dt)
+            _ = stage.tabCards.step(out: !stage.magnet.holds, dt: dt)
+        }
     }
 
-    /// The tab closing: the page on screen, as its picture down to the bar, slides with the finger; once the magnet
-    /// stops holding it (at once for a quick finger) it shrinks into a card while the tab shown next lifts off the tab
-    /// button's front card and grows into one beside it, both on their own clock (`stepPageSwipe`).
+    /// The tab closing: the page on screen, as its picture, slides with the finger; once the magnet stops holding it
+    /// (at once for a quick finger) it is cut down to the bar and shrinks into a card while the tab shown next lifts
+    /// off the tab button's front card and grows into one beside it, both on their own clock (`stepPageSwipe`).
     private func startClosingTab(_ stage: PageSwipeStage, picture image: UIImage?) {
-        let bounds = view.bounds, barTop = tabArea.maxY
+        let bounds = view.bounds
         let leaving = UIView()
         leaving.isUserInteractionEnabled = false
         leaving.clipsToBounds = true
         leaving.layer.cornerCurve = .continuous
-        leaving.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: barTop)
-        leaving.center = CGPoint(x: bounds.midX, y: barTop / 2)
-        if let shot = pageContainer.snapshotView(afterScreenUpdates: false) {
-            shot.frame = bounds
+        leaving.bounds = bounds
+        leaving.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let strip = view.safeAreaInsets.top
+        for (part, rect) in [(\PageSwipeStage.leavingStrip, CGRect(x: 0, y: 0, width: bounds.width, height: strip)),
+                             (\PageSwipeStage.leavingBody, CGRect(x: 0, y: strip, width: bounds.width, height: bounds.height - strip))] {
+            guard rect.height > 0,
+                  let shot = pageContainer.resizableSnapshotView(from: rect, afterScreenUpdates: false, withCapInsets: .zero)
+            else { continue }
+            shot.frame = rect
             leaving.addSubview(shot)
+            stage[keyPath: part] = shot
         }
         view.insertSubview(leaving, aboveSubview: pageContainer)
         pageContainer.isHidden = true
@@ -273,8 +301,15 @@ extension BrowserViewController {
             stage.band.backgroundColor = bandColour(for: tab)
             stage.arriving.backgroundColor = pageBackground(for: tab.id)
         }
-        // Lifted off the button, so over the bar while it is there; the slot it left is empty while it is out.
-        view.insertSubview(stage.arriving, aboveSubview: bar)
+        splitCardPicture(stage)
+        // Lifted off the button, so over the bar while it is there, and from behind a bar that has slid away; the slot
+        // it left is empty while it is out.
+        stage.cardOverBar = MobilePageSwipe.tabCardOverBar(barCollapse: barCollapse.progress)
+        if stage.cardOverBar {
+            view.insertSubview(stage.arriving, aboveSubview: bar)
+        } else {
+            view.insertSubview(stage.arriving, belowSubview: bar)
+        }
         if let tab = stage.tab, tab.id == store.tabsBehindCurrent.first?.id {
             bar.tabsButton.setFrontEmpty(true)
             stage.emptiedButton = true
@@ -284,10 +319,13 @@ extension BrowserViewController {
     private func placePageSwipe(_ stage: PageSwipeStage) {
         let width = view.bounds.width
         if stage.reveal == .closingTab {
-            layOutClosingTab(stage, progress: stage.progress, translation: stage.pageTranslation)
+            layOutClosingTab(stage, progress: stage.progress, tab: stage.tabProgress, translation: stage.pageTranslation)
             let card = stage.arriving.frame
-            tracePageSwipe(String(format: "page %.0f card %.0f %.0f %.0f %.0f finger %.0f", stage.pageTranslation, card.minX,
-                                  card.minY, card.width, card.height, stage.translation))
+            let leaving = stage.leaving.map { ($0.frame.height, $0.layer.cornerRadius * $0.transform.a) } ?? (0, 0)
+            let strip = (stage.leavingStrip?.frame.height ?? 0) * (stage.leaving?.transform.a ?? 1)
+            tracePageSwipe(String(format: "page %.0f card %.0f %.0f %.0f %.0f finger %.0f leaving %.0f rounded %.0f strip %.0f",
+                                  stage.pageTranslation, card.minX, card.minY, card.width, card.height, stage.translation,
+                                  leaving.0, leaving.1, strip))
         } else {
             let edge = MobilePageSwipe.topEdge(translation: stage.pageTranslation, width: width, reveal: stage.reveal)
             layOutPageSwipe(stage, edge: edge)
@@ -312,40 +350,85 @@ extension BrowserViewController {
         stage.shadow.frame = CGRect(x: edge - shadow, y: 0, width: shadow, height: bounds.height)
     }
 
-    /// The closing tab's two cards, `progress` of the way into cards with the finger `translation` across.
-    private func layOutClosingTab(_ stage: PageSwipeStage, progress: CGFloat, translation: CGFloat) {
-        guard let leaving = stage.leaving else { return }
+    /// The closing tab's two cards, the page's `progress` and the tab's `tab` of the way into cards, with the finger
+    /// `translation` across. Out of a bar that has slid away, the tab's card comes out of nothing.
+    private func layOutClosingTab(_ stage: PageSwipeStage, progress: CGFloat, tab: CGFloat, translation: CGFloat) {
         let width = view.bounds.width, barTop = tabArea.maxY
-        let place = MobilePageSwipe.leavingPage(progress: progress, translation: translation, width: width, barTop: barTop)
-        leaving.transform = CGAffineTransform(scaleX: place.scale, y: place.scale)
-        leaving.center = place.center
-        leaving.layer.cornerRadius = MobilePageSwipe.cardCornerRadius / max(place.scale, 0.01)
-        let card = MobilePageSwipe.arrivingCard(progress: progress, from: stage.buttonCard, tilt: MobileMotion.frontCardTilt,
-                                                buttonCorner: 5, leavingCenterX: place.center.x, width: width, barTop: barTop)
+        let place = leavingPlace(progress: progress, translation: translation)
+        placeLeaving(stage, place)
+        let card = MobilePageSwipe.arrivingCard(progress: tab, from: stage.buttonCard, tilt: MobileMotion.frontCardTilt,
+                                                buttonCorner: 5, leavingCenterX: place.center.x, width: width,
+                                                band: view.safeAreaInsets.top, barTop: barTop)
         // Bounds and centre: a frame set through the lean would not be the card's size.
         stage.arriving.transform = CGAffineTransform(rotationAngle: card.angle)
         stage.arriving.bounds = CGRect(origin: .zero, size: card.size)
         stage.arriving.center = card.center
         stage.arriving.layer.cornerRadius = card.cornerRadius
-        layOutCardPicture(stage, progress: progress)
+        stage.arriving.alpha = MobilePageSwipe.tabCardAlpha(progress: tab, overBar: stage.cardOverBar)
+        layOutCardPicture(stage, progress: tab, strip: card.strip)
     }
 
-    /// The tab's picture in its card, the whole page across: its middle showing in the button's little card as the
-    /// button shows it, its top at the card's top once the card is a page. A tab's picture is either the whole page,
-    /// band and all (`capturePageSnapshot`), or its web view only, which begins under the band (`WebPage.takeSnapshot`):
-    /// that one gets the tab's band over it, as the tab row draws it, so either lands on the page as it is on screen.
-    private func layOutCardPicture(_ stage: PageSwipeStage, progress: CGFloat) {
+    /// The closing tab's page `progress` of the way into its card with the finger `translation` across.
+    private func leavingPlace(progress: CGFloat, translation: CGFloat) -> MobilePageSwipe.LeavingPage {
+        let bounds = view.bounds
+        return MobilePageSwipe.leavingPage(progress: progress, translation: translation, width: bounds.width,
+                                           height: bounds.height, band: view.safeAreaInsets.top, barTop: tabArea.maxY,
+                                           displayCorner: UIScreen.main.displayCornerRadius)
+    }
+
+    /// Puts the closing tab's page at `place`: its strip squashed to the height `place` gives it, from the top, and
+    /// the page under it below the strip, as tall as it was.
+    private func placeLeaving(_ stage: PageSwipeStage, _ place: MobilePageSwipe.LeavingPage) {
+        guard let leaving = stage.leaving else { return }
+        leaving.transform = CGAffineTransform(scaleX: place.scale, y: place.scale)
+        leaving.bounds = CGRect(origin: .zero, size: place.size)
+        leaving.center = place.center
+        leaving.layer.cornerRadius = place.cornerRadius / max(place.scale, 0.01)
+        let width = place.size.width
+        if let strip = stage.leavingStrip {
+            let height = strip.bounds.height
+            strip.transform = CGAffineTransform(scaleX: 1, y: max(0.001, place.band / max(height, 1)))
+            strip.center = CGPoint(x: width / 2, y: place.band / 2)
+        }
+        if let body = stage.leavingBody {
+            body.center = CGPoint(x: width / 2, y: place.band + body.bounds.height / 2)
+        }
+    }
+
+    /// A tab's picture is either the whole page, band and all (`capturePageSnapshot`), or its web view only, which
+    /// begins under the band (`WebPage.takeSnapshot`). The whole page's is cut in two here, its strip under the status
+    /// bar and the page under it; the web view's gets the tab's band over it, as the tab row draws it. Either way the
+    /// card has a strip to squash away while it is out.
+    private func splitCardPicture(_ stage: PageSwipeStage) {
+        guard let image = stage.picture.image, let cg = image.cgImage else { return }
+        let screen = view.bounds.size
+        let whole = image.size.height / max(image.size.width, 1) >= screen.height / max(screen.width, 1) - 0.02
+        let strip = (CGFloat(cg.height) * view.safeAreaInsets.top / max(screen.height, 1)).rounded()
+        guard whole, strip > 0, strip < CGFloat(cg.height),
+              let top = cg.cropping(to: CGRect(x: 0, y: 0, width: CGFloat(cg.width), height: strip)),
+              let rest = cg.cropping(to: CGRect(x: 0, y: strip, width: CGFloat(cg.width), height: CGFloat(cg.height) - strip))
+        else { return }
+        stage.stripPicture.image = UIImage(cgImage: top, scale: image.scale, orientation: image.imageOrientation)
+        stage.picture.image = UIImage(cgImage: rest, scale: image.scale, orientation: image.imageOrientation)
+    }
+
+    /// The tab's picture in its card, the whole page across, under `strip` of its strip under the status bar: its
+    /// middle showing in the button's little card as the button shows it, its top at the card's top once the card is
+    /// a page.
+    private func layOutCardPicture(_ stage: PageSwipeStage, progress: CGFloat, strip share: CGFloat) {
         let size = stage.arriving.bounds.size, screen = view.bounds.size
-        let screenAspect = screen.height / max(screen.width, 1)
-        let aspect = stage.picture.image.map { $0.size.height / max($0.size.width, 1) } ?? screenAspect
-        let whole = aspect >= screenAspect - 0.02
-        let band = whole ? 0 : view.safeAreaInsets.top * size.width / max(screen.width, 1)
+        let fit = size.width / max(screen.width, 1)
+        let aspect = stage.picture.image.map { $0.size.height / max($0.size.width, 1) }
+            ?? (screen.height - view.safeAreaInsets.top) / max(screen.width, 1)
+        let strip = view.safeAreaInsets.top * fit * min(1, max(0, share))
         let pictureHeight = size.width * aspect
-        let centred = (size.height - band - pictureHeight) / 2
+        let centred = (size.height - strip - pictureHeight) / 2
         let top = centred * (1 - min(1, max(0, progress)))
-        stage.band.isHidden = whole || stage.band.backgroundColor == nil
-        stage.band.frame = CGRect(x: 0, y: top, width: size.width, height: band)
-        stage.picture.frame = CGRect(x: 0, y: top + band, width: size.width, height: pictureHeight)
+        let cut = stage.stripPicture.image != nil
+        stage.stripPicture.isHidden = !cut
+        stage.band.isHidden = cut || stage.band.backgroundColor == nil
+        for view in [stage.band, stage.stripPicture] { view.frame = CGRect(x: 0, y: top, width: size.width, height: strip) }
+        stage.picture.frame = CGRect(x: 0, y: top + strip, width: size.width, height: pictureHeight)
     }
 
     // MARK: Letting go
@@ -458,15 +541,17 @@ extension BrowserViewController {
     /// its card to the whole screen under the bar, over its live page until that has drawn.
     private func settleClosingTab(_ stage: PageSwipeStage, velocity: CGFloat) {
         guard let leaving = stage.leaving else { return }
-        let bounds = view.bounds, width = bounds.width, barTop = tabArea.maxY
+        let bounds = view.bounds, width = bounds.width
         view.insertSubview(stage.arriving, belowSubview: bar)
-        let card = MobilePageSwipe.cardFrame(width: width, barTop: barTop)
         let goneX = MobilePageSwipe.leavingCardGoneX(width: width)
         let speed = MobilePageSwipe.initialVelocity(velocity: velocity, from: leaving.center.x, to: goneX)
+        // A card by now, even when a quick release comes before the cards are all the way out, shrinking a little
+        // further on its way off.
+        var gone = leavingPlace(progress: 1, translation: 0)
+        gone.scale = MobilePageSwipe.cardLeaveScale
+        gone.center.x = goneX
         animatePageSwipe(stage, spring: MobilePageSwipe.cardLeave, velocity: speed, {
-            let scale = MobilePageSwipe.cardLeaveScale
-            leaving.transform = CGAffineTransform(scaleX: scale, y: scale)
-            leaving.center = CGPoint(x: goneX, y: card.midY)
+            self.placeLeaving(stage, gone)
         }, completion: { [weak stage] in
             stage?.leaving?.removeFromSuperview()
             stage?.leaving = nil
@@ -477,7 +562,9 @@ extension BrowserViewController {
             stage.arriving.bounds = CGRect(origin: .zero, size: bounds.size)
             stage.arriving.center = CGPoint(x: bounds.midX, y: bounds.midY)
             stage.arriving.layer.cornerRadius = display
-            self.layOutCardPicture(stage, progress: 1)
+            stage.arriving.alpha = 1
+            // Made the page, its strip under the status bar comes back.
+            self.layOutCardPicture(stage, progress: 1, strip: 1)
         }, completion: { [weak self, weak stage] in
             guard let self, let stage, self.pageSwipe === stage else { return }
             stage.settled = true
@@ -509,15 +596,15 @@ extension BrowserViewController {
             // Back the way they came, a frame at a time: the tab's card down the screen's edge into the button along the
             // path it came up, the page's card back to the page. A spring between the two layouts would take the card
             // there in a straight line.
-            let progress = stage.progress, translation = stage.pageTranslation
+            let progress = stage.progress, tab = stage.tabProgress, translation = stage.pageTranslation
             let start = CACurrentMediaTime()
             stage.startClock { [weak self, weak stage] time in
                 guard let self, let stage, self.pageSwipe === stage else { return }
                 let back = MobilePageSwipe.cardsReturn(after: time - start)
                 let left = back.home ? 0 : 1 - back.share
-                self.layOutClosingTab(stage, progress: progress * left, translation: translation * left)
+                self.layOutClosingTab(stage, progress: progress * left, tab: tab * left, translation: translation * left)
                 let card = stage.arriving.frame
-                self.tracePageSwipe(String(format: "down %.3f card %.1f %.1f %.1f %.1f page %.1f", progress * left,
+                self.tracePageSwipe(String(format: "down %.3f card %.1f %.1f %.1f %.1f page %.1f", tab * left,
                                            card.minX, card.minY, card.width, card.height, translation * left))
                 if back.home {
                     stage.stopClock()

@@ -72,6 +72,21 @@ public enum MobileMotion {
             return high
         }
 
+        /// Where something `offset` from its rest, moving at `velocity`, is `time` later and how fast it is moving
+        /// then, worked out exactly, so it can be stepped a frame at a time and turned towards a new rest on the way.
+        /// Under-damped it overshoots and rings; critically damped or more it is taken as critically damped.
+        public func step(offset x0: Double, velocity v0: Double, after time: Double) -> (offset: Double, velocity: Double) {
+            let omega = 2 * .pi / response, t = max(0, time)
+            guard dampingRatio < 1 else {
+                let e = exp(-omega * t)
+                return ((x0 + (v0 + omega * x0) * t) * e, (v0 - omega * (v0 + omega * x0) * t) * e)
+            }
+            let zeta = max(0, dampingRatio), damped = omega * (1 - zeta * zeta).squareRoot()
+            let e = exp(-zeta * omega * t), c = cos(damped * t), s = sin(damped * t)
+            return (e * (x0 * c + (v0 + zeta * omega * x0) / damped * s),
+                    e * (v0 * c - (zeta * omega * v0 + omega * omega * x0) / damped * s))
+        }
+
         /// Where something let go `offset` from its rest at `velocity` is after `time`, still as
         /// an offset from rest. Only for a critically damped spring: it carries on the way it was
         /// going, turns once and eases home, never rocking back and forth.

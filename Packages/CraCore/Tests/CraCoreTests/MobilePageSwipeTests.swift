@@ -5,7 +5,7 @@ import Testing
 
 /// The swipe across the page, as measured on Arc Search's recordings (430 × 932 pt, its bar's top at 856).
 struct MobilePageSwipeTests {
-    private let width: CGFloat = 430, barTop: CGFloat = 856
+    private let width: CGFloat = 430, height: CGFloat = 932, band: CGFloat = 59, barTop: CGFloat = 856
 
     @Test func eachWayLeadsSomewhereShowsWhatItLeadsTo() {
         #expect(MobilePageSwipe.reveal(for: .back) == .back)
@@ -61,13 +61,14 @@ struct MobilePageSwipeTests {
         #expect(MobilePageSwipe.settle.dampingRatio == 1)
     }
 
-    /// Arc Search's cards: 390 × 777 at (20, 59), from a page whose bar starts at 856.
+    /// Arc Search's cards: 390 × 777 at (20, 59), from a page whose safe area starts at 59 and whose bar starts at 856:
+    /// their tops on the safe area's.
     @Test func bothPagesShrinkIntoArcSearchsCards() {
-        let card = MobilePageSwipe.cardFrame(width: width, barTop: barTop)
+        let card = MobilePageSwipe.cardFrame(width: width, band: band, barTop: barTop)
         #expect(abs(card.minX - 20) < 0.01)
         #expect(abs(card.width - 390) < 0.01)
-        #expect(abs(card.height - 776.4) < 0.1)
-        #expect(abs(card.minY - 59.6) < 0.1)
+        #expect(abs(card.height - 777) < 0.01)
+        #expect(card.minY == band)
         #expect(abs(card.maxY - (barTop - 20)) < 0.01)
         #expect(abs(MobilePageSwipe.cardScale(width: width) - 0.907) < 0.001)
     }
@@ -75,28 +76,107 @@ struct MobilePageSwipeTests {
     /// The cards' own clock, not the finger's travel: Arc Search's measured .09, .33, .59, .77, .89 at frames 1, 3, 5,
     /// 7, 9 after the swipe started, and .98 by frame 12.
     @Test func theCardsComeOnTheirOwnClock() {
-        let measured: [(frame: Double, progress: CGFloat)] = [(1, 0.09), (3, 0.33), (5, 0.59), (7, 0.77), (9, 0.89)]
-        for (frame, progress) in measured {
-            #expect(abs(MobilePageSwipe.cardProgress(after: frame / 60) - progress) < 0.04, "frame \(frame)")
+        let measured: [Int: CGFloat] = [1: 0.09, 3: 0.33, 5: 0.59, 7: 0.77, 9: 0.89]
+        var cards = MobilePageSwipe.Cards()
+        #expect(cards.step(out: false, dt: 1) == 0, "held, they stay in")
+        for frame in 1...300 {
+            let progress = cards.step(out: true, dt: 1.0 / 60)
+            if let arc = measured[frame] { #expect(abs(progress - arc) < 0.04, "frame \(frame)") }
+            if frame == 13 { #expect(progress > 0.95) }
         }
-        #expect(MobilePageSwipe.cardProgress(after: 13.0 / 60) > 0.95)
-        #expect(MobilePageSwipe.cardProgress(after: 0) == 0)
-        #expect(MobilePageSwipe.cardProgress(after: -1) == 0)
-        #expect(MobilePageSwipe.cardProgress(after: 5) == 1)
+        #expect(cards.progress == 1)
     }
 
-    /// The page follows the finger one to one and shrinks about its centre into its card's place.
+    /// The tab's card comes out with a slight overshoot and settles on its place; going back in it doesn't overshoot
+    /// into the button, and the page beside it never overshoots.
+    @Test func theTabsCardOvershootsALittleOnTheWayOut() {
+        var tab = MobilePageSwipe.Cards.tab, page = MobilePageSwipe.Cards.page
+        var furthest: CGFloat = 0, pageFurthest: CGFloat = 0
+        for _ in 0..<120 {
+            furthest = max(furthest, tab.step(out: true, dt: 1.0 / 120))
+            pageFurthest = max(pageFurthest, page.step(out: true, dt: 1.0 / 120))
+        }
+        #expect(furthest > 1.002 && furthest < 1.015, "a slight overshoot: \(furthest)")
+        #expect(pageFurthest == 1)
+        #expect(tab.progress == 1, "settled on its place")
+        var lowest: CGFloat = 1
+        for _ in 0..<240 { lowest = min(lowest, tab.step(out: false, dt: 1.0 / 120)) }
+        #expect(lowest == 0, "back into the button without going past it")
+    }
+
+    /// The spring stepped a frame at a time lands where the whole step would, and an under-damped one overshoots as
+    /// its damping says.
+    @Test func aSpringSteppedFrameByFrameIsTheSpring() {
+        for spring in [MobilePageSwipe.cardSpring, MobilePageSwipe.tabCardOut] {
+            let whole = spring.step(offset: -1, velocity: 0, after: 0.2)
+            var state = (offset: -1.0, velocity: 0.0)
+            for _ in 0..<24 { state = spring.step(offset: state.offset, velocity: state.velocity, after: 0.2 / 24) }
+            #expect(abs(state.offset - whole.offset) < 1e-9 && abs(state.velocity - whole.velocity) < 1e-9)
+        }
+        #expect(abs(MobilePageSwipe.cardSpring.step(offset: 1, velocity: 0, after: 0.1).offset
+            - MobilePageSwipe.cardSpring.remaining(after: 0.1)) < 1e-12)
+        let spring = MobilePageSwipe.tabCardOut
+        var state = (offset: -1.0, velocity: 0.0), peak = -1.0
+        for _ in 0..<600 {
+            state = spring.step(offset: state.offset, velocity: state.velocity, after: 1.0 / 600)
+            peak = max(peak, state.offset)
+        }
+        #expect(abs(peak - spring.overshoot) < 0.001)
+    }
+
+    /// Held again part of the way out, the cards turn and go back in on the same spring, and out again when the
+    /// magnet lets go once more: a finger going back and forth takes them out and in.
+    @Test func theCardsGoBackInWhenThePageIsHeldAgain() {
+        var cards = MobilePageSwipe.Cards()
+        for _ in 0..<6 { _ = cards.step(out: true, dt: 1.0 / 60) }
+        let out = cards.progress
+        #expect(out > 0.4 && out < 0.9)
+        // Still on its way out for a moment as it turns, then only ever back.
+        var last = cards.step(out: false, dt: 1.0 / 60)
+        #expect(last < 1)
+        var turned = false
+        for _ in 0..<120 {
+            let progress = cards.step(out: false, dt: 1.0 / 60)
+            if progress < last { turned = true }
+            if turned { #expect(progress <= last + 0.0001) }
+            last = progress
+        }
+        #expect(cards.progress == 0, "back to the page")
+        for _ in 0..<120 { _ = cards.step(out: true, dt: 1.0 / 60) }
+        #expect(cards.progress == 1, "and out again")
+    }
+
+    /// Held, the page is the whole screen sliding with the finger, rounded as the display is; as the cards come out it
+    /// shrinks into a card above the bar, its status bar strip squashed to nothing while the page under it keeps its
+    /// height, cut down to the bar.
     @Test func thePageFollowsTheFingerIntoItsCard() {
-        let start = MobilePageSwipe.leavingPage(progress: 0, translation: 0, width: width, barTop: barTop)
-        #expect(start.center == CGPoint(x: 215, y: 428))
+        func place(_ progress: CGFloat, _ translation: CGFloat) -> MobilePageSwipe.LeavingPage {
+            MobilePageSwipe.leavingPage(progress: progress, translation: translation, width: width, height: height,
+                                        band: band, barTop: barTop, displayCorner: 55)
+        }
+        let start = place(0, 40)
+        #expect(start.center == CGPoint(x: 255, y: 466))
+        #expect(start.size == CGSize(width: width, height: height))
         #expect(start.scale == 1)
-        let done = MobilePageSwipe.leavingPage(progress: 1, translation: 100, width: width, barTop: barTop)
-        let card = MobilePageSwipe.cardFrame(width: width, barTop: barTop)
+        #expect(start.cornerRadius == 55)
+        #expect(start.band == band)
+
+        let done = place(1, 100)
+        let card = MobilePageSwipe.cardFrame(width: width, band: band, barTop: barTop)
+        let scale = MobilePageSwipe.cardScale(width: width)
         #expect(done.center.x == 315)
-        #expect(abs(done.center.y - card.midY) < 0.01)
-        #expect(abs(done.scale - MobilePageSwipe.cardScale(width: width)) < 0.0001)
-        // Arc Search's centre came down from 428 to 447.5.
-        #expect(abs(done.center.y - 447.8) < 0.5)
+        #expect(done.band == 0, "the strip squashed to nothing")
+        #expect(abs(done.scale - scale) < 0.0001)
+        #expect(abs(done.size.height * done.scale - card.height) < 0.01, "the page under it, shrunk, cut off at the card's bottom")
+        #expect(abs(done.center.y - done.size.height * done.scale / 2 - band) < 0.01, "its top on the safe area's")
+        #expect(abs(done.center.y + done.size.height * done.scale / 2 - card.maxY) < 0.01, "its bottom on the card's")
+        #expect(done.cornerRadius == MobilePageSwipe.cardCornerRadius)
+
+        // Half way, the strip half squashed and the page under it half cut down.
+        let half = place(0.5, 0)
+        #expect(half.band == band / 2)
+        #expect(abs(half.size.height - (band / 2 + (height - band + card.height / scale) / 2)) < 0.01)
+        #expect(half.cornerRadius == (55 + MobilePageSwipe.cardCornerRadius) / 2)
     }
 
     /// The tab before it lifts off the button's front card, leaning as it does there, flies up first and out to the
@@ -106,26 +186,45 @@ struct MobilePageSwipeTests {
         let tilt: CGFloat = 8 * .pi / 180
         func card(_ progress: CGFloat, page: CGFloat = 215) -> MobilePageSwipe.Card {
             MobilePageSwipe.arrivingCard(progress: progress, from: button, tilt: tilt, buttonCorner: 5,
-                                         leavingCenterX: page, width: width, barTop: barTop)
+                                         leavingCenterX: page, width: width, band: band, barTop: barTop)
         }
         let lifted = card(0)
         #expect(lifted.center == CGPoint(x: button.midX, y: button.midY))
         #expect(lifted.size == button.size)
         #expect(lifted.angle == tilt)
         #expect(lifted.cornerRadius == 5)
+        #expect(lifted.strip == 1, "as the button shows it, strip and all")
 
         let out = card(1, page: 315)
-        let place = MobilePageSwipe.cardFrame(width: width, barTop: barTop)
+        let place = MobilePageSwipe.cardFrame(width: width, band: band, barTop: barTop)
         #expect(abs(out.center.x - (315 - 410)) < 0.01, "a card's width and 20 pt to the left of the page's card")
         #expect(abs(out.center.y - place.midY) < 0.01)
         #expect(abs(out.size.width - place.width) < 0.01 && abs(out.size.height - place.height) < 0.01)
         #expect(out.angle == 0)
         #expect(out.cornerRadius == MobilePageSwipe.cardCornerRadius)
+        #expect(out.strip == 0, "its strip squashed away, as the page's beside it")
+        // Overshooting, it carries on past its place.
+        let past = card(1.03)
+        #expect(past.center.x < card(1).center.x && past.size.width > place.width)
+        #expect(past.angle == 0 && past.strip == 0)
+        // Over the bar while it is there, from behind it once it has mostly slid away.
+        #expect(MobilePageSwipe.tabCardOverBar(barCollapse: 0))
+        #expect(MobilePageSwipe.tabCardOverBar(barCollapse: 0.4))
+        #expect(!MobilePageSwipe.tabCardOverBar(barCollapse: 0.6))
+        #expect(!MobilePageSwipe.tabCardOverBar(barCollapse: 1))
+        // From behind it, out of sight while still where the button was, and quickly in view as it leaves.
+        #expect(MobilePageSwipe.tabCardAlpha(progress: 0, overBar: false) == 0)
+        #expect(abs(MobilePageSwipe.tabCardAlpha(progress: 0.06, overBar: false) - 0.5) < 0.0001)
+        #expect(MobilePageSwipe.tabCardAlpha(progress: 0.12, overBar: false) == 1)
+        #expect(MobilePageSwipe.tabCardAlpha(progress: 1.03, overBar: false) == 1)
+        #expect(MobilePageSwipe.tabCardAlpha(progress: 0, overBar: true) == 1)
+        #expect(abs(out.center.y - out.size.height / 2 - band) < 0.01, "its top level with the page's card's")
 
-        // Half way it has risen half the way but gone only a quarter of the way out: up first, then out.
+        // Half way it has risen half the way but gone only a quarter of the way out, bowed out to the left besides: up
+        // first in an arc, then out.
         let half = card(0.5)
         #expect(abs(half.center.y - (button.midY + (place.midY - button.midY) / 2)) < 0.01)
-        #expect(abs(half.center.x - (button.midX + ((215 - 410) - button.midX) / 4)) < 0.01)
+        #expect(abs(half.center.x - (button.midX + ((215 - 410) - button.midX) / 4 - MobilePageSwipe.tabCardArc)) < 0.01)
         #expect(abs(half.angle - tilt / 2) < 0.0001)
     }
 
@@ -206,7 +305,8 @@ struct MobilePageSwipeTests {
 
     /// Arc Search's quick swipes on a tab's first page weren't held: the page was 17.5 pt along four frames in, where
     /// held it would have been at most 0.124 of the finger's way. The cards come out at once (`holds` is false), but
-    /// letting go still only goes once the finger is past where a slow swipe lets go, with one tick there.
+    /// letting go still only goes once the finger is past where a slow swipe lets go, with one tick there. Turned back,
+    /// it is held again.
     @Test func aQuickFingerClosingATabIsNotHeld() {
         var magnet = MobilePageSwipe.magnet(for: .closingTab)
         #expect(magnet.quickSpeed == MobilePageSwipe.quickSpeed)
@@ -233,10 +333,21 @@ struct MobilePageSwipeTests {
         // On past where the magnet lets go: the tick, and letting go goes.
         #expect(magnet.step(distance: 200, dt: 1 / 60).letGoNow)
         #expect(magnet.letGo)
-        // Taken back, the page still follows the finger: only a slow swipe is held again.
+        // Taken back under where the magnet takes hold again, a quick finger's page is held again too, so the cards go
+        // back in; on past where it lets go, it lets go again, with its tick.
         for _ in 0..<40 { page = magnet.step(distance: 90, dt: 1 / 60).page }
         #expect(!magnet.letGo)
-        #expect(abs(page - 60) < 1)
+        #expect(magnet.holds)
+        #expect(abs(page - magnet.held(90)) < 1)
+        #expect(magnet.step(distance: 200, dt: 1 / 60).letGoNow)
+        // A quick finger only slowing down, short of the furthest it came, stays not held.
+        var slowing = MobilePageSwipe.magnet(for: .closingTab)
+        _ = slowing.step(distance: 60, dt: 1 / 60, speed: 1200)
+        _ = slowing.step(distance: 100, dt: 1 / 60, speed: 600)
+        _ = slowing.step(distance: 90, dt: 1 / 60, speed: -100)
+        #expect(!slowing.holds, "10 pt back is not turning back")
+        _ = slowing.step(distance: 75, dt: 1 / 60, speed: -100)
+        #expect(slowing.holds, "25 pt back is")
 
         // A slow finger, as the swipes with the finger shown, stays held; Back is held whatever the speed.
         var slow = MobilePageSwipe.magnet(for: .closingTab)
