@@ -35,6 +35,10 @@ class HarnessTests(unittest.TestCase):
             f"{s}: coverage.py and the nightly sanitizer loop run it as a harness, but scripts/test.sh doesn't. "
             "Wire it into scripts/test.sh with a `suite` line, or rename it if it isn't a test." for s in missing))
 
+    def test_coverage_pys_ordering_lists_name_only_harnesses(self):
+        stale = [s for s in coverage.SERIAL + coverage.FIRST if s.endswith(".sh") and s not in looped()]
+        self.assertEqual(stale, [], "scripts/coverage.py's SERIAL or FIRST names scripts it doesn't run as harnesses")
+
     def test_the_nightly_skip_list_is_coverage_pys(self):
         nightly = (ROOT / ".github/workflows/nightly.yml").read_text()
         skip = re.search(r'case "\$t" in (\S+)\) continue', nightly)

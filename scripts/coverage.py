@@ -42,7 +42,7 @@ NOT_HARNESSES = {"scripts/test-update.sh", "scripts/test.sh"}
 JOBS = max(1, int(os.environ.get("CRA_TEST_JOBS") or os.cpu_count() or 1))
 # Run alone, after the others: windows ordered on screen or sheets that need the key window,
 # and the two that failed while another run of every suite shared the Mac.
-SERIAL = ["scripts/test-dialogs.sh", "scripts/test-display.sh", "scripts/test-pager-mask.sh",
+SERIAL = ["scripts/test-dialogs.sh", "scripts/test-pager-mask.sh",
           "scripts/test-pip-overlay.sh", "scripts/test-chromium-window-corners.sh", "scripts/test-feed-counts.sh"]
 # Started first, so none of them is what is left running at the end: the longest on CI (28 Nov 2026).
 LIBRARY = "CraCore library for the harnesses"
