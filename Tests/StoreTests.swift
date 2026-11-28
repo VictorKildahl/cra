@@ -134,6 +134,8 @@ enum StoreTests {
         windowsShareTheSidebar()
         clearTodayArchivesInOnePass()
         settingsSync()
+        syncKeepsASplitMadeWhileTheOtherMacLooked()
+        thinSplitsGoOnLoad()
         syncLeavesBlankWindowsOnTheirMac()
         blankWindows()
         blankWindowWithoutItsWindow()
@@ -5031,6 +5033,88 @@ enum StoreTests {
         expect(syncC.pendingChoice?.device == "Studio", "and the new Mac asks which sidebar to keep, as when sync is turned on")
         syncC.useLocal()
         syncA.disable(); syncC.disable()
+    }
+
+    // promise: #921
+    /// The dead tab reported on X (27 Nov 2026): two tabs made into a split on one Mac while the other
+    /// Mac looked at them. The merge gave each tab the other Mac's parent, Today, and kept the split with
+    /// no panes: a row with only a close button that did nothing, synced to every Mac.
+    @MainActor
+    private static func syncKeepsASplitMadeWhileTheOtherMacLooked() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-sync-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let clockA = ManualScheduler(), clockB = ManualScheduler(now: clockA.now)
+        let a = AppComposition(clock: clockA).store
+        let first = a.createTab(url: "https://codepen.io/vscode", title: "VS Code Extension – CodePen")
+        let second = a.createTab(url: "https://codepen.io/mcp", title: "MCP – CodePen")
+        let syncA = SettingsSyncService(store: a, clock: clockA, device: "Studio", deviceID: "studio")
+        expect(syncA.enable(folder: folder) == .synced, "split sync: the first Mac writes its bundle")
+        let b = SidebarStore(clock: clockB)
+        let syncB = SettingsSyncService(store: b, clock: clockB, device: "MacBook", deviceID: "macbook")
+        guard case .bundleFound = syncB.enable(folder: folder) else { return expect(false, "split sync: the second Mac finds the bundle") }
+        syncB.useRemote()
+        expect(b.item(first.id) != nil && b.item(second.id) != nil, "split sync: both Macs have both tabs")
+
+        // The second Mac looks at both tabs and writes; the first, not having looked yet, splits them.
+        clockB.advance(by: 10)
+        b.selectTab(first.id)
+        b.selectTab(second.id)
+        syncB.poll()
+        clockA.advance(by: 20)
+        guard let split = a.createSplit(with: [first.id, second.id]) else { return expect(false, "split sync: the split is made") }
+        syncA.poll()
+        syncB.poll()
+        for (mac, store) in [("first", a), ("second", b)] {
+            expect(store.item(split.id)?.children == [first.id, second.id],
+                   "split sync: the split keeps both its panes on the \(mac) Mac, got \(store.item(split.id)?.children.count ?? -1)")
+            expect(store.item(first.id)?.parentID == split.id && store.item(second.id)?.parentID == split.id,
+                   "split sync: both tabs are in the split on the \(mac) Mac")
+            expect(store.document.items.allSatisfy { !$0.isSplit || $0.children.count >= 2 }, "split sync: no split without panes on the \(mac) Mac")
+            expect(store.integrityProblems().isEmpty, "split sync: the \(mac) Mac's sidebar is sound: \(store.integrityProblems())")
+        }
+        syncA.disable()
+        syncB.disable()
+    }
+
+    // promise: #921
+    /// A split with no panes, or one, as a Cra before the fix synced to every Mac: it goes when the
+    /// sidebar loads or a bundle is applied, its pane in its place, so the row that could not be closed
+    /// is gone.
+    @MainActor
+    private static func thinSplitsGoOnLoad() {
+        let source = AppComposition(clock: ManualScheduler()).store
+        _ = source.createTab(url: "https://codepen.io/before", title: "Before")
+        let lone = source.createTab(url: "https://codepen.io/lone", title: "Lone")
+        _ = source.createTab(url: "https://codepen.io/after", title: "After")
+        let today = source.focusedSpace.todayContainerID
+        let listed = source.item(today)?.children ?? []
+        var doc = source.document
+        var empty = SidebarItem.split(parent: today)
+        var single = SidebarItem.split(parent: today)
+        single.children = [lone.id]
+        empty.children = []
+        doc.items = doc.items.map { it in
+            var it = it
+            if it.id == lone.id { it.parentID = single.id }
+            // Where the lone tab was, its split, and an empty one after it.
+            if it.id == today { it.children = it.children.flatMap { $0 == lone.id ? [single.id, empty.id] : [$0] } }
+            return it
+        } + [empty, single]
+
+        let synced = SidebarStore(clock: ManualScheduler())
+        synced.replace(document: doc)
+        expect(synced.item(empty.id) == nil && synced.item(single.id) == nil, "thin splits: an applied bundle's splits without two panes go")
+        expect(synced.item(today)?.children == listed, "thin splits: the lone pane takes its split's place")
+        expect(synced.item(lone.id)?.parentID == today && synced.integrityProblems().isEmpty, "thin splits: the sidebar is sound after a bundle: \(synced.integrityProblems())")
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try? encoder.encode(doc).write(to: AppPaths.file("sidebar.json"))
+        let launched = SidebarStore(clock: ManualScheduler())
+        expect(launched.item(empty.id) == nil && launched.item(single.id) == nil, "thin splits: a saved sidebar's splits without two panes go at launch")
+        expect(launched.item(today)?.children == listed, "thin splits: at launch the lone pane takes its split's place")
+        expect(launched.integrityProblems().isEmpty, "thin splits: the sidebar is sound after a launch")
     }
 
     /// A Blank Window is one Mac's window: its sidebar never goes to the other Mac, and a bundle

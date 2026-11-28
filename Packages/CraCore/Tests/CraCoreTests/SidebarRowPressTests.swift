@@ -38,4 +38,19 @@ struct SidebarRowPressTests {
         #expect(!SidebarRowPress.selectsOnPress(.favorite, clickCount: 1, modified: false))
         #expect(!SidebarRowPress.selectsOnPress(.split, clickCount: 1, modified: false))
     }
+
+    /// ⌥-click on another tab opens it in Split View with the open one, as in Arc (reported on X, 27 Nov 2026).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/922")) func optionClickOnAnotherTabSplitsIt() {
+        func click(command: Bool = false, shift: Bool = false, option: Bool = false, count: Int = 1, open: Bool = false, canSplit: Bool = true) -> SidebarRowPress.TabClick {
+            SidebarRowPress.tabClick(command: command, shift: shift, option: option, clickCount: count, isOpen: open, canSplit: canSplit)
+        }
+        #expect(click(option: true) == .openInSplit)
+        #expect(click(option: true, open: true) == .select, "the open tab has nothing to split with")
+        #expect(click(option: true, canSplit: false) == .select, "no open tab with a page in this space: a plain click")
+        #expect(click(option: true, count: 2) == .rename)
+        #expect(click(command: true, option: true) == .pick(range: false))
+        #expect(click(shift: true) == .pick(range: true))
+        #expect(click() == .select)
+        #expect(click(count: 2) == .rename)
+    }
 }

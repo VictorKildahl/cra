@@ -166,6 +166,156 @@ struct SidebarMergeTests {
         #expect(SidebarMerge.merge(base: f.doc, local: local, remote: f.doc).spaces[0].title == "Mine")
     }
 
+    /// `doc` with the Today tab and a second Today tab made into a split, as SidebarStore.createSplit does:
+    /// the split takes the first tab's place and both tabs move into it.
+    func splitToday(_ f: Fixture, with other: SidebarItem, _ doc: SidebarDocument) -> (SidebarDocument, SidebarItem) {
+        let todayID = f.doc.spaces[0].todayContainerID
+        var split = SidebarItem.split(parent: todayID)
+        split.children = [f.today.id, other.id]
+        var d = doc
+        d.items.append(split)
+        d.items = d.items.map { it in
+            var it = it
+            if it.id == todayID { it.children = [split.id] + it.children.filter { $0 != f.today.id && $0 != other.id } }
+            if it.id == f.today.id || it.id == other.id { it.parentID = split.id }
+            return it
+        }
+        return (d, split)
+    }
+
+    func lookedAt(_ id: UUID, _ when: Date, _ doc: SidebarDocument) -> SidebarDocument {
+        var d = doc
+        d.items = d.items.map { it in
+            guard it.id == id, var tab = it.tab else { return it }
+            tab.timeLastActiveAt = when
+            var it = it
+            it.data = .tab(tab)
+            return it
+        }
+        return d
+    }
+
+    /// The dead tab (X, 27 Nov 2026): a split made here, while the other Mac looked at its tabs or a
+    /// page there changed its title. Each tab was the other Mac's, parent and all, so both went back to
+    /// Today and the split stayed with no panes: a row with only a close button that did nothing,
+    /// synced to every Mac. A move made here is kept with what the other Mac changed.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/921")) func aSplitMadeHereKeepsItsPanesWhenTheOtherMacLookedAtThem() {
+        let f = Fixture()
+        let todayID = f.doc.spaces[0].todayContainerID
+        let other = SidebarItem.tab("https://codepen.io/mcp", title: "MCP", parent: todayID)
+        let base = added(other, under: todayID, f.doc)
+        let (local, split) = splitToday(f, with: other, base)
+        let seen = Date(timeIntervalSince1970: 1_800_000_000)
+        let remote = lookedAt(f.today.id, seen, retitled(other.id, "MCP – CodePen", base))
+        let merged = SidebarMerge.merge(base: base, local: local, remote: remote)
+        #expect(item(split.id, in: merged)?.children == [f.today.id, other.id])
+        #expect(item(f.today.id, in: merged)?.parentID == split.id && item(other.id, in: merged)?.parentID == split.id)
+        #expect(item(todayID, in: merged)?.children == [split.id])
+        #expect(item(other.id, in: merged)?.tab?.savedTitle == "MCP – CodePen")
+        #expect(item(f.today.id, in: merged)?.tab?.timeLastActiveAt == seen)
+    }
+
+    /// The same the other way round: the split made there, the tabs looked at here.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/921")) func aSplitMadeThereKeepsItsPanesWhenThisMacLookedAtThem() {
+        let f = Fixture()
+        let todayID = f.doc.spaces[0].todayContainerID
+        let other = SidebarItem.tab("https://codepen.io/mcp", title: "MCP", parent: todayID)
+        let base = added(other, under: todayID, f.doc)
+        let (remote, split) = splitToday(f, with: other, base)
+        let local = lookedAt(f.today.id, Date(timeIntervalSince1970: 1_800_000_000), retitled(other.id, "MCP – CodePen", base))
+        let merged = SidebarMerge.merge(base: base, local: local, remote: remote)
+        #expect(item(split.id, in: merged)?.children == [f.today.id, other.id])
+        #expect(item(todayID, in: merged)?.children == [split.id])
+        #expect(item(other.id, in: merged)?.tab?.savedTitle == "MCP – CodePen")
+    }
+
+    /// A tab put in a folder here while its page changed title there: in the folder, with the new title.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/921")) func aTabMovedHereStaysMovedWhenItsPageChangedThere() {
+        let f = Fixture()
+        let todayID = f.doc.spaces[0].todayContainerID
+        var local = f.doc
+        local.items = local.items.map { it in
+            var it = it
+            if it.id == todayID { it.children = [] }
+            if it.id == f.folder.id { it.children.append(f.today.id) }
+            if it.id == f.today.id { it.parentID = f.folder.id }
+            return it
+        }
+        let remote = retitled(f.today.id, "Today, renamed", f.doc)
+        let merged = SidebarMerge.merge(base: f.doc, local: local, remote: remote)
+        #expect(item(f.today.id, in: merged)?.parentID == f.folder.id)
+        #expect(item(f.folder.id, in: merged)?.children == [f.first.id, f.second.id, f.today.id])
+        #expect(item(todayID, in: merged)?.children == [])
+        #expect(item(f.today.id, in: merged)?.tab?.savedTitle == "Today, renamed")
+    }
+
+    /// A page that navigated here while the other Mac only looked at the tab: the page is this Mac's.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/921")) func aPageOpenedHereIsKeptWhenTheOtherMacOnlyLookedAtTheTab() {
+        let f = Fixture()
+        var local = f.doc
+        local.items = local.items.map { it in
+            guard it.id == f.today.id, var tab = it.tab else { return it }
+            tab.url = "https://example.com/next"
+            tab.savedTitle = "Next"
+            var it = it
+            it.data = .tab(tab)
+            return it
+        }
+        let seen = Date(timeIntervalSince1970: 1_800_000_000)
+        let remote = lookedAt(f.today.id, seen, f.doc)
+        let tab = item(f.today.id, in: SidebarMerge.merge(base: f.doc, local: local, remote: remote))?.tab
+        #expect(tab?.url == "https://example.com/next" && tab?.savedTitle == "Next" && tab?.timeLastActiveAt == seen)
+    }
+
+    /// Each Mac closed a different pane of a three-pane split: the one left takes the split's place.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/921")) func aSplitBothMacsLeftOnePaneGivesItsTabBack() {
+        let f = Fixture()
+        let todayID = f.doc.spaces[0].todayContainerID
+        let a = SidebarItem.tab("https://example.com/a", title: "A", parent: todayID)
+        let b = SidebarItem.tab("https://example.com/b", title: "B", parent: todayID)
+        let (split2, split) = splitToday(f, with: a, added(b, under: todayID, added(a, under: todayID, f.doc)))
+        var base = split2
+        base.items = base.items.map { it in
+            var it = it
+            if it.id == split.id { it.children.append(b.id) }
+            if it.id == todayID { it.children.removeAll { $0 == b.id } }
+            if it.id == b.id { it.parentID = split.id }
+            return it
+        }
+        let merged = SidebarMerge.merge(base: base, local: without(f.today.id, base), remote: without(a.id, base))
+        #expect(item(split.id, in: merged) == nil)
+        #expect(item(b.id, in: merged)?.parentID == todayID)
+        #expect(item(todayID, in: merged)?.children == [b.id])
+    }
+
+    /// What a split left with one pane or none becomes, wherever it came from (a merge, a file an older
+    /// Cra wrote): an empty one goes, one with a pane gives it its place. Two panes or more stay.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/921")) func thinSplitsCollapse() {
+        let parent = UUID()
+        var container = SidebarItem.container(.today(spaceID: UUID()), id: parent)
+        var empty = SidebarItem.split(parent: parent)
+        var single = SidebarItem.split(parent: parent)
+        var pair = SidebarItem.split(parent: parent)
+        let lone = SidebarItem.tab("https://example.com/lone", parent: single.id)
+        let p1 = SidebarItem.tab("https://example.com/1", parent: pair.id)
+        let p2 = SidebarItem.tab("https://example.com/2", parent: pair.id)
+        let after = SidebarItem.tab("https://example.com/after", parent: parent)
+        single.children = [lone.id]
+        pair.children = [p1.id, p2.id]
+        empty.children = []
+        container.children = [empty.id, single.id, pair.id, after.id]
+        var table = Dictionary(uniqueKeysWithValues: [container, empty, single, pair, lone, p1, p2, after].map { ($0.id, $0) })
+        let changed = ThinSplits.collapse(&table)
+        #expect(table[empty.id] == nil && table[single.id] == nil)
+        #expect(table[parent]?.children == [lone.id, pair.id, after.id])
+        #expect(table[lone.id]?.parentID == parent)
+        #expect(table[pair.id]?.children == [p1.id, p2.id])
+        #expect(changed == [empty.id, single.id, lone.id, parent])
+        #expect(table[pair.id]?.parentID == parent && table[p1.id]?.parentID == pair.id)
+        var again = table
+        #expect(ThinSplits.collapse(&again).isEmpty && again == table)
+    }
+
     @Test func listsMergeAroundTheItemAnAdditionFollows() {
         let a = UUID(), b = UUID(), c = UUID(), d = UUID(), e = UUID()
         #expect(SidebarMerge.mergeList(base: [a, b, c], local: [a, d, b, c], remote: [a, b, c, e]) == [a, d, b, c, e])

@@ -192,6 +192,10 @@ final class SidebarStore {
             it.children = it.children.filter { items[$0] != nil && items[$0]?.parentID == id }
             items[id] = it
         }
+        // A split with no panes, or one, that a sync merge made before the fix: a row with nothing
+        // to close, on every Mac (#921). Its pane, if any, takes its place.
+        var table = items.all
+        for id in ThinSplits.collapse(&table) { items[id] = table[id] }
         for (id, it) in items.all where it.container == nil {
             if let p = it.parentID, let parent = items[p], parent.children.contains(id) { continue }
             // Orphan: put it in the first space's today list rather than losing it.

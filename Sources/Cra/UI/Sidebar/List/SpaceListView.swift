@@ -892,6 +892,16 @@ final class SpaceListView: NSView, NSDraggingSource {
 
     /// Scenarios (cra://debug?rowPoint=<id>, #743): where a real pointer goes to rest on the middle of the
     /// shown list's row for `itemID`, in top-left screen points, for scripts/scenario.sh's `click row <id> move`.
+    /// Scenarios (cra://debug?clickRow=<id>): the middle of the row for that item in its window, AppKit's
+    /// coordinates, for a click through the event queue; nil when the row isn't shown.
+    static func debugRowWindowPoint(_ itemID: UUID, ui: SidebarUIState) -> (NSPoint, NSWindow)? {
+        for l in all.allObjects where l.ui === ui {
+            guard let row = l.views[.item(itemID)], let w = row.window, w.isVisible, !row.isHiddenOrHasHiddenAncestor else { continue }
+            return (row.convert(NSPoint(x: row.bounds.midX, y: row.bounds.midY), to: nil), w)
+        }
+        return nil
+    }
+
     static func debugRowPoint(_ itemID: UUID, ui: SidebarUIState) -> NSPoint? {
         for l in all.allObjects where l.ui === ui {
             guard let row = l.views[.item(itemID)], let w = row.window, w.isVisible, !row.isHiddenOrHasHiddenAncestor,
@@ -1168,13 +1178,23 @@ final class SpaceListView: NSView, NSDraggingSource {
     }
 
     func clickTab(_ id: UUID, event: NSEvent) {
-        let flags = event.modifierFlags.intersection([.command, .shift])
-        if !flags.isEmpty {
-            ui.pick(id, range: flags.contains(.shift), in: store)
-        } else if event.clickCount == 2 {
+        let flags = event.modifierFlags
+        let open = store.selectedTabID(window: ui.windowID)
+        // What the tab menu's Open in Split View needs (SidebarMenus.tab): a tab with a page open in this space.
+        let canSplit = open.map { store.item($0)?.isEmptyTab == false && store.spaceID(ofItem: id) == store.focusedSpaceID(window: ui.windowID) } ?? false
+        switch SidebarRowPress.tabClick(command: flags.contains(.command), shift: flags.contains(.shift), option: flags.contains(.option),
+                                        clickCount: event.clickCount, isOpen: id == open, canSplit: canSplit) {
+        case .pick(let range):
+            ui.pick(id, range: range, in: store)
+        case .rename:
             CraLog.note("sidebar double-click: rename")
             ui.renamingID = id
-        } else {
+        case .openInSplit:
+            CraLog.note("sidebar option-click: open in split view")
+            ui.clearPicks(anchor: id)
+            if ui.keyboardFocusID != nil { ui.keyboardFocusID = nil }
+            actions.performAction("openInSplit:\(id.uuidString)")
+        case .select:
             ui.clearPicks(anchor: id)
             if ui.keyboardFocusID != nil { ui.keyboardFocusID = nil }
             store.selectTab(id, window: ui.windowID)

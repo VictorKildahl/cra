@@ -2,8 +2,9 @@ import Foundation
 
 /// Two Macs' sidebars put together for sync (SettingsSyncService). `base` is the bundle both
 /// were written from, `local` this Mac's sidebar now, `remote` the bundle the other Mac wrote.
-/// What changed on one Mac since `base` is kept. Where both changed one item, the other Mac's
-/// version (the later bundle's) wins, with the children of a folder put together. An item gone
+/// What changed on one Mac since `base` is kept. Where both changed one item, each of its fields
+/// is the other Mac's (the later bundle's) unless only this Mac changed it, with the children of a
+/// folder put together. An item gone
 /// on either Mac stays gone: a tab closed on one Mac came back because the other Mac wrote its
 /// whole sidebar first (reported by a user, 13 Nov 2026).
 public enum SidebarMerge {
@@ -61,6 +62,8 @@ public enum SidebarMerge {
             out[parentID] = parent
             listed[parentID]?.insert(id)
         }
+        // Each Mac closed a different pane of one split: the pane left takes the split's place.
+        ThinSplits.collapse(&out)
         return ids.compactMap { out[$0] }
     }
 
@@ -75,17 +78,51 @@ public enum SidebarMerge {
         case (let b?, let l?, let r?):
             if l == b { return r }
             if r == b { return l }
+            // Changed on both Macs: field by field. The whole item was the other Mac's, parent and all,
+            // so tabs made into a split here while the other Mac only looked at them went back to Today
+            // and left the split with no panes (#921, reported on X).
             var m = r
-            m.children = mergeList(base: b.children, local: l.children, remote: r.children)
-            // Looked at on both Macs: the later look, or this Mac's would read as idle to the archive pass.
-            switch (m.data, l.data) {
-            case (.tab(var t), .tab(let lt)):
-                if let lt = lt.timeLastActiveAt, lt > (t.timeLastActiveAt ?? .distantPast) { t.timeLastActiveAt = lt; m.data = .tab(t) }
-            case (.split(var s), .split(let ls)):
-                if let lt = ls.timeLastActiveAt, lt > (s.timeLastActiveAt ?? .distantPast) { s.timeLastActiveAt = lt; m.data = .split(s) }
-            default: break
+            func keepLocal<V: Equatable>(_ key: WritableKeyPath<SidebarItem, V>) {
+                if l[keyPath: key] != b[keyPath: key], r[keyPath: key] == b[keyPath: key] { m[keyPath: key] = l[keyPath: key] }
             }
+            keepLocal(\.parentID)
+            keepLocal(\.title)
+            keepLocal(\.isUnread)
+            keepLocal(\.folderIcon)
+            keepLocal(\.folderSymbol)
+            keepLocal(\.liveFolder)
+            keepLocal(\.tabGroup)
+            m.children = mergeList(base: b.children, local: l.children, remote: r.children)
+            m.data = mergeData(base: b.data, local: l.data, remote: r.data)
             return m
+        }
+    }
+
+    /// A tab's or a split's data changed on both Macs: the other Mac's, unless all it changed is when
+    /// it was looked at (and which pane had focus), as a Mac does with every look; then this Mac's. The
+    /// later look either way, or this Mac's would read as idle to the archive pass.
+    static func mergeData(base: ItemData, local: ItemData, remote: ItemData) -> ItemData {
+        if local == base { return remote }
+        if remote == base { return local }
+        func later(_ a: Date?, _ b: Date?) -> Date? {
+            guard let a else { return b }
+            guard let b else { return a }
+            return max(a, b)
+        }
+        switch (base, local, remote) {
+        case (.tab(let b), .tab(let l), .tab(let r)):
+            func page(_ t: TabData) -> TabData { var t = t; t.timeLastActiveAt = nil; return t }
+            var t = page(r) == page(b) ? l : r
+            t.timeLastActiveAt = later(l.timeLastActiveAt, r.timeLastActiveAt)
+            return .tab(t)
+        case (.split(let b), .split(let l), .split(let r)):
+            func layout(_ s: SplitData) -> SplitData { var s = s; s.timeLastActiveAt = nil; s.focusTabID = nil; return s }
+            var s = layout(r) == layout(b) ? l : r
+            s.focusTabID = l.focusTabID != b.focusTabID && r.focusTabID == b.focusTabID ? l.focusTabID : r.focusTabID
+            s.timeLastActiveAt = later(l.timeLastActiveAt, r.timeLastActiveAt)
+            return .split(s)
+        default:
+            return remote
         }
     }
 

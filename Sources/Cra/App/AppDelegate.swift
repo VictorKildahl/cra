@@ -3369,6 +3369,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 NSLog("Cra folderPreview %@: lit=%@ top=%.0f", label, preview.debugLit.map(String.init).joined(separator: ","), preview.debugTop)
                 return
             }
+            // clickRow=<id>&mods=<modifier bits>: a click on the middle of that item's sidebar row through the event
+            // queue, as clickAt's (524288, Option: the tab opens in Split View with the open one, as in Arc).
+            if let r = dict["clickRow"] {
+                guard let id = UUID(uuidString: r), let (p, w) = SpaceListView.debugRowWindowPoint(id, ui: main.sidebarUI) else {
+                    CraLog.note("click row: none"); return
+                }
+                CraLog.note("click row: \(store.item(id)?.displayTitle ?? "?")")
+                TestGesture.click(at: p, in: w, modifiers: NSEvent.ModifierFlags(rawValue: dict["mods"].flatMap(UInt.init) ?? 0))
+                return
+            }
             // rowPoint=<id>: "row point: <x> <y>", where scenario.sh's `click row <id> move` rests the real pointer (#743).
             if let r = dict["rowPoint"] {
                 guard let id = UUID(uuidString: r), let p = SpaceListView.debugRowPoint(id, ui: main.sidebarUI) else {

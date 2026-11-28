@@ -19,6 +19,10 @@ extension SidebarStore {
                 if child.parentID != id { problems.append("\(name(c)) is listed by \(name(id)) but points at \(child.parentID.map(name) ?? "nothing")") }
             }
             if Set(it.children).count != it.children.count { problems.append("\(name(id)) lists a child twice") }
+            // One with none draws a row with only a close button, which has nothing to close (ThinSplits, #921).
+            if it.isSplit, case let panes = it.children.filter({ all[$0]?.isTab == true }).count, panes < 2 {
+                problems.append("split \(name(id)) has \(panes) pane\(panes == 1 ? "" : "s")")
+            }
         }
         for (id, it) in all {
             if let p = it.parentID {
