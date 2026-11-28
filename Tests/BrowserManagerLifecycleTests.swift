@@ -123,7 +123,61 @@ enum BrowserManagerLifecycleTests {
     }
 
     @MainActor
+    // promise: #907
+    private static func incognitoShiftClickCase() async {
+        let store = SidebarStore()
+        let manager = BrowserManager(store: store, favicons: FaviconCache(), container: NSView())
+        let observer = Observer()
+        manager.delegate = observer
+        let source = store.createTab(url: "https://example.test/private").id
+        store.incognitoItems.insert(source)
+        manager.show(source, focus: false)
+        let page = manager.runtime(for: source)!.browser
+        expect(page.isIncognito, "#907 source page is incognito")
+        let before = Set(store.items.keys)
+        let url = "https://example.test/shifted"
+        expect(manager.browser(page, opensPeekForURL: url, shiftClick: true, newTab: false),
+               "#907 an incognito Shift-click is handled before Chrome opens a stray window")
+        expect(Set(store.items.keys) == before, "#907 tab creation waits until Chromium's call returns")
+        await drainMainQueue()
+        let added = Set(store.items.keys).subtracting(before)
+        expect(added.count == 1, "#907 an incognito Shift-click creates exactly one tab")
+        let tab = added.first!
+        expect(store.item(tab)?.tab?.url == url && store.spaceID(ofItem: tab) == store.spaceID(ofItem: source),
+               "#907 the shifted link stays in the source incognito space")
+        expect(store.selectedTabPerSpace[store.spaceID(ofItem: source)!] == tab,
+               "#907 the shifted tab opens in front")
+        expect(!manager.browser(page, opensPeekForURL: url, shiftClick: false, newTab: false)
+               && !manager.browser(page, opensPeekForURL: url, shiftClick: false, newTab: true),
+               "#907 other incognito links keep their existing routing")
+        await drainMainQueue()
+        expect(Set(store.items.keys).subtracting(before) == added && observer.peekCalls == 0,
+               "#907 other incognito links create no tab and never ask for a Peek")
+        let normal = store.createTab(url: "https://example.test/normal").id
+        manager.show(normal, focus: false)
+        let normalPage = manager.runtime(for: normal)!.browser
+        expect(!normalPage.isIncognito, "#907 regression source page is normal")
+        let normalBefore = Set(store.items.keys)
+        expect(!manager.browser(normalPage, opensPeekForURL: url, shiftClick: true, newTab: false),
+               "#907 a normal Shift-click keeps the Peek delegate's answer")
+        await drainMainQueue()
+        expect(observer.peekCalls == 1 && Set(store.items.keys) == normalBefore,
+               "#907 a normal Shift-click asks for a Peek and creates no tab itself")
+        expect(manager.browser(page, opensPeekForURL: url, shiftClick: true, newTab: false),
+               "#907 an incognito Shift-click is handled before its source closes")
+        store.incognitoItems.remove(source)
+        store.items.removeValue(forKey: source)
+        store.itemSpaces.removeValue(forKey: source)
+        let afterClose = Set(store.items.keys)
+        await drainMainQueue()
+        expect(Set(store.items.keys) == afterClose,
+               "#907 closing the incognito source before the deferred click creates no normal tab")
+        manager.closeAll()
+    }
+
+    @MainActor
     static func main() async {
+        await incognitoShiftClickCase()
         downloadSourceAdoptionCase()
         fullscreenTabClosedCase()
         await sparePagesCase()
@@ -3440,7 +3494,11 @@ private final class Observer: BrowserManagerDelegate {
         activatedTabs.append(tabID)
         activatedByPage.append(byPage)
     }
-    func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool { false }
+    var peekCalls = 0
+    func browserManagerOpensPeek(url: String, fromTab tabID: UUID, pageURL: String, shiftClick: Bool, newTab: Bool) -> Bool {
+        peekCalls += 1
+        return false
+    }
     var littleWindowLinks: [(url: String, tab: UUID)] = []
     func browserManagerOpensLittleWindow(url: String, fromTab tabID: UUID) -> Bool {
         littleWindowLinks.append((url, tabID))

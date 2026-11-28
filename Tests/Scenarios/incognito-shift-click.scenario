@@ -1,0 +1,20 @@
+# promise: #907
+# A Shift-click in incognito fell through to Chrome's new off-the-record window, then the stray
+# handler opened the link in a normal Default-profile tab. Keep it in a foreground incognito tab;
+# Cra has no Peek in incognito, even with Shift-click Peek on.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "peekOnShiftClick": true}
+cra://open?url=${PAGE}?n=normal
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 1
+cra://debug?incognitoWindow=${PAGE}?n=private
+wait 12
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(a=>(a.href='${PAGE}?n=shifted',a.textContent='link',a.style.cssText='position:fixed;inset:0;z-index:9;background:pink',document.body.append(a),'placed'))(document.createElement('a'))"}
+expect-log Cra cdp Runtime.evaluate .*"value":"placed"
+cra://debug?clickAt=450,400&mods=131072
+wait 2
+cra://debug?browserWindows=shift
+expect-log Cra browser windows shift: kind=incognito .*tabs=\[[^]]*n=shifted[^]]*\] open=\S*n=shifted .*active=1
+reject-log Cra browser windows shift: kind=normal .*n=shifted
+cra://debug?littleShown=shift
+expect-log little shown shift: windows=0 space=- profile=-$
