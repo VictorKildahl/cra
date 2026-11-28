@@ -1557,7 +1557,7 @@
 #670   iOS/CraUITests/LinkMenuTests.swift::testShareFromALinksMenu  8d893605c190
 #673   Tests/StoreTests.swift::importedTabsKeepTheirOwnIcons  6b33b1cf8f28
 #674   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::appSettingsUsesFullHeightOnIPadAndKeepsMediumOnIPhone  ab096e56dcb8
-#674   iOS/CraUITests/BrowserTests.swift::testAppSettingsOpensTallOnIPadAndHalfOnIPhone  1f7ec8f0e34a
+#674   iOS/CraUITests/BrowserTests.swift::testAppSettingsOpensTallOnIPadAndHalfOnIPhone  dd89d7f72609
 #675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theBarsButtonsTickOnlyAsTheFingerComesDown  fcf94e21a913
 #675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theCapsulesButtonsTickOnlyAsTheFingerLetsGo  d0cc43b0e2ef
 #675   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theMenusTilesAndRowsTickOnPress  c7a41ea96da6
@@ -1594,7 +1594,7 @@
 #685   Tests/Scenarios/toolbar-double-click-zoom-edge-to-edge.scenario  f3d687966ae7
 #685   Tests/Scenarios/toolbar-double-click-zoom.scenario  e5a054fce232
 #685   Tests/WindowContentGrabberTests.swift::checkEdgeToEdgeDoubleClick  bb8ee9288aec
-#686   iOS/CraUITests/BrowserTests.swift::testChangeIconQuickActionOpensTallOnIPadAndHalfOnIPhone  8fb41c660fe8
+#686   iOS/CraUITests/BrowserTests.swift::testChangeIconQuickActionOpensTallOnIPadAndHalfOnIPhone  66bd77fe0f20
 #688   Tests/Scenarios/crest-import.scenario  1f12d0e1f934
 #688   Tests/StoreTests.swift::crestImport  28fcb56b5b9b
 #689   Packages/CraCore/Tests/CraCoreTests/LinkPreviewTests.swift::aHeldKeySaysWhatAClickWillDo  2c24d1b0aa7b

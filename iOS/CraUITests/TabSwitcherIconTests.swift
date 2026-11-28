@@ -1,3 +1,4 @@
+import CraCore
 import XCTest
 
 /// The site icon and title above each card in the tab switcher.
@@ -72,14 +73,19 @@ final class TabSwitcherIconTests: BrowserTestCase {
         XCTAssertTrue(newest.waitForExistence(timeout: 10))
         sleep(1)
         let screen = app.windows.firstMatch.frame
+        let screenClass = MobileScreenClass.of(size: screen.size, isPad: UIDevice.current.userInterfaceIdiom == .pad)
+        // Side insets are zero because the test measures against the window, as before.
+        let insets = screenClass.carouselInsets(size: screen.size, insets: (0, 0))
+        let band = CGRect(x: screen.minX + insets.left, y: screen.minY,
+                          width: screen.width - insets.left - insets.right, height: screen.height)
         // The row opens on the card left of the page: the second tab, with a neighbour on each side.
-        XCTAssertEqual(second.frame.minX, screen.minX + screen.width * 0.2112, accuracy: 2, "the card between stays left of centre: \(second.frame) in \(screen)")
+        XCTAssertEqual(second.frame.minX, band.minX + band.width * 0.2112, accuracy: 2, "the card between stays left of centre: \(second.frame) in \(screen)")
         dragTheRow(from: 0.7, to: 0.3)
         keep("last-card")
-        XCTAssertEqual(newest.frame.midX, screen.midX, accuracy: 2, "the newest card is centred: \(newest.frame) in \(screen)")
+        XCTAssertEqual(newest.frame.midX, band.midX, accuracy: 2, "the newest card is centred: \(newest.frame) in \(screen)")
         dragTheRow(from: 0.3, to: 0.7)
         dragTheRow(from: 0.3, to: 0.7)
-        XCTAssertEqual(first.frame.midX, screen.midX, accuracy: 2, "the first card is centred: \(first.frame) in \(screen)")
+        XCTAssertEqual(first.frame.midX, band.midX, accuracy: 2, "the first card is centred: \(first.frame) in \(screen)")
     }
 
     /// With two tabs both cards are ends: each rests in the middle.
@@ -112,9 +118,15 @@ final class TabSwitcherIconTests: BrowserTestCase {
         // The row opens on the card left of the page: the fourth. Each flick drags three quarters
         // of a card: one back, one more, then one forward.
         waitForTheRow(toRestOn: 3, of: cards)
+        let screen = app.windows.firstMatch.frame
+        let screenClass = MobileScreenClass.of(size: screen.size, isPad: UIDevice.current.userInterfaceIdiom == .pad)
+        // Side insets are zero because the test measures against the window, as before.
+        let insets = screenClass.carouselInsets(size: screen.size, insets: (0, 0))
+        let band = CGRect(x: screen.minX + insets.left, y: screen.minY,
+                          width: screen.width - insets.left - insets.right, height: screen.height)
         for (from, to, card) in [(0.29, 0.71, 2), (0.29, 0.71, 1), (0.71, 0.29, 2)] {
-            app.coordinate(withNormalizedOffset: CGVector(dx: from, dy: 0.5))
-                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: to, dy: 0.5)),
+            app.coordinate(withNormalizedOffset: CGVector(dx: (band.minX - screen.minX + band.width * from) / screen.width, dy: 0.5))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: (band.minX - screen.minX + band.width * to) / screen.width, dy: 0.5)),
                        withVelocity: .fast, thenHoldForDuration: 0)
             waitForTheRow(toRestOn: card, of: cards)
         }

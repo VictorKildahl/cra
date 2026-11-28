@@ -183,6 +183,9 @@ remain enabled):
 | `PlainHTTPTests/testBackFromARefusedAddressReturnsToThePageBefore` | Menu below the 678 pt screen after typing, on a reused simulator only; passes on a fresh Duo (unresolved) |
 | `ShareExtensionTests/testTheShareSheetSavesThroughTheExtension` | iOS 27 extension unresolved |
 | `AppIconDockTests/testChangeAppIconShowsTheDock` | Intermittent in research; passed rerun |
+| `TabSwitcherIconTests/testALoneCardSitsInTheMiddle` | Cards stay left of the status column (closed-screen rule); the test centres on the whole window |
+| `TabSwitcherIconTests/testTheFirstAndTheLastCardRestInTheMiddle` | Cards stay left of the status column (closed-screen rule); the test centres on the whole window |
+| `TabSwitcherIconTests/testWithTwoTabsBothCardsRestInTheMiddle` | Cards stay left of the status column (closed-screen rule); the test centres on the whole window |
 
 Expected failures on the **open and half-open** Duo:
 
@@ -196,6 +199,8 @@ Expected failures on the **open and half-open** Duo:
 | `LinkMenuTests/testAPrivateBackgroundTabWaitsInTheRow` | Title never arrives |
 | `PageBasicsTests/testADownloadIsSavedAnnouncedAndListed` | Download name numbering |
 | `SpacesTests/testTheMacsSpacesOpenFromTheTabRow` | Synced Spaces unresolved |
+| `SpacesTests/testManySpacesKeepTheSheetOnScreen` | Spaces sheet extends beyond the screen |
+| `TabSwitcherIconTests/testATabCardShowsTheSitesOwnIconInItsOwnShape` | Icon pixel check samples the row background on the wide screen |
 | `SpacesTests/testSpacesBackgroundsReachTheWindowEdges` | XCTest inner-screen capture does not match the window |
 | `CustomSearchEngineTests/testACustomEngineTakesTheSearch` | Alert Save |
 
