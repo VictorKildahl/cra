@@ -113,7 +113,7 @@ enum FloatingSidebarTests {
         expect(!sidebar.isShown && !shell.sidebarDetached && !shell.floatingSidebar,
                "an uninterrupted hide still reattaches the sidebar normally")
 
-        onlyTheKeyWindowReveals(window: window, sidebar: sidebar, panel: panel)
+        recognizesTheKeyWindow(window: window, sidebar: sidebar, panel: panel)
         pointerPastTheLeftEdge(window: window, sidebar: sidebar)
         theRevealSwingsPastItsEdge(window: window, sidebar: sidebar, panel: panel)
         thePanelsStayInsideTheWindow(window: window, sidebar: sidebar, panel: panel)
@@ -128,9 +128,11 @@ enum FloatingSidebarTests {
         aStillPointerWaitsToMove(window: window, sidebar: sidebar)
         aPointerInsideTheSidebarBringsNothingOut(window: window, sidebar: sidebar)
 
-        // #136: the pointer is sampled only while Cra is the active app.
+        // #136: the background timer runs only during an edge dwell.
+        sidebar.keyWindow = { nil }
         sidebar.install()
         expect(!sidebar.isPolling, "an inactive app installs no pointer timer")
+        anExposedEdgeRevealsWithoutFocus(sidebar: sidebar)
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
         expect(sidebar.isPolling, "becoming active starts the pointer timer")
         NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
@@ -238,12 +240,10 @@ enum FloatingSidebarTests {
         shell.sidebarSide = .left
     }
 
-    /// GitHub #82: like Arc, only the key window's hidden sidebar comes out on hover, so a window
-    /// behind another can't reveal over it. The key window may be one of its own children (the
-    /// page, DevTools, the floating panel); with Cra inactive, none reveals.
+    /// The key window may be one of the browser window's children (the page, DevTools or the panel).
     // promise: #82
     @MainActor
-    private static func onlyTheKeyWindowReveals(window: NSWindow, sidebar: FloatingSidebarController, panel: NSWindow) {
+    private static func recognizesTheKeyWindow(window: NSWindow, sidebar: FloatingSidebarController, panel: NSWindow) {
         let page = NSWindow(contentRect: NSRect(x: -9990, y: -9990, width: 1380, height: 860),
                             styleMask: [.borderless], backing: .buffered, defer: false)
         page.isReleasedWhenClosed = false
@@ -252,7 +252,10 @@ enum FloatingSidebarTests {
         front.isReleasedWhenClosed = false
         var key: NSWindow? = window
         sidebar.keyWindow = { key }
-        expect(sidebar.isKey, "the key window reveals")
+        expect(sidebar.isKey, "the browser window can be key directly")
+        let bounds = sidebar.shell.bounds
+        sidebar.pointerSample(at: CGPoint(x: bounds.minX + 2, y: bounds.midY), isOverWindow: false)
+        expect(!sidebar.staged, "a covered edge cannot stage even when the browser window is key")
         key = page
         expect(sidebar.isKey, "its page being key counts as the window")
         sidebar.show()
@@ -260,12 +263,64 @@ enum FloatingSidebarTests {
         expect(sidebar.isKey, "its floating panel being key counts as the window")
         sidebar.hide(animated: false)
         key = front
-        expect(!sidebar.isKey, "a window behind the key window does not reveal")
+        expect(!sidebar.isKey, "another window being key does not count as the browser window")
         key = nil
-        expect(!sidebar.isKey, "no key window (Cra inactive) does not reveal")
+        expect(!sidebar.isKey, "Cra has no key window while inactive")
         window.removeChildWindow(page)
         page.close()
         front.close()
+    }
+
+    // promise: #82
+    @MainActor
+    private static func anExposedEdgeRevealsWithoutFocus(sidebar: FloatingSidebarController) {
+        let bounds = sidebar.shell.bounds
+        var clock: TimeInterval = 1000
+        sidebar.now = { clock }
+        for side in [SidebarSide.left, .right] {
+            sidebar.shell.sidebarSide = side
+            let edge = CGPoint(x: side == .left ? bounds.minX + 2 : bounds.maxX - 2, y: bounds.midY)
+            let outside = CGPoint(x: side == .left ? bounds.minX - 2 : bounds.maxX + 2, y: bounds.midY)
+            sidebar.pointerSample(at: outside, isOverWindow: false)
+            expect(!sidebar.staged && !sidebar.isPolling, "an inactive window waits for an inside edge")
+            sidebar.pointerSample(at: edge, isOverWindow: false)
+            expect(!sidebar.staged && !sidebar.isPolling, "a covered edge cannot start a reveal behind another window (#82)")
+
+            sidebar.pointerSample(at: edge, isOverWindow: true)
+            expect(sidebar.staged && sidebar.isPolling && !sidebar.isShown, "an exposed edge starts the wait without focus")
+            clock += 0.05
+            sidebar.pointerSample(at: edge, isOverWindow: false)
+            expect(!sidebar.staged && !sidebar.isPolling, "covering the edge cancels the wait and stops the timer")
+
+            sidebar.pointerSample(at: edge, isOverWindow: true)
+            clock += 0.05
+            sidebar.pointerSample(at: edge, isOverWindow: true)
+            expect(!sidebar.isShown, "returning to an exposed edge starts a new wait")
+            clock += FloatingSidebarGeometry.revealDwell
+            sidebar.pointerSample(at: edge, isOverWindow: true)
+            expect(sidebar.isShown && !sidebar.isPolling, "the background sidebar reveals after the dwell and stops polling")
+            sidebar.pointerSample(at: CGPoint(x: bounds.midX, y: bounds.midY), isOverWindow: true)
+            expect(!sidebar.isShown, "moving toward the middle of the page retracts the background sidebar")
+            sidebar.hide(animated: false)
+        }
+        // Back at the edge while the background hide still slides: the panel is still out, so nothing stages, but the
+        // wait runs and a pointer that comes to rest there still brings the sidebar out (#936 review).
+        sidebar.shell.sidebarSide = .left
+        let edge = CGPoint(x: bounds.minX + 2, y: bounds.midY)
+        sidebar.show()
+        sidebar.hide(animated: true)
+        expect(sidebar.shell.sidebarDetached && !sidebar.isPolling, "the background hide is in flight")
+        sidebar.pointerSample(at: edge, isOverWindow: true)
+        expect(sidebar.isPolling, "a wait started during the hide keeps the timer running")
+        // The timer's next look, with the pointer resting at the edge.
+        clock += 0.05 + FloatingSidebarGeometry.revealDwell
+        sidebar.pointerSample(at: edge, isOverWindow: true)
+        expect(sidebar.isShown && !sidebar.isPolling, "the resting pointer brings it out once its wait is over")
+        sidebar.hide(animated: false)
+        drainAnimations()
+        sidebar.pointerSample(at: CGPoint(x: bounds.midX, y: bounds.midY), isOverWindow: true)
+        expect(!sidebar.isPolling, "away from the edge the timer stops")
+        sidebar.now = { ProcessInfo.processInfo.systemUptime }
     }
 
     // promise: #24
@@ -405,7 +460,7 @@ enum FloatingSidebarTests {
         sidebar.resignedActive(pointerAt: CGPoint(x: 120, y: mid))
         expect(sidebar.isShown, "with the pointer over the window it stays, as before")
         sidebar.hide(animated: false)
-        // Only the key window's sidebar comes out, out there as at the edge (#82).
+        // Only the key window's sidebar comes out when the pointer is thrown past the edge.
         sidebar.keyWindow = { nil }
         sample(300, mid, at: 540)
         for t in [540.03, 540.2, 540.4] { sample(-100, mid, at: t) }

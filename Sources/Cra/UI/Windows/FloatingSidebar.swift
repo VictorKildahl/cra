@@ -7,8 +7,8 @@ import AppKit
 /// Pages are separate Chromium child windows stacked above the shell, so a
 /// sidebar drawn inside the shell would be covered and the shell never sees the
 /// pointer over a page. The sidebar therefore moves into its own child panel
-/// (above the page windows) while it floats, and a pointer monitor that sees
-/// events in every window of the app decides when it comes and goes.
+/// (above the page windows) while it floats. The pointer is sampled across
+/// windows to decide when the sidebar comes and goes.
 @MainActor
 final class FloatingSidebarController {
     unowned let shell: ShellView
@@ -30,7 +30,7 @@ final class FloatingSidebarController {
     var didAttachPanel: (() -> Void)?
 
     private(set) var isShown = false {
-        didSet { if isShown != oldValue { refreshPolling() } }
+        didSet { if isShown != oldValue { refreshPointerTracking() } }
     }
     /// A completed hide must not take the panel away from a newer reveal or anchor.
     private var transitionGeneration: UInt64 = 0
@@ -93,12 +93,14 @@ final class FloatingSidebarController {
 
     deinit {
         poll?.invalidate()
+        backgroundMonitors.forEach(NSEvent.removeMonitor)
         activation.forEach(NotificationCenter.default.removeObserver)
         panelMoves.forEach(NotificationCenter.default.removeObserver)
         displayOptions.map(NSWorkspace.shared.notificationCenter.removeObserver)
     }
 
     private var poll: Timer?
+    private var backgroundMonitors: [Any] = []
     private var activation: [NSObjectProtocol] = []
     /// Either panel moved or resized while on the window: the shadow and the window's outline follow (#550).
     private var panelMoves: [NSObjectProtocol] = []
@@ -120,11 +122,10 @@ final class FloatingSidebarController {
     /// Reduce transparency changes the panel's lift (GitHub #156).
     private var displayOptions: NSObjectProtocol?
 
-    /// No window of ours reliably receives mouse-moved events here: the key window
-    /// is usually a Chromium page window, and the shell's tracking areas only run in
-    /// the key window. So the pointer is sampled on a timer while the app is active,
-    /// and the timer stops while it is not: at 30 Hz it was most of the run loop's
-    /// wake-ups in a Cra left in the background (#136).
+    /// Chromium's child windows cover the shell, so its tracking areas miss some moves.
+    /// In front, sample the pointer on a timer. In the background,
+    /// mouse events start the wait, and a timer runs only until that wait is over.
+    /// A continuous 30 Hz timer was most of the run loop's background wake-ups (#136).
     func install() {
         guard activation.isEmpty else { return }
         let center = NotificationCenter.default
@@ -132,13 +133,13 @@ final class FloatingSidebarController {
             center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.appActive = on
-                    self?.refreshPolling()
+                    self?.refreshPointerTracking()
                     if !on { self?.resignedActive() }
                 }
             }
         }
         appActive = NSApp.isActive
-        refreshPolling()
+        refreshPointerTracking()
         displayOptions = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -149,11 +150,34 @@ final class FloatingSidebarController {
     /// Whether Cra is the active app, as the activation notifications last said.
     private var appActive = false
 
-    /// The pointer matters only while Cra is active and the sidebar is hidden (it may come out) or out
-    /// floating (it may leave). With the sidebar anchored, the timer was most of an idle Cra's
-    /// wake-ups with its window in front.
-    private func refreshPolling() {
-        setPolling(appActive && (isShown || sidebarHidden()))
+    private func refreshPointerTracking() {
+        guard !activation.isEmpty else { return }
+        let needsPointer = isShown || sidebarHidden()
+        setPolling(needsPointer && (appActive || waitingAtEdge))
+        setBackgroundMonitoring(needsPointer && !appActive)
+    }
+
+    private func setBackgroundMonitoring(_ on: Bool) {
+        if !on {
+            backgroundMonitors.forEach(NSEvent.removeMonitor)
+            backgroundMonitors.removeAll()
+            return
+        }
+        guard backgroundMonitors.isEmpty else { return }
+        // Inactive windows can still get mouse events, such as releases from a drag.
+        // The global monitor sees only events sent to other apps.
+        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseUp, .rightMouseUp, .otherMouseUp]
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.pointerMoved() }
+        }) {
+            backgroundMonitors.append(monitor)
+        }
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.pointerMoved() }
+            return event
+        }) {
+            backgroundMonitors.append(monitor)
+        }
     }
 
     private func setPolling(_ on: Bool) {
@@ -168,42 +192,63 @@ final class FloatingSidebarController {
         poll?.tolerance = 0.01
     }
 
-    /// Whether the pointer is being sampled (the tests check it follows the app's activation).
+    /// Whether the timer is sampling the pointer.
     var isPolling: Bool { poll != nil }
 
     /// The anchored sidebar was shown or hidden, or a page entered or left full screen.
-    func sidebarVisibilityChanged() { refreshPolling() }
+    func sidebarVisibilityChanged() { refreshPointerTracking() }
 
     private func pointerMoved() {
-        guard NSApp.isActive, window.isVisible else { return }
-        guard isShown || sidebarHidden() else { return }
+        guard window.isVisible, !NSApp.isHidden else {
+            if staged || waitingAtEdge {
+                unstage()
+                waitingAtEdge = false
+                dwell.reset()
+                offEdge.reset()
+            }
+            return
+        }
         let screenPoint = NSEvent.mouseLocation
-        pointerSample(at: shell.convert(window.convertPoint(fromScreen: screenPoint), from: nil))
+        pointerSample(at: shell.convert(window.convertPoint(fromScreen: screenPoint), from: nil),
+                      isOverWindow: pointerHitsWindow(at: screenPoint))
+    }
+
+    private func pointerHitsWindow(at screenPoint: CGPoint) -> Bool {
+        // AppKit accounts for windows of other apps and panels that let clicks through.
+        let number = NSWindow.windowNumber(at: screenPoint, belowWindowWithWindowNumber: 0)
+        return owns(NSApp.window(withWindowNumber: number))
     }
 
     /// One look at the pointer, in the shell's coordinates: the poll's, wherever the pointer is on
     /// screen (the tests stand one in).
-    func pointerSample(at p: CGPoint) {
+    func pointerSample(at p: CGPoint, isOverWindow: @autoclosure () -> Bool = true) {
         guard isShown || sidebarHidden() else { return }
         if !isShown, pointerStillThere(p) { return }
         if !isShown {
             let t = now()
-            guard sidebarHidden(), isKey else {
-                offEdge.reset()
-                wait(atEdge: false, over: dwell.sample(inStrip: false, at: t), why: "the edge strip", at: p)
-                return
-            }
+            let focused = isKey
             let inStrip = FloatingSidebarGeometry.shouldReveal(at: p, in: shell.bounds, edgeToEdge: shell.fillsWindow, side: side,
                                                                pageMargin: shell.pageMargin)
-            // Thrown past the edge, out of the window: it comes out there as well (#350).
-            let off = offEdge.sample(p, in: shell.bounds, sidebarWidth: shell.sidebarWidth, side: side, at: t)
+                && (shell.bounds.contains(p) ? isOverWindow() : focused)
+            // The key window also reveals when the pointer is thrown past its edge (#350).
+            let off: FloatingSidebarOffEdge.Step
+            if focused {
+                off = offEdge.sample(p, in: shell.bounds, sidebarWidth: shell.sidebarWidth, side: side, at: t)
+            } else {
+                offEdge.reset()
+                off = .away
+            }
             let stripOver = dwell.sample(inStrip: inStrip, at: t)
             wait(atEdge: inStrip || off != .away, over: stripOver || off == .reveal,
                  why: stripOver ? "the edge strip" : "past the window's edge", at: p)
-        } else if FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
-                                                     pressedMouseButtons: pressedMouseButtons(), edgeToEdge: shell.fillsWindow,
-                                                     side: side, pageMargin: shell.pageMargin) {
-            requestAutomaticHide()
+        } else {
+            let buttons = pressedMouseButtons()
+            if FloatingSidebarGeometry.shouldHide(at: p, in: shell.bounds, sidebarWidth: shell.sidebarWidth,
+                                                  pressedMouseButtons: buttons, edgeToEdge: shell.fillsWindow,
+                                                  side: side, pageMargin: shell.pageMargin)
+                || (buttons == 0 && !isKey && !isOverWindow()) {
+                requestAutomaticHide()
+            }
         }
     }
 
@@ -215,8 +260,8 @@ final class FloatingSidebarController {
         hide(animated: true)
     }
 
-    /// Cra stopped being the active app, and with it the poll that sends the sidebar away. One the
-    /// pointer keeps out from beside the window goes now, as in Arc 1.172.2 (11 Nov 2026, #350: out with
+    /// When Cra stops being the active app, a sidebar held open by the
+    /// pointer beside the window goes now, as in Arc 1.172.2 (11 Nov 2026, #350: out with
     /// the pointer 100 pt left of the window, another app activated, back in 85 ms later). Over the
     /// window it stays as it did.
     func resignedActive(pointerAt p: CGPoint) {
@@ -271,6 +316,7 @@ final class FloatingSidebarController {
         guard isShown, let p = panel, p.parent === window else { return false }
         isShown = false
         staged = false
+        waitingAtEdge = false
         revealRoom = 0
         dwell.reset()
         offEdge.reset()
@@ -353,6 +399,7 @@ final class FloatingSidebarController {
         if !shell.sidebarDetached { stage() }
         isShown = true
         staged = false
+        waitingAtEdge = false
         dwell.reset()
         offEdge.reset()
         transitionGeneration &+= 1
@@ -379,6 +426,7 @@ final class FloatingSidebarController {
     /// The pointer is at the edge (in the strip, or thrown past it) or not, and its wait is over or not.
     private func wait(atEdge: Bool, over: Bool, why: String, at p: CGPoint) {
         guard !isShown else { return }
+        waitingAtEdge = atEdge && !over
         if atEdge, !shell.sidebarDetached { stage() }
         if !atEdge, staged { unstage() }
         if over { show(why: "\(why), pointer at \(Int(p.x)),\(Int(p.y))") }
@@ -387,17 +435,25 @@ final class FloatingSidebarController {
     /// Whether the sidebar waits in its panel, tucked away, for the pointer's wait to end.
     private(set) var staged = false
 
-    /// The app's key window (nil while Cra is inactive); the tests stand one in.
-    var keyWindow: () -> NSWindow? = { NSApp.keyWindow }
+    /// The pointer is at the edge and its wait isn't over. In the background the timer runs only then, so a
+    /// pointer that comes to rest still finishes its wait, staged or not: back at the edge while a hide
+    /// still slides, the panel is still out and nothing stages (#936 review).
+    private var waitingAtEdge = false {
+        didSet { if waitingAtEdge != oldValue { refreshPointerTracking() } }
+    }
 
-    /// Like Arc, only the key window's sidebar comes out on hover (GitHub #82): every window
-    /// polls the pointer, and one behind another would otherwise reveal over it. The key
-    /// window is often one of this window's own child windows (a page, DevTools, the panel).
-    var isKey: Bool {
-        var w = keyWindow()
+    /// The app's key window (nil while Cra is inactive); the tests stand one in.
+    var keyWindow: () -> NSWindow? = { NSApp.isActive ? NSApp.keyWindow : nil }
+
+    /// A Chromium page, DevTools or floating panel can take keys or receive pointer events
+    /// on the browser window's behalf.
+    private func owns(_ child: NSWindow?) -> Bool {
+        var w = child
         while let c = w, c !== window { w = c.parent }
         return w != nil
     }
+
+    var isKey: Bool { owns(keyWindow()) }
 
     private var side: SidebarSide { shell.sidebarSide }
 
@@ -670,6 +726,7 @@ final class FloatingSidebarController {
         let tucked = fresh || staged
         isShown = true
         staged = false
+        waitingAtEdge = false
         dwell.reset()
         offEdge.reset()
         transitionGeneration &+= 1
@@ -770,6 +827,7 @@ final class FloatingSidebarController {
         revealRoom = 0
         isShown = false
         staged = false
+        waitingAtEdge = false
         dwell.reset()
         offEdge.reset()
         transitionGeneration &+= 1
@@ -794,6 +852,7 @@ final class FloatingSidebarController {
         revealRoom = 0
         isShown = false
         staged = false
+        waitingAtEdge = false
         dwell.reset()
         offEdge.reset()
         for l in [slider.layer, shadowView.layer] { l?.removeAnimation(forKey: Self.slideKey) }

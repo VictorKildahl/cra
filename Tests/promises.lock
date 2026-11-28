@@ -63,7 +63,8 @@
 #80    Packages/CraCore/Tests/CraCoreTests/DisplayDiagnosticsTests.swift::variableRateDisplayShowsItsRange  bd4f54224644
 #80    Tests/BrowserManagerLifecycleTests.swift::pageProbeCase  6cd5b47ee6e3
 #81    Tests/Scenarios/space-profiles.scenario  9ca615fdf045
-#82    Tests/FloatingSidebarTests.swift::onlyTheKeyWindowReveals  e03736669b48
+#82    Tests/FloatingSidebarTests.swift::anExposedEdgeRevealsWithoutFocus  ae37cbcee003
+#82    Tests/FloatingSidebarTests.swift::recognizesTheKeyWindow  ab9e37eb6fc2
 #83    Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::fullscreenSwapsTheBlurForTheDesktopTint  dbfce1b4413d
 #83    Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::lightVibrantThemesKeepTheirCalibration  71fe23c0c000
 #83    Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::logLineNamesTheState  16b128ce2bbf
