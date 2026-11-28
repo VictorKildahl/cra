@@ -67,7 +67,10 @@ struct DialogButton: View {
                     // text arrow sat 1.25 pt high, on its font's line rather than in the badge.
                     let size = badge ?? (key == "↩" ? CGSize(width: 28, height: 20) : CGSize(width: 35, height: 20))
                     Group {
-                        if key == "↩" { Image(systemName: "return") } else { Text(key) }
+                        // At 10 pt the symbol's frame is 14 × 12 pt, so centred in 28 × 20 it starts on a whole point,
+                        // (7, 4). At 11 pt (15 × 13) it started at (6.5, 3.5): a Retina screen draws that, a 1x one
+                        // rounds it, and the ↩ sat a point left of the middle there.
+                        if key == "↩" { Image(systemName: "return").font(.system(size: 10, weight: .bold)) } else { Text(key) }
                     }
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(destructive ? .white : accent ? Color(hex: "#EDEDFF") : enabled ? Color(hex: "#B7B7DD") : Color(hex: "#5F6193"))

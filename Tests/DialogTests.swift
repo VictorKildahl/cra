@@ -187,7 +187,8 @@ enum DialogTests {
     // promise: #876
     /// The key badges on Arc's Quit sheet (the reporter's 2x capture of Arc, 27 Nov 2026): ESC 35 × 20 pt,
     /// ↩ 28 × 20 pt with the return glyph (12 × 10.5 pt of ink) in its middle. Cra's ↩ was a text arrow
-    /// 1.25 pt above the middle of a 27 × 19 pt badge.
+    /// 1.25 pt above the middle of a 27 × 19 pt badge. Cra's glyph is a point smaller than Arc's (11 × 9.5 pt of
+    /// ink, the symbol at 10 pt) so that its frame starts on a whole point and a 1x screen draws it in the middle too.
     @MainActor
     private static func checkKeyBadges() {
         let window = AppDialog(title: "Quit Cra?", actions: [DialogAction("Quit"), .cancel, DialogAction("Quit, and don’t ask again", role: .secondary)],
@@ -234,7 +235,7 @@ enum DialogTests {
         } }
         guard let glyph = glyphBox else { fatalError("The ↩ glyph is missing") }
         let ink = size(glyph)
-        expect(ink.width >= 11.5 && ink.width <= 13.5 && ink.height >= 10 && ink.height <= 12, "the ↩ glyph is Arc's return glyph, about 12 × 10.5 pt, not \(ink)")
+        expect(ink.width >= 10.5 && ink.width <= 12.5 && ink.height >= 9 && ink.height <= 11, "the ↩ glyph is the return glyph a point under Arc's, about 11 × 9.5 pt, not \(ink)")
         let dy = (CGFloat(glyph.1 + glyph.3) - CGFloat(quit.1 + quit.3)) / 2 / scale
         let dx = (CGFloat(glyph.0 + glyph.2) - CGFloat(quit.0 + quit.2)) / 2 / scale
         expect(abs(dy) <= 0.5 && abs(dx) <= 0.5, "the ↩ sits in the middle of its badge, not \(dx) pt across and \(dy) pt down")
