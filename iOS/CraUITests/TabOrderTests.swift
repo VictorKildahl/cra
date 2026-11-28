@@ -87,6 +87,26 @@ final class TabOrderTests: BrowserTestCase {
         XCTAssertEqual(rowTitles(), ["First", "Third", "Second"])
     }
 
+    /// A swipe along the bar walks the row without picking: the tab button's stack keeps the tab
+    /// last picked on top, so a flick up goes back to it, not to the tab swiped past.
+    func testSwipingAlongTheBarLeavesTheTabStackAlone() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        openTab("Third")
+        swipeAlongTheBarToTheOlderTab()
+        waitForPage("Second")
+        swipeAlongTheBarToTheOlderTab()
+        waitForPage("First")
+        flickUpFromTheTabButton()
+        waitForPage("Third")
+        // The tab flicked from comes next: the second flick returns to it.
+        flickUpFromTheTabButton()
+        waitForPage("First")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertEqual(rowTitles(), ["Second", "Third", "First"])
+    }
+
     // promise: #647
     /// A popup from a tab further back, swiped away on its first page, hands the screen back to
     /// that tab instead of the row's last one. The source tab is reached along the bar, which

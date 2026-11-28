@@ -105,9 +105,17 @@ final class FidgetLogoView: UIImageView {
 
 /// A view that takes no touches itself, only its subviews do: the page container, so that the
 /// logo and the dots under it can be played with while no page is open.
+/// Unclipped, it also takes a touch on a subview lying outside its bounds: the tab a bar swipe
+/// brings in rides beside the page, outside the container, and is used as soon as it shows.
 final class PassthroughView: UIView {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let hit = super.hitTest(point, with: event)
         return hit === self ? nil : hit
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        if super.point(inside: point, with: event) { return true }
+        guard !clipsToBounds else { return false }
+        return subviews.contains { !$0.isHidden && $0.alpha > 0.01 && $0.isUserInteractionEnabled && $0.frame.contains(point) }
     }
 }

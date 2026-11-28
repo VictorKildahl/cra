@@ -59,6 +59,19 @@ public enum MobileMotion {
             return (1 + omega * time) * exp(-omega * time)
         }
 
+        /// How long until the spring, released at rest, is within `share` of its rest: the
+        /// inverse of `remaining(after:)`. Only for a critically damped spring.
+        public func time(toWithin share: Double) -> Double {
+            guard share < 1 else { return 0 }
+            var low = 0.0, high = response
+            while remaining(after: high) > share { high *= 2 }
+            for _ in 0..<60 {
+                let middle = (low + high) / 2
+                if remaining(after: middle) > share { low = middle } else { high = middle }
+            }
+            return high
+        }
+
         /// Where something let go `offset` from its rest at `velocity` is after `time`, still as
         /// an offset from rest. Only for a critically damped spring: it carries on the way it was
         /// going, turns once and eases home, never rocking back and forth.

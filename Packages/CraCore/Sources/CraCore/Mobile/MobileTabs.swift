@@ -7,6 +7,10 @@ public struct MobileTab: Codable, Equatable, Identifiable {
     public var title: String
     /// When the tab was last on screen. Auto-archive counts from here.
     public var lastActive: Date
+    /// When the tab was last picked (in the tab row, by a flick up on the tab button, or as it
+    /// opened) or left for a tab that was. The tab button's stack and the flick up follow it; a
+    /// swipe along the bar changes it for no tab (`MobileTabsDocument.walk`).
+    public var lastPicked: Date
     public var isIncognito: Bool
 
     public init(id: UUID = UUID(), url: String, title: String = "", lastActive: Date, isIncognito: Bool = false) {
@@ -14,10 +18,11 @@ public struct MobileTab: Codable, Equatable, Identifiable {
         self.url = url
         self.title = title
         self.lastActive = lastActive
+        self.lastPicked = lastActive
         self.isIncognito = isIncognito
     }
 
-    private enum CodingKeys: String, CodingKey { case id, url, title, lastActive, isIncognito }
+    private enum CodingKeys: String, CodingKey { case id, url, title, lastActive, lastPicked, isIncognito }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -25,6 +30,7 @@ public struct MobileTab: Codable, Equatable, Identifiable {
         url = try c.decode(String.self, forKey: .url)
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         lastActive = try c.decode(Date.self, forKey: .lastActive)
+        lastPicked = try c.decodeIfPresent(Date.self, forKey: .lastPicked) ?? lastActive
         isIncognito = try c.decodeIfPresent(Bool.self, forKey: .isIncognito) ?? false
     }
 
@@ -96,8 +102,10 @@ public struct MobileTabsDocument: Codable, Equatable {
 
     public var selectedTab: MobileTab? { tabs.first { $0.id == selected } }
 
-    /// Opens `tab` at the end and shows it.
+    /// Opens `tab` at the end and shows it, picked: the tab it is opened from comes next in the
+    /// tab button's stack.
     public mutating func open(_ tab: MobileTab) {
+        leaveSelected(at: tab.lastPicked)
         tabs.append(tab)
         selected = tab.id
     }
@@ -114,32 +122,53 @@ public struct MobileTabsDocument: Codable, Equatable {
         if tab.isIncognito { unseenIncognito.insert(tab.id) }
     }
 
-    /// Shows a tab and restarts its archive clock.
+    /// Shows a tab, picked, and restarts its archive clock: it leads the tab button's stack, and
+    /// the tab it was picked from comes next, so the flick up goes back there.
     public mutating func select(_ id: UUID, now: Date) {
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        leaveSelected(at: now)
+        tabs[index].lastPicked = now
+        walk(to: id, now: now)
+    }
+
+    /// Shows the neighbouring tab a swipe along the bar brings in and restarts its archive clock,
+    /// but picks nothing: the row, the tab button's stack and the flick up stay as they were.
+    public mutating func walk(to id: UUID, now: Date) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         tabs[index].lastActive = now
         selected = id
         unseenIncognito.remove(id)
     }
 
-    /// Shows a tab picked from the tab row (or the search sheet's recent tabs) and moves it to the
-    /// row's newest end, as Arc Search's row keeps tabs from the least to the most recently picked,
-    /// like the iPhone's app switcher (#647). A swipe along the bar only `select`s, so it walks the
-    /// row without shuffling it.
+    /// The tab on screen, left for one being picked, comes right after it in the tab button's
+    /// stack, even when it was only walked to.
+    private mutating func leaveSelected(at date: Date) {
+        guard let index = tabs.firstIndex(where: { $0.id == selected }) else { return }
+        tabs[index].lastPicked = max(tabs[index].lastPicked, date)
+    }
+
+    /// Shows a tab picked from the tab row and moves it to the row's newest end, as Arc Search's
+    /// row keeps tabs from the least to the most recently picked, like the iPhone's app switcher
+    /// (#647). A swipe along the bar only `walk`s, so it walks the row without shuffling it.
     public mutating func bringToFront(_ id: UUID, now: Date) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         tabs.append(tabs.remove(at: index))
         select(id, now: now)
     }
 
-    /// Closes a tab. When it was the one on screen, the tab after it takes its place, or the one
-    /// before when it was last.
-    public mutating func close(_ id: UUID) {
+    /// Closes a tab. When it was the one on screen, `opener` takes its place if it is still open
+    /// (a popup hands the screen back to the tab that opened it, #647); otherwise the tab after
+    /// it, or the one before when it was last.
+    public mutating func close(_ id: UUID, returningTo opener: UUID? = nil) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         tabs.remove(at: index)
         unseenIncognito.remove(id)
         guard selected == id else { return }
-        selected = tabs.isEmpty ? nil : tabs[min(index, tabs.count - 1)].id
+        if let opener, tabs.contains(where: { $0.id == opener }) {
+            selected = opener
+        } else {
+            selected = tabs.isEmpty ? nil : tabs[min(index, tabs.count - 1)].id
+        }
     }
 
     /// Moves the tabs nobody looked at for `after` into the archive, newest first, and returns
@@ -162,6 +191,7 @@ public struct MobileTabsDocument: Codable, Equatable {
         guard let index = archived.firstIndex(where: { $0.id == id }) else { return }
         var tab = archived.remove(at: index)
         tab.lastActive = now
+        tab.lastPicked = now
         open(tab)
     }
 }
@@ -172,9 +202,7 @@ extension MobileTabsDocument {
     /// still open, as closing it from the page does (#647).
     public mutating func archive(_ id: UUID, returningTo opener: UUID? = nil) {
         guard let tab = tabs.first(where: { $0.id == id }) else { return }
-        let wasSelected = selected == id
-        close(id)
-        if wasSelected, let opener, tabs.contains(where: { $0.id == opener }) { selected = opener }
+        close(id, returningTo: opener)
         guard !tab.isIncognito else { return }
         archived.insert(tab, at: 0)
     }
@@ -208,32 +236,29 @@ extension MobileTabsDocument {
         tabs.filter { !$0.isIncognito || ($0.id != selected && unseenIncognito.contains($0.id) && selectedTab?.isIncognito == true) }
     }
 
-    /// Where a flick up on the tab button goes (#537): the row's tab looked at most recently
-    /// before the one on screen, so a second flick comes back. Arc Search 1.0 toggled between
-    /// the current and the previous page this way. Ties go to the newer tab in the row.
-    public var previousTab: MobileTab? {
-        rowTabs.last { $0.id != selected && $0.lastActive == newestBehind }
-    }
+    /// Where a flick up on the tab button goes (#537): the row's tab picked most recently before
+    /// the one on screen (`MobileTab.lastPicked`), so a second flick comes back. Arc Search 1.0
+    /// toggled between the current and the previous page this way. Ties go to the newer tab in
+    /// the row.
+    public var previousTab: MobileTab? { tabsBehindCurrent.first }
 
-    /// The row's tabs behind the one on screen, most recently looked at first, ties to the newer
+    /// The row's tabs behind the one on screen, most recently picked first, ties to the newer
     /// tab in the row. The tab button's preview shows the first two, never the page itself.
     public var tabsBehindCurrent: [MobileTab] {
         rowTabs.enumerated()
             .filter { $0.element.id != selected }
-            .sorted { ($0.element.lastActive, $0.offset) > ($1.element.lastActive, $1.offset) }
+            .sorted { ($0.element.lastPicked, $0.offset) > ($1.element.lastPicked, $1.offset) }
             .map(\.element)
     }
 
-    private var newestBehind: Date? {
-        rowTabs.lazy.filter { $0.id != selected }.map(\.lastActive).max()
-    }
-
-    /// The card the tab row opens focused on: the one behind the page, to its left in the row.
-    /// The first card focuses itself, and with no page on screen the newest card does.
+    /// The card the tab row opens focused on: the one behind the page, to its left, when the page
+    /// is the row's newest card, the tab picked last; a page short of that end (walked to along
+    /// the bar) focuses its own card, as does the first. With no page on screen the newest card
+    /// is focused.
     public var switcherFocus: MobileTab? {
         let cards = switcherTabs
         guard let selected, let index = cards.firstIndex(where: { $0.id == selected }) else { return cards.last }
-        return cards[max(0, index - 1)]
+        return cards[index == cards.count - 1 ? max(0, index - 1) : index]
     }
 
     /// Export Data: the open tabs as text, a title and an address each. Incognito tabs stay out.

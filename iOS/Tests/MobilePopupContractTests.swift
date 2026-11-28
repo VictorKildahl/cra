@@ -120,7 +120,7 @@ final class PopupOwner: WebPageDelegate {
         let nextPrivate = store.open(url: "https://secret.example/again", incognito: true)
         let nextPage = store.page(for: nextPrivate)
         _ = store.openPopup(configuration: WKWebViewConfiguration(), request: request, from: nextPage)
-        store.select(sourceTab.id)
+        store.walk(to: sourceTab.id)
         check(store.tabs.allSatisfy { !$0.isIncognito }, "leaving the live chain removes every private popup and opener")
         check(store.existingPage(nextPrivate.id) == nil, "private opener storage is released after leaving the chain")
         check(store.archived.allSatisfy { !$0.isIncognito }, "private relationship cleanup never archives secret tabs")

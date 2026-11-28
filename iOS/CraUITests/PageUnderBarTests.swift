@@ -33,15 +33,18 @@ final class PageUnderBarTests: BrowserTestCase {
             + "<button/style=display:block;width:100vw;height:44px;font-size:20px;position:sticky;bottom:0>Footer</button>"
     }
 
-    /// The web view reaches the safe area's edge, 42 pt under the bar's top, not just to its top.
+    /// The web view reaches the screen's bottom edge, under the bar and past the home indicator,
+    /// not just the bar's top or the safe area's edge: the bar's material has the page behind it
+    /// all the way down, while a sticky bottom still sits on the bar's top
+    /// (`testAStickyFooterSitsOnTheBarsTop`).
     func testThePagesViewRunsUnderTheBar() {
         launch(["-CraOpenURL", Self.stickyPage("Under"), "-CraSearch", "NO"])
         waitForPage("Under")
         let web = app.webViews.firstMatch
         XCTAssertGreaterThan(web.frame.maxY, barTop + 30,
                              "the page runs under the bar: \(web.frame) vs bar top \(barTop)")
-        XCTAssertLessThan(web.frame.maxY, app.windows.firstMatch.frame.maxY,
-                          "the page stops at the safe area's edge: \(web.frame)")
+        XCTAssertEqual(web.frame.maxY, app.windows.firstMatch.frame.maxY, accuracy: 0.5,
+                       "the page runs on to the screen's edge: \(web.frame)")
         keep("page under the bar")
     }
 
@@ -54,6 +57,36 @@ final class PageUnderBarTests: BrowserTestCase {
         XCTAssertEqual(footer.frame.maxY, barTop, accuracy: 4,
                        "the sticky footer sits on the bar's top: \(footer.frame) vs \(barTop)")
         keep("sticky footer")
+    }
+
+    /// A tab a swipe along the bar brings in shows its bottom on the bar's top as it slides in, not
+    /// at the screen's edge under the bar until it lands. Here it has no page yet, after a
+    /// relaunch: the swipe makes one, which has no insets of its own.
+    func testASwipedInPageShowsItsBottomOnTheBarsTop() {
+        let data = FileManager.default.temporaryDirectory.appendingPathComponent("Cra-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: data) }
+        app.launchArguments = ["-CraDataDir", data.path, "-CraOpenURL", Self.stickyPage("One"), "-CraSearch", "NO"]
+        app.launch()
+        waitForPage("One")
+        app.buttons["bar-search"].tap()
+        app.textFields["search-field"].typeText(Self.stickyPage("Two") + "\n")
+        waitForPage("Two")
+        XCUIDevice.shared.press(.home)
+        sleep(2)
+        app.terminate()
+
+        app.launchArguments = ["-CraDataDir", data.path, "-CraSearch", "NO", "-CraTraceTabOpen", "YES"]
+        app.launch()
+        waitForPage("Two")
+        let top = barTop
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.95))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.95)),
+                   withVelocity: .fast, thenHoldForDuration: 0)
+        waitForPage("One")
+        let value = app.descendants(matching: .any)["swipe-page-trace"].value as? String ?? ""
+        let bottom = value.split(separator: " ").last.flatMap { Double($0) }
+        XCTAssertNotNil(bottom, "the swipe brought in the live page: \(value)")
+        XCTAssertEqual(CGFloat(bottom ?? 0), top, accuracy: 4, "the page's bottom sat on the bar's top as it came in: \(value)")
     }
 
     /// An app sized to the screen with `100vh` keeps its bottom strip above the bar, not under it,
