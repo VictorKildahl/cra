@@ -165,8 +165,9 @@ it skips, except the promised Spaces background test, which fails on blank or mi
 
 StatusBandTests skips on the Duo: the right-hand column or
 top-right status cluster has no top safe area, and band placement is an open product question
-(duo research, finding 8). PageUnderBarTests skips before iOS 26 (no obscured content insets)
-and on the Duo (the pixel check).
+(duo research, finding 8). StickyHeaderTests also skips on the Duo: with no top safe area,
+its "below the band" check means nothing. PageUnderBarTests skips before iOS 26 (no obscured
+content insets) and on the Duo (the pixel check).
 
 Expected failures on the **closed** Duo (app bugs and unresolved iOS 27 behaviour; these tests
 remain enabled):
@@ -186,6 +187,10 @@ remain enabled):
 | `TabSwitcherIconTests/testALoneCardSitsInTheMiddle` | Cards stay left of the status column (closed-screen rule); the test centres on the whole window |
 | `TabSwitcherIconTests/testTheFirstAndTheLastCardRestInTheMiddle` | Cards stay left of the status column (closed-screen rule); the test centres on the whole window |
 | `TabSwitcherIconTests/testWithTwoTabsBothCardsRestInTheMiddle` | Cards stay left of the status column (closed-screen rule); the test centres on the whole window |
+| `GestureTests/testSwipingBackOnAFirstPageArchivesTheTabAndTheOppositeSwipeReopensIt` | The first reopen swipe after the tab row closes is dropped; a second swipe reopens. Unresolved, possibly an app bug, so there is no retry |
+| `KeyCommandTests/testCommandLEditsTheAddress` | ⌘L does not open the search sheet on the Duo; passes on an iPhone on iOS 27.0. Cause undetermined |
+| `KeyCommandTests/testCommandLSearchesOnTheEmptyHome` | ⌘L does not open the search sheet on the Duo; passes on an iPhone on iOS 27.0. Cause undetermined |
+| `KeyCommandTests/testCommandTSearchesForANewTab` | ⌘T does not open the search sheet on the Duo; passes on an iPhone on iOS 27.0. Cause undetermined |
 
 Expected failures on the **open and half-open** Duo:
 
@@ -203,6 +208,14 @@ Expected failures on the **open and half-open** Duo:
 | `TabSwitcherIconTests/testATabCardShowsTheSitesOwnIconInItsOwnShape` | Icon pixel check samples the row background on the wide screen |
 | `SpacesTests/testSpacesBackgroundsReachTheWindowEdges` | XCTest inner-screen capture does not match the window |
 | `CustomSearchEngineTests/testACustomEngineTakesTheSearch` | Alert Save |
+| `GestureTests/testSwipingBackOnAFirstPageArchivesTheTabAndTheOppositeSwipeReopensIt` | The first reopen swipe after the tab row closes is dropped; a second swipe reopens. Unresolved, possibly an app bug, so there is no retry |
+| `KeyCommandTests/testCommandLEditsTheAddress` | ⌘L does not open the search sheet on the Duo; passes on an iPhone on iOS 27.0. Cause undetermined |
+| `KeyCommandTests/testCommandLSearchesOnTheEmptyHome` | ⌘L does not open the search sheet on the Duo; passes on an iPhone on iOS 27.0. Cause undetermined |
+| `KeyCommandTests/testCommandTSearchesForANewTab` | ⌘T does not open the search sheet on the Duo; passes on an iPhone on iOS 27.0. Cause undetermined |
+| `GestureTests/testFlickingUpBesideTheTabButtonStillSwitches` | Locked #537. `MobileBottomBar.previousTabZone` ignores the wide-screen band, so the zone ends at x=248 while the tabs button spans 223-270. App issue for the maintainer |
+| `MenuHapticsTests/testTheMenusControlsTickOnPressAndRelease` | Locked #675. Tapping `menu-host` opens the address sheet without its press tick. Cause undetermined, app side |
+| `SearchFieldTests/testTheClearButtonsCrossIsCutOut` | XCTest inner-screen capture is rotated against the window, so the pixel check samples the wrong spot |
+| `SearchFieldTests/testTheIncognitoMaskIsHollowUntilItIsOn` | XCTest inner-screen capture is rotated against the window, so the pixel check samples the wrong spot |
 
 These lists record the research expectations, not exemptions in the harness. Other failures
 need hierarchy or `simctl` screenshot evidence to distinguish a harness miss from a Cra bug.

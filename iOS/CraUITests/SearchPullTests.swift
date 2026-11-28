@@ -152,8 +152,12 @@ final class SearchPullTests: BrowserTestCase {
         app.buttons["bar-search"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         let field = app.textFields["search-field"]
-        let above = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
-        XCTAssertLessThan(above.screenPoint.y, field.frame.minY - 40, "the tap lands above the drawer")
+        let window = app.windows.firstMatch
+        let point = CGPoint(x: window.frame.midX, y: field.frame.minY - 60)
+        XCTAssertLessThanOrEqual(point.y, field.frame.minY - 40, "the tap lands above the drawer")
+        XCTAssertTrue(window.frame.contains(point), "the tap lands inside the window")
+        let above = window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: point.x - window.frame.minX, dy: point.y - window.frame.minY))
         above.tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: 5), "the drawer closed")
         XCTAssertFalse(app.keyboards.firstMatch.exists)

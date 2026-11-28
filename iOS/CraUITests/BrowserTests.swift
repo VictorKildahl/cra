@@ -539,7 +539,7 @@ final class SettingsTests: BrowserTestCase {
         sleep(1)
         keep("site-settings")
         ads.switches.firstMatch.tap()
-        XCTAssertEqual(ads.value as? String, "0")
+        waitForValue("0", of: ads)
         app.buttons["Done"].tap()
         app.buttons["menu-row-siteSettings"].tap()
         XCTAssertTrue(app.switches["setting-block-ads"].waitForExistence(timeout: 5))
@@ -1192,6 +1192,7 @@ final class CollapseBottomBarTests: BrowserTestCase {
     func testAPageThatShrinksToFitBringsTheBarBack() {
         launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Shrinking</title>"
                 + "<h1>Shrinking</h1>"
+                + "<div/style=height:200px></div>"
                 + "<details/open><summary/style=font-size:32px>Shrink</summary>"
                 + "<div/style=height:4000px></div></details>", "-CraSearch", "NO"])
         waitForPage("Shrinking")
@@ -1212,7 +1213,7 @@ final class CollapseBottomBarTests: BrowserTestCase {
         launch(["-CraOpenURL", "data:text/html,<meta/name=viewport/content=width=device-width><title>Grow</title>"
                 + "<body/style=margin:0>"
                 + "<section/style=height:100svh><h1>Grow</h1></section>"
-                + "<details><summary/style=position:fixed;top:80px;right:24px;font-size:32px>More</summary>"
+                + "<details><summary/style=position:fixed;top:300px;left:24px;font-size:32px>More</summary>"
                 + "<div/style=height:2000px></div></details>", "-CraSearch", "NO"])
         waitForPage("Grow")
         let pill = app.buttons["bar-search"]
