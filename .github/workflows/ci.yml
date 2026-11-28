@@ -28,6 +28,10 @@ jobs:
       - name: Lint
         run: scripts/lint.py
 
+      # coverage.py runs every scripts/test-*.sh as a harness: each must be one (Tests/test_harnesses.py).
+      - name: Harness list
+        run: python3 Tests/test_harnesses.py
+
       # CraCore as the harnesses link it (scripts/harness-cracore.sh), kept between runs: a change that
       # leaves CraCore alone links the last one instead of building it. The script checks the sources,
       # flags and compiler itself, so a copy that doesn't match is rebuilt, never used.

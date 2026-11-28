@@ -180,7 +180,7 @@ fi
 # snapshots: every scenario with a snapshot line, one at a time (some serve their pages on a fixed port), with
 # CRA_SNAPSHOTS=strict and CRA_BUDGETS=report: a snapshot that differs from Tests/Snapshots, or couldn't be compared,
 # fails; budgets are only noted. References are 2x, so the copies open on a 2x display: CRA_TEST_SCREEN when it
-# names one, else the first one connected, else the virtual 2x "Cra Test Display" (scripts/test-display.sh), taken
+# names one, else the first one connected, else the virtual 2x "Cra Test Display" (scripts/virtual-display.sh), taken
 # away afterwards. What scripts/release.sh runs after the web features: component-snapshots broke on main when
 # PR #678 gave the Arc fixture its icons (22 Nov 2026), and nothing ran it. build/scenarios/snapshots.txt says how it went.
 if [ "${1:-}" = "snapshots" ]; then
@@ -192,7 +192,7 @@ if [ "${1:-}" = "snapshots" ]; then
   if [ -n "${CRA_TEST_SCREEN:-}" ] && grep -qiF -- "$CRA_TEST_SCREEN" <<< "$screens"; then SCREEN="$CRA_TEST_SCREEN"
   elif [ -n "$screens" ]; then SCREEN="$(head -1 <<< "$screens")"
   else
-    scripts/test-display.sh >/dev/null || { echo "snapshots: no 2x display, and macOS wouldn't make the virtual one"; exit 2; }
+    scripts/virtual-display.sh >/dev/null || { echo "snapshots: no 2x display, and macOS wouldn't make the virtual one"; exit 2; }
     VDISPLAY="$(cat build/vdisplay.pid)"; SCREEN="Cra Test Display"
     trap 'kill "$VDISPLAY" 2>/dev/null' EXIT
   fi

@@ -45,9 +45,9 @@ jobs:
         run: scripts/build.sh
 
       # GitHub's macOS runners have one small 1x screen, where a scenario's 1200x800 window doesn't fit; the
-      # scenarios run on a virtual 1728x1117 Retina display instead (scripts/test-display.sh).
+      # scenarios run on a virtual 1728x1117 Retina display instead (scripts/virtual-display.sh).
       - name: Test display
-        run: scripts/test-display.sh
+        run: scripts/virtual-display.sh
 
       - name: Scenarios
         env:

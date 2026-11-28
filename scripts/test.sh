@@ -23,6 +23,7 @@ suite "Filter list scriptlets (#845)" node --test Tests/ScriptletTests.js
 suite "Engine security check" python3 Tests/test_engine_security.py
 suite "Web features map" python3 -I scripts/web-features.py
 suite "Web features check" python3 Tests/test_web_features.py
+suite "Harness list" python3 Tests/test_harnesses.py
 suite "Notarize dist (#720)" scripts/test-notarize-dist.sh
 suite "Load paths (#720)" scripts/test-load-paths.sh
 suite "Scenario lines" scripts/test-scenario-line.sh
