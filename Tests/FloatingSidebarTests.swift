@@ -303,7 +303,23 @@ enum FloatingSidebarTests {
             expect(!sidebar.isShown, "moving toward the middle of the page retracts the background sidebar")
             sidebar.hide(animated: false)
         }
+        // Back at the edge while the background hide still slides: the panel is still out, so nothing stages, but the
+        // wait runs and a pointer that comes to rest there still brings the sidebar out (#936 review).
         sidebar.shell.sidebarSide = .left
+        let edge = CGPoint(x: bounds.minX + 2, y: bounds.midY)
+        sidebar.show()
+        sidebar.hide(animated: true)
+        expect(sidebar.shell.sidebarDetached && !sidebar.isPolling, "the background hide is in flight")
+        sidebar.pointerSample(at: edge, isOverWindow: true)
+        expect(sidebar.isPolling, "a wait started during the hide keeps the timer running")
+        // The timer's next look, with the pointer resting at the edge.
+        clock += 0.05 + FloatingSidebarGeometry.revealDwell
+        sidebar.pointerSample(at: edge, isOverWindow: true)
+        expect(sidebar.isShown && !sidebar.isPolling, "the resting pointer brings it out once its wait is over")
+        sidebar.hide(animated: false)
+        drainAnimations()
+        sidebar.pointerSample(at: CGPoint(x: bounds.midX, y: bounds.midY), isOverWindow: true)
+        expect(!sidebar.isPolling, "away from the edge the timer stops")
         sidebar.now = { ProcessInfo.processInfo.systemUptime }
     }
 

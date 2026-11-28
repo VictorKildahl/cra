@@ -153,7 +153,7 @@ final class FloatingSidebarController {
     private func refreshPointerTracking() {
         guard !activation.isEmpty else { return }
         let needsPointer = isShown || sidebarHidden()
-        setPolling(needsPointer && (appActive || staged))
+        setPolling(needsPointer && (appActive || waitingAtEdge))
         setBackgroundMonitoring(needsPointer && !appActive)
     }
 
@@ -200,8 +200,9 @@ final class FloatingSidebarController {
 
     private func pointerMoved() {
         guard window.isVisible, !NSApp.isHidden else {
-            if staged {
+            if staged || waitingAtEdge {
                 unstage()
+                waitingAtEdge = false
                 dwell.reset()
                 offEdge.reset()
             }
@@ -315,6 +316,7 @@ final class FloatingSidebarController {
         guard isShown, let p = panel, p.parent === window else { return false }
         isShown = false
         staged = false
+        waitingAtEdge = false
         revealRoom = 0
         dwell.reset()
         offEdge.reset()
@@ -397,6 +399,7 @@ final class FloatingSidebarController {
         if !shell.sidebarDetached { stage() }
         isShown = true
         staged = false
+        waitingAtEdge = false
         dwell.reset()
         offEdge.reset()
         transitionGeneration &+= 1
@@ -423,14 +426,20 @@ final class FloatingSidebarController {
     /// The pointer is at the edge (in the strip, or thrown past it) or not, and its wait is over or not.
     private func wait(atEdge: Bool, over: Bool, why: String, at p: CGPoint) {
         guard !isShown else { return }
+        waitingAtEdge = atEdge && !over
         if atEdge, !shell.sidebarDetached { stage() }
         if !atEdge, staged { unstage() }
         if over { show(why: "\(why), pointer at \(Int(p.x)),\(Int(p.y))") }
     }
 
     /// Whether the sidebar waits in its panel, tucked away, for the pointer's wait to end.
-    private(set) var staged = false {
-        didSet { if staged != oldValue { refreshPointerTracking() } }
+    private(set) var staged = false
+
+    /// The pointer is at the edge and its wait isn't over. In the background the timer runs only then, so a
+    /// pointer that comes to rest still finishes its wait, staged or not: back at the edge while a hide
+    /// still slides, the panel is still out and nothing stages (#936 review).
+    private var waitingAtEdge = false {
+        didSet { if waitingAtEdge != oldValue { refreshPointerTracking() } }
     }
 
     /// The app's key window (nil while Cra is inactive); the tests stand one in.
@@ -717,6 +726,7 @@ final class FloatingSidebarController {
         let tucked = fresh || staged
         isShown = true
         staged = false
+        waitingAtEdge = false
         dwell.reset()
         offEdge.reset()
         transitionGeneration &+= 1
@@ -817,6 +827,7 @@ final class FloatingSidebarController {
         revealRoom = 0
         isShown = false
         staged = false
+        waitingAtEdge = false
         dwell.reset()
         offEdge.reset()
         transitionGeneration &+= 1
@@ -841,6 +852,7 @@ final class FloatingSidebarController {
         revealRoom = 0
         isShown = false
         staged = false
+        waitingAtEdge = false
         dwell.reset()
         offEdge.reset()
         for l in [slider.layer, shadowView.layer] { l?.removeAnimation(forKey: Self.slideKey) }
