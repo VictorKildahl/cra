@@ -98,7 +98,7 @@ let package = Package(
         // Dock tile plug-in: keeps the icon picked in Settings after Cra quits.
         .target(
             name: "CraDockTile",
-            dependencies: ["CraAppIcons"],
+            dependencies: ["CraAppIcons", .product(name: "CraCore", package: "CraCore")],
             path: "Sources/CraDockTile",
             linkerSettings: [.linkedFramework("AppKit")]
         ),

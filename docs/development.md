@@ -151,6 +151,9 @@ time, on one core.
   few production files with `swiftc` against fakes (`Tests/BrowserManagerSupport` stands in
   for CraCEF and the rest of the app). When the manager calls something new from the app, add
   a stub to `AppServices.swift`.
+- `scripts/test-app-icons.sh` requires Xcode 27 or later. It builds a temporary Mac app, verifies
+  the alternate icon helpers’ signatures and architecture, and loads each icon. On macOS 26 or
+  later it also checks appearance refreshes and the Dock’s Clear and Tinted rendering.
 - `scripts/test-site-icons.sh`: `SiteIconLoader` and `FaviconCache` against an HTTP server on
   127.0.0.1: a site that never answers, a dropped connection, redirects, the candidate limit, an
   icon that claims 20000 px, and a PDF served as an icon.

@@ -2,13 +2,9 @@ import AppKit
 
 @main
 struct AppIconResourcesTests {
-    static func main() {
+    @MainActor
+    static func main() async {
         guard let app = Bundle(path: CommandLine.arguments[1]) else { fatalError("Missing test app bundle") }
-        precondition(AppIconResources.currentID(for: "midnight") == "segments")
-        precondition(AppIconResources.currentID(for: "violet") == "colorful")
-        for id in ["segments", "colorful", "mono", "custom"] {
-            precondition(AppIconResources.currentID(for: id) == id)
-        }
         let icons = ["segments", "original", "mono", "candy", "hologram", "neon", "fluted-glass", "schoolbook", "colorful", "canary", "early-birds"].map { id in
             guard let image = AppIconResources.image(named: id, in: app) else {
                 fatalError("Could not load app icon \(id)")
@@ -19,7 +15,7 @@ struct AppIconResourcesTests {
         precondition(icons[0] != icons[1], "Each document should draw its own artwork")
         precondition(AppIconResources.image(named: "missing", in: app) == nil)
         if #available(macOS 26, *) {
-            checkAppearanceRefresh()
+            await checkAppearanceRefresh()
             checkIconRendering()
         }
     }
@@ -129,17 +125,15 @@ struct AppIconResourcesTests {
     }
 
     @MainActor
-    private static func checkAppearanceRefresh() {
+    private static func checkAppearanceRefresh() async {
         var refreshed = false
         let observation = AppIconAppearanceObservation { refreshed = true }
+        let defaults = UserDefaults.standard
+        defaults.willChangeValue(forKey: "AppleIconAppearanceTheme")
+        defaults.didChangeValue(forKey: "AppleIconAppearanceTheme")
+        // KVO queues the refresh on main before this block, even on a busy runner.
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
         withExtendedLifetime(observation) {
-            let defaults = UserDefaults.standard
-            defaults.willChangeValue(forKey: "AppleIconAppearanceTheme")
-            defaults.didChangeValue(forKey: "AppleIconAppearanceTheme")
-            let deadline = Date(timeIntervalSinceNow: 1)
-            while !refreshed && Date() < deadline {
-                RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
-            }
             precondition(refreshed, "Changing the system icon style should refresh a selected preset")
         }
     }

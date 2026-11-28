@@ -1,5 +1,6 @@
 import AppKit
 import CraAppIcons
+import CraCore
 
 /// Cra's Dock tile plug-in (NSDockTilePlugIn in Info.plist): the Dock loads it while Cra
 /// is in the Dock but not running, so the icon picked in Settings stays after Cra quits.
@@ -49,7 +50,7 @@ final class CraDockTilePlugIn: NSObject, NSDockTilePlugIn {
         guard let app, let id = app.bundleIdentifier as CFString? else { return nil }
         CFPreferencesAppSynchronize(id)
         guard let stored = CFPreferencesCopyAppValue("appIcon" as CFString, id) as? String else { return nil }
-        let selected = AppIconResources.currentID(for: stored)
+        let selected = AppIconBundle.currentID(for: stored)
         guard selected != "segments" else { return nil }
         if selected == "custom" {
             return (CFPreferencesCopyAppValue("appIconCustomPath" as CFString, id) as? String).flatMap(NSImage.init(contentsOfFile:))

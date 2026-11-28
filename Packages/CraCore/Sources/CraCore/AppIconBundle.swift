@@ -6,6 +6,14 @@ import Foundation
 /// it, and lsd kept registering the app launch-disabled while trustd checked it over and over. The pick shows in
 /// the Dock (applicationIconImage, and the CraDockTile plug-in after Cra quits), which needs no change to the app.
 public enum AppIconBundle {
+    public static func currentID(for savedID: String) -> String {
+        switch savedID {
+        case "midnight": return "segments"
+        case "violet": return "colorful"
+        default: return savedID
+        }
+    }
+
     public enum Change: Equatable, Sendable {
         /// Take Finder's custom icon off: the app's signature holds again.
         case takeOff

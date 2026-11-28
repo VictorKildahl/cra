@@ -58,7 +58,7 @@ final class AppIconManager {
     private init() {
         let defaults = UserDefaults.standard
         let stored = defaults.string(forKey: Keys.selected) ?? Self.defaultID
-        let current = AppIconResources.currentID(for: stored)
+        let current = AppIconBundle.currentID(for: stored)
         if current != stored, let domain = Bundle.main.bundleIdentifier,
            defaults.persistentDomain(forName: domain)?[Keys.selected] as? String == stored {
             defaults.set(current, forKey: Keys.selected)

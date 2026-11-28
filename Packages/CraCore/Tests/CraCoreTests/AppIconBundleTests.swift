@@ -2,6 +2,14 @@ import CraCore
 import Testing
 
 struct AppIconBundleTests {
+    @Test func retiredIconIDsResolveToTheirReplacements() {
+        #expect(AppIconBundle.currentID(for: "midnight") == "segments")
+        #expect(AppIconBundle.currentID(for: "violet") == "colorful")
+        for id in ["segments", "colorful", "mono", "custom", "unknown"] {
+            #expect(AppIconBundle.currentID(for: id) == id)
+        }
+    }
+
     /// GitHub #724: a picked icon on Cra.app (Finder's `Icon\r` file and its com.apple.FinderInfo flag) breaks the
     /// app's signature: `codesign --strict` refuses the attribute, and lsd kept registering the app launch-disabled
     /// with trustd busy. The app never puts an icon on itself, whatever is picked; the Dock tile (applicationIconImage
