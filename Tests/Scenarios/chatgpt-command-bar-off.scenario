@@ -1,0 +1,24 @@
+# promise: #828
+# ChatGPT in the Command Bar off (Arc's default): "chatg" offers no ChatGPT scope, a question gets no "Ask ChatGPT" row,
+# and ⌥⌘G opens the plain ⌘T bar, as Arc 1.174 did with the switch off (27 Nov 2026, GitHub #828).
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "searchSuggestions": false}
+pace 0.5
+cra://open?url=${PAGE}?n=gpt-off
+wait 2
+cra://commandbar?query=chatg
+wait 1
+cra://debug?commandBarScope=offered-off
+expect-log command bar scope offered-off: none, .* hint -
+cra://commandbar?query=what%20is%20two%20plus%20two
+wait 1
+cra://debug?commandBarRows=plain-off
+expect-log Cra command bar rows plain-off: open=1
+reject-log rows plain-off:.*chatgpt\.com/\?q=
+cra://dismiss
+wait 1
+cra://action/newChatGPTMessage
+wait 1
+cra://debug?commandBarScope=gpt-off
+expect-log command bar scope gpt-off: none, .* placeholder Search or Enter URL…
+cra://dismiss

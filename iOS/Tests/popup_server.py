@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Local synthetic fixtures for CraUITests: POST/opener pages (PopupTests), a passkey page
 (PasskeyTests), a block list and the script it stops (BlockingTests), a plain-http page and one
-to come back to from a refused address (PlainHTTPTests), links and a script redirect to other
+to come back to from a refused address (PlainHTTPTests), two pages to swipe Back between
+(PageGestureTests), links and a script redirect to other
 apps' addresses (ExternalLinkTests), a page naming two icons (TabSwitcherIconTests), a long page
 with a link to a short one and a two-tone page for the bottom bar's tests (CollapseBottomBarTests,
 PageUnderBarTests) and, given a certificate, the same pages over HTTPS with that certificate,
@@ -147,12 +148,21 @@ function createPasskey() {
                       '<p style="height:3000px">Long</p>')
         elif url.path == '/two-tones':
             # A black top band over a white page bottom: the bar follows the bottom behind it,
-            # the status band the top (PageUnderBarTests).
+            # the status band the top (PageUnderBarTests). The black stops well above the bar: a
+            # full-screen block ran on under it, and the bar's ultra-thin material let it through.
             self.page('<meta name="theme-color" content="#000000"><title>Two Tones</title>'
                       '<style>html,body{margin:0;padding:0}</style>'
-                      '<div style="height:100vh;background:black">'
+                      '<div style="height:240px;background:black">'
                       '<h1 style="color:white;padding:24px">Two Tones</h1></div>'
                       '<div style="height:100vh;background:white"></div>')
+        elif url.path == '/swipe-first':
+            # Two pages in one tab's history, each its own colour, for a swipe Back that shows the page it goes
+            # back to underneath (PageGestureTests).
+            self.page('<title>Swipe First</title><style>body{background:#2e7d32;color:white}</style>'
+                      '<h1>Swipe First</h1><p><a style="color:white;font-size:40px" href="/swipe-second">Next page</a></p>')
+        elif url.path == '/swipe-second':
+            self.page('<title>Swipe Second</title><style>body{background:#1565c0;color:white}</style>'
+                      '<h1>Swipe Second</h1>')
         elif url.path == '/dark-page':
             # No theme-color, a dark background of its own (StatusBandTests, #657).
             self.page('<title>Dark Page</title><style>html,body{background:#123456;color:white}</style>'

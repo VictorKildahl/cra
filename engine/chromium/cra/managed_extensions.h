@@ -23,6 +23,16 @@ void WatchManagedExtensions(Profile* profile);
 // Whether Cra manages `extension_id` in `profile`.
 bool IsManagedExtension(const Profile* profile, const std::string& extension_id);
 
+// A shared extension whose data is one profile's (discussion #595's follow-up): `home`, the profile folder it was set
+// up in, and the folders that use its chrome.storage (home among them).
+struct SharedStorage {
+  std::string home;
+  std::set<std::string> profiles;
+};
+
+// Extension ID → its shared storage. Replaces the whole map. Sets the storage hooks (patches/extension-shared-storage.patch).
+void SetSharedExtensionStorage(std::map<std::string, SharedStorage> by_extension);
+
 // chrome://extensions' words for it.
 inline constexpr char kManagedByCra[] = "Managed by Cra";
 

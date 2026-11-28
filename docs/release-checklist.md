@@ -12,9 +12,11 @@ built release app with a test profile. Note anything that fails in the release's
 
 ### Themes and window chrome
 
-- **#739:** with Settings ▸ App Icon on Segments, System Settings ▸ Appearance ▸ Icon & widget style set to Dark, then Clear and Tinted,
-  turns Cra's Dock icon dark, clear and tinted like the other apps' (resources/AppIcon.icns is on Apple's grid, AppIconGridTests). A picked
-  icon stays as drawn.
+- **#739:** with Settings ▸ General ▸ App Icon on Segments (check `defaults read dk.kildahl.cra appIcon`: a pick is
+  drawn as it is, by design), System Settings ▸ Appearance ▸ Icon & widget style set to Dark, then Clear and Tinted,
+  turns Cra's Dock icon dark, glassy and tinted like the other apps' (the Icon Composer icon, resources/AppIcon.icon,
+  compiled into Assets.car; AppIconCatalogTests). Default is Gilad's white glass tile. On macOS 14 or 15 the .icns
+  rendered from the same icon shows. Built on Xcode 27, check it on macOS 26 too, not only 27.
 - **#372:** Settings opens at 684 × 650 pt on the first tab (your first name, "Cra" without one) every time, whatever tab it was closed on, and ⌘W closes it. Go through the
   ten tabs in dark and in light: the window is the system's window colour (not Arc's navy, Victor 12 Nov 2026), the chosen tab's pill
   (white 10 % with a hairline in dark, white with a shadow in light), 36 × 16 pt switches, the cards, Max's banner (Cra's mark and "Max"),
@@ -83,6 +85,18 @@ built release app with a test profile. Note anything that fails in the release's
   page and a pink one: its top rests 5 pt below the screen's edge and its shadow touches it all round,
   with no strip of page colour above it. macOS 26 places the panels right without the fix, so
   FloatingSidebarTests (AppKit's own constraint) and `floating-sidebar-shadow` stand in; ask the reporter.
+
+### Boosts
+
+- **#478:** open a Boost on a page of dark and light text, tint it, then drag the small wheel handle
+  away from the big one: only the small handle moves, dark pixels change hue and light ones keep the
+  big handle's hue. Drag the big handle afterwards: the offset between them stays. The connector
+  follows the orbit and keeps its direction past half a turn. Either dot has three sizes: at rest,
+  larger under the pointer, and largest while held and hovered, with no pointer change. CraCore pins
+  the geometry and the colourize; only the gesture and the hover animation need a person to watch them.
+- **PR #889:** open the Boost editor beside Arc's on the same site, untinted and then tinted: the frame's
+  width and corners, the ring's colours, the dot grid, the faint colour wash on the face and the hairline
+  round each handle look the same. CraCore pins the ring's colour stops; the drawing needs an eye.
 
 ### Sidebar, tabs and the command bar
 
@@ -459,6 +473,10 @@ built release app with a test profile. Note anything that fails in the release's
     screen. (`page-fullscreen-keyboard-lock` presses it; a scenario can't hold a key.)
   - web feature: SaveFrame. Open a PDF (any link to one) and press the viewer's Save button: the file
     saves as a download (or into the save panel with Ask Where to Save Each File on) and shows in the bin.
+  - Download a PDF and an image, open the downloads tray at the sidebar's bottom left and drag each row
+    onto the tab list: the insertion line shows, and let go it opens as a tab there (the PDF in the PDF
+    viewer), behind the page you're on, as in Arc. A .zip dragged the same way is refused. (`drop-file`
+    drops them through `cra://debug`; a scenario can't drive a real drag.)
 - **#272:** download a large file. The bin over the Library button keeps a ring that fills as it
   downloads; right-clicking its row in the tray and on Library ▸ Downloads offers Pause Download and
   Cancel Download, and a paused row reads "Paused". ⌘Q while it runs asks "Downloads in progress";
@@ -504,9 +522,18 @@ built release app with a test profile. Note anything that fails in the release's
   shows "Synced" on both and never asks which sidebar to keep after the first answer. Needs
   real iCloud: the harness only stands in for a file that is still downloading.
 - **PR #289:** the same with a folder in Dropbox, OneDrive or a similar service instead of iCloud.
+- **Easels in sync:** with a signed build on two Macs and Sync with iCloud on, an easel with a
+  few pictures and captures made on one Mac opens on the other with every picture, within about
+  a minute; a title changed on each Mac shows on both; deleting it in Library ▸ Easels removes it
+  on the other Mac and closes its tab there. Needs real iCloud: the harness doesn't download
+  pictures in a subfolder file by file.
 
 ### iPhone
 
+- **#866, the open iPhone Duo:** on a TestFlight build on an iPhone Duo (or the Duo simulator, which needs Xcode 27),
+  unfolded: App Settings from the tab switcher's gear opens at full height; the bottom bar's tab and menu buttons sit
+  within 540 pt in the middle; the onboarding Next button and the Spaces sync intro's buttons are no wider than 540 pt;
+  the tab switcher shows a phone-sized card in the middle with its neighbours. Folded, everything is as on an iPhone.
 - **#504:** on a TestFlight build with the default-browser entitlement, Settings ▸ Set Cra as
   Default Browser opens Cra's page in iOS Settings with a "Default Browser App" row; picking Cra
   there makes a link tapped in Messages open in Cra. Settings ▸ Apps ▸ Default Apps ▸ Browser App
@@ -514,8 +541,15 @@ built release app with a test profile. Note anything that fails in the release's
 
 - **Opening the search sheet (`MobileSearchMotion`):** on a real iPhone in dark mode beside Arc Search, over a
   page: tap the pill. The sheet moves on the frame after the finger lifts, solid from the start, the plus at the
-  field's left with "Search..." to its right, and the mic and eyes come in over the second half. Needs a human eye:
+  field's left with "Search..." to its right, and the mic and eyes fade in with the field as it opens (the new tab drawer's `drawerAccessorySpan`; the page menu's address editor keeps Arc Search's second half). Needs a human eye:
   the simulator's frame timing is not the phone's.
+
+- **The new tab drawer's field growing out of the pill:** on a real iPhone over a light page and a dark
+  one, tap the pill, and pull it up and let go. The field's white lift grows with the field, its ends
+  rounded all the way: no square corners inside the rounded edge. The lift was a bare layer on Core
+  Animation's own timing and lagged behind the field; a UI test cannot catch a frame mid-move. After a search, open it
+  again: the mic and the mask only fade in with the field, without springing up from small, which
+  they did when the sheet still remembered the clear button.
 
 - **#675:** on a TestFlight build on a real iPhone with System Haptics on, press the New Tab pill, the
   tab stack and the up arrow: one very subtle tick as the finger comes down and nothing as it lets go. In
@@ -528,11 +562,32 @@ built release app with a test profile. Note anything that fails in the release's
   growing past its size (it puffed up to 106 %). `PillPressTests` covers a held press; a quick tap's way
   back needs an eye.
 
+- **The swipe across the page (`MobilePageSwipe`):** on a TestFlight build on a real iPhone with System
+  Haptics on, beside Arc Search. Tap a link, then drag the page right slowly: it holds back, a quarter of the
+  finger's way, then lets go with one tick about 75 pt in and catches up; the page it goes back to is under it,
+  a third of the way along, with a soft shadow on the page's edge, and nothing jumps when its picture gives way
+  to the live page. On a tab's first page the hold is harder: still for the first 16 pt, an eighth of the
+  finger's way after, the tick about 185 pt in, and from it the page shrinks into a card while the tab before
+  it lifts off the tab button's front card and flies in beside it. Let go before the tick, both go back; after
+  it, the tab closes and the next page shows without a black frame. Everything moves at 120 Hz, the cards'
+  flight included, and the release never stutters. `PageGestureTests` pins the geometry, the hold and where it
+  lets go; the tick, the frame rate and the feel need a phone.
+
 - **The bar's settle:** on a TestFlight build on a real iPhone, flick the page up and down quickly,
   each flick landing while the bar is still moving, and flick from near the bottom where the
   home-indicator swipe can take the touch: the bar always comes to rest fully open or closed, never
   between them. The simulator cannot stage a system gesture taking the page's pan;
   `testFlicksLandingOnASettleLeaveTheBarAtAnEnd` covers the flicks themselves.
+
+- **The tab row's settle (PR #882):** on a real iPhone with five or more tabs, flick the tab row and
+  take a card up before the row lands: the row holds still under the held
+  card, then settles on the card it was heading to once the card is let go or thrown away, also when
+  a card thrown just before lands meanwhile (`aHeldRowResumesOnItsCardAfterAnEarlierThrowLands`). Catch the
+  row with a finger while it springs back from past either end: it stays under the finger. Throw a card
+  up and flick the row before it has flown off: the row lands on the card the flick was heading for
+  (`aFlickStillLandsOnItsCardWhenAnEarlierThrowLeaves`). XCUITest
+  waits for the row to rest before its next gesture, so it can't stage any of these;
+  `catchingTheRowPastAnEndHoldsItWhereItIs` covers the catch's arithmetic.
 
 - **The page under the bar (iOS 26):** on a TestFlight build on a real iPhone, open a long page with
   a sticky or fixed `bottom: 0` element and drag the bar slowly both ways, then let it settle: the
@@ -540,7 +595,10 @@ built release app with a test profile. Note anything that fails in the release's
   scroll stays even under the finger the whole way, the page's content shows through the bar's
   frosted material, and the last line scrolls clear of the bar.
   `PageUnderBarTests` pins the geometry in the simulator; the blur and the frame rate are a phone's
-  to judge.
+  to judge. Then open a workbook in Excel for the web, signed in, on an iPhone and an iPad: the
+  sheet tabs and the status bar under them sit on the bar's top, all tappable; the simulator has no
+  signed-in Office account, so `testAScreenSizedAppKeepsItsBottomStripAboveTheBar` stands in with a
+  `100vh` page.
 
 - **Pull to refresh:** on a TestFlight build on a real iPhone with System Haptics on, pull a page down
   from its top: the page's whole view comes down with the pull (its content stays at the top inside it, so
@@ -578,6 +636,13 @@ built release app with a test profile. Note anything that fails in the release's
   `AddedListRulesTests` compile a list of EasyList's shape on the Mac, and
   `testAnAddedListsPathRuleStopsAScriptFromAnUnlistedDomain` pins a served list in the simulator.
 
+- **PR #827, the filter helper's new permissions on an existing profile:** update a Mac from the previous
+  release, with EasyList (or any list with network rules) on in Settings ▸ Privacy ▸ Block lists. After
+  the update, chrome://extensions in that profile shows no disabled helper and no permission prompt,
+  and a page from a blocked ad host still fails to load. The helper (1.2) asks for scripting and site
+  access; Chrome grants an unpacked extension's new permissions as it loads, but only an update from
+  a real older profile shows that. The scenarios start from a fresh profile.
+
 - **#623, the pull-up's motion:** on a real iPhone at 60 fps, record a drag up from the + pill let go
   halfway and compare it frame by frame with the reporter's Arc Search recording
   (streamable.com/vbu4dx): let go, the sheet stays put until the keyboard comes, then rises with it
@@ -595,6 +660,14 @@ built release app with a test profile. Note anything that fails in the release's
   the + button's search pushes it back, and dragging this panel down leaves the page still. The
   simulator records animations at a variable rate, so
   only a phone settles the handoff; `testTheMenusAddressIsEditedInThisTab` pins the end state.
+
+- **Escape closes the search sheet:** on a real iPad with a hardware keyboard, press ⌘T over a page,
+  then Escape: the sheet closes and the page stays as it was; Escape on a page with the sheet down
+  still reaches the page (a site's own dialog closes). XCTest never delivers Escape to the app in the
+  simulator; `MobileKeyCommandsTests.escapeIsThePagesUnlessTheSheetIsUp` pins when it is claimed, and
+  `KeyCommandTests` pins ⌘T and ⌘L. On an iPad on iPadOS 26, ⌘T and ⌘L open the search too, also with
+  nothing in focus (no tap on the page since it loaded) and on the empty home, and neither opens anything
+  under a summary: XCTest on iOS 26 drops ⌘ more often than not, so `KeyCommandTests` runs from iOS 27.
 
 - **A choice in the search sheet (`MobileSheetLeave`):** on a real iPhone in dark mode beside Arc Search, with
   google.com's dark theme on, search for google.com from a page and from the empty home screen. The sheet rises and

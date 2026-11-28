@@ -12,9 +12,18 @@ struct CaptureMenuLayoutTests {
 
     @Test func theEaselsAreRowsOfTheMenuAfterNewEasel() {
         let s = CaptureMenuLayout.sections(easels: [test, movies])
-        let expected: [[String]] = [["Copy", "Save...", "Send via iMessage..."], ["Retake"], ["New Easel", "Test", "Movies"]]
+        let expected: [[String]] = [["Copy", "Save...", "Send via iMessage..."], ["Edit", "Retake"], ["New Easel", "Test", "Movies"]]
         #expect(titles(s) == expected)
         #expect(s[2][1].item == .easel(test.id) && s[2][2].item == .easel(movies.id))
+    }
+
+    /// Arc's Edit row (#851): the capture opens in Arc's image editor, Easel's tools over it. It sits with Retake,
+    /// above it, as in Arc 1.174 (26 Nov 2026, live).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/851"))
+    func editSitsAboveRetakeAsInArc() {
+        let s = CaptureMenuLayout.sections(easels: [])
+        #expect(s[1].map(\.item) == [.edit, .retake])
+        #expect(s[1][0].title == "Edit")
     }
 
     @Test func withNoEaselThereIsStillNewEasel() {
@@ -33,7 +42,7 @@ struct CaptureMenuLayoutTests {
         let onlyMovies: [[String]] = [["Movies"]]
         #expect(narrowed == onlyMovies)
         let withE: [[String]] = titles(CaptureMenuLayout.sections(easels: [test, movies], filter: "E"))
-        let expected: [[String]] = [["Save...", "Send via iMessage..."], ["Retake"], ["New Easel", "Test", "Movies"]]
+        let expected: [[String]] = [["Save...", "Send via iMessage..."], ["Edit", "Retake"], ["New Easel", "Test", "Movies"]]
         #expect(withE == expected)
         #expect(CaptureMenuLayout.sections(easels: [test], filter: "zzz").isEmpty)
     }
@@ -73,10 +82,10 @@ struct CaptureMenuLayoutTests {
 
     @Test func itsHeightFollowsItsRows() {
         // Arc's menu with two easels is 433 pt (866 px at 2x): the field, nine rows, two lines and
-        // the bottom. Cra's has seven rows there, without Save to Library and Edit.
+        // the bottom. Cra's has eight rows there, without Save to Library: 40 pt less.
         let s = CaptureMenuLayout.sections(easels: [test, movies])
-        let seven: CGFloat = 49.5 + 280 + 18 + 5.5
-        #expect(CaptureMenuLayout.height(s) == seven)
+        let eight: CGFloat = 49.5 + 320 + 18 + 5.5
+        #expect(CaptureMenuLayout.height(s) == eight)
         let none: CGFloat = 55
         #expect(CaptureMenuLayout.height([]) == none)
     }
@@ -85,5 +94,30 @@ struct CaptureMenuLayoutTests {
         let s = CaptureMenuLayout.sections(easels: [test, movies], filter: "mov")
         #expect(CaptureMenuLayout.defaultRow(s, filter: "mov")?.item == .easel(movies.id))
         #expect(CaptureMenuLayout.defaultRow(CaptureMenuLayout.sections(easels: [test]), filter: "") == nil)
+    }
+}
+
+/// The capture menu's colours are ARC_Capture.bundle's named colours (Arc 1.174.3 Assets.car, read with
+/// `assetutil --info`), which have a light value and a dark one: Arc's menu follows the Mac's appearance.
+struct CaptureMenuTonesTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/822")) func inLightModeTheCaptureMenuIsLight() {
+        let t = CaptureMenuTones(dark: false)
+        #expect(t.fill == .init(.white), "Background: white")
+        #expect(t.text == .init(.black), "TextColor: black")
+        #expect(t.field == .init(.black, 0.07), "TextFieldBackground: black 7 %")
+        #expect(t.prompt == .init(.black, 0.45), "SeeMoreEaselTextColor: black 45 %")
+        #expect(t.icon == .init(.black, 0.3), "ButtonText: black 30 %")
+        #expect(t.divider == .init(.black, 0.07))
+        // The picked row is the same blue in both, its title white.
+        #expect(t.hover == CaptureMenuTones(dark: true).hover)
+        #expect(t.hoverText.rgb == .white)
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/822")) func inDarkModeTheCaptureMenuKeepsArcsDarkColours() {
+        let t = CaptureMenuTones(dark: true)
+        #expect(t.fill == .init(RGB(0.071, 0.059, 0.18)), "Background (dark): (18,15,46)")
+        #expect(t.text == .init(.white, 0.9), "TextColor (dark): white 90 %")
+        #expect(t.field == .init(.white, 0.07) && t.prompt == .init(.white, 0.45))
+        #expect(t.hover == .init(RGB(0.161, 0.18, 0.757)))
     }
 }

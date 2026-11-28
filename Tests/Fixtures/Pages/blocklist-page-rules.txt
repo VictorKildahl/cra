@@ -1,0 +1,10 @@
+! Title: Page rules fixture (#845)
+! YouTube-style: the ads ride in the page's own player data.
+video.example##+js(set, ytInitialPlayerResponse.adPlacements, undefined)
+video.example##+js(json-prune, playerResponse.adPlacements playerResponse.playerAds adPlacements adSlots)
+video.example##+js(json-prune-fetch-response, adPlacements adSlots, , propsToMatch, /player-response/)
+! A trusted- scriptlet from a list Cra doesn't trust never runs.
+video.example##+js(trusted-set-constant, untrustedValue, '{"ran":true}')
+! X-style: a promoted post is an ordinary post with "Ad" in it.
+social.example#?#div[data-testid="cellInnerDiv"]:has(span:has-text(/^Ad$/))
+social.example##article:has-text(Sponsored):upward(1)

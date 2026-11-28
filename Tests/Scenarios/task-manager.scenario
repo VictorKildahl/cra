@@ -1,0 +1,23 @@
+# promise: #855
+# Help ▸ Troubleshooting ▸ Open Task Manager opens Chrome's own Task Manager, as Arc's does, also with no tab in
+# front: the page opened in the background is enough. Before, Cra asked only the page in front and said "Open a
+# Page First" while other pages were open.
+budget rss=900 stalls50=20
+ends-a-page
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+pace 0.5
+
+cra://open?url=${PAGE}?n=background&background=1
+expect-log GET /page\.html\?n=background
+wait 2
+cra://action/taskManager
+expect-log task manager: opened from another open page
+wait 3
+cra://debug?chromeWindows=tm
+expect-log chrome window tm: .*'Task [Mm]anager'
+reject-log task manager: no page open
+
+# Its End task ends the page's process, as for a frozen tab: the page goes and Cra stays (the harness checks it runs).
+cra://debug?taskManagerEnd=Fixture
+expect-log task manager end Fixture: pressed for Tab: Fixture
+expect-log page process ended \((killed|abnormal termination)\)

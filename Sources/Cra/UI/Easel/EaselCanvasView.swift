@@ -57,13 +57,9 @@ final class EaselCanvasView: NSView {
     init(document: Easel) {
         self.document = document
         store = EaselFiles.store(document.id)
-        // A new easel is on disk from the start, so Library ▸ Easels lists it.
-        let isNew = !FileManager.default.fileExists(atPath: store.url.path)
-        if isNew { store.saveNow(document) }
         sheet = EaselSheetView(document: document)
         super.init(frame: .zero)
         EaselFiles.opened(self)
-        if isNew { EaselFiles.listChanged() }
         wantsLayer = true
         layer?.backgroundColor = NSColor(white: 0, alpha: 0.5).cgColor
         scroll.drawsBackground = false
@@ -108,7 +104,13 @@ final class EaselCanvasView: NSView {
         let renamed = doc.title != document.title
         document = doc
         settle()
-        guard !EaselFiles.deleted.contains(doc.id) else { return }
+        if EaselFiles.deleted.contains(doc.id) {
+            // Drawn on after its file went (a reopened tab or Peek): the user is making it again.
+            guard !FileManager.default.fileExists(atPath: store.url.path) else { return }
+            EaselFiles.deleted.remove(doc.id)
+            EaselFiles.listChanged()
+        }
+        edited = true
         store.save(doc)
         if renamed {
             onTitle(doc.title)
@@ -116,8 +118,11 @@ final class EaselCanvasView: NSView {
         }
     }
 
-    /// A deleted easel's tab, closing, writes nothing back.
-    func saveNow() { if !EaselFiles.deleted.contains(document.id) { store.saveNow(document) } }
+    /// Changed since it opened: an easel with no file (a row whose easel was deleted) is written only then.
+    private var edited = false
+
+    /// Closing: what is not on disk yet. A deleted easel's tab writes nothing back.
+    func saveNow() { if edited, !EaselFiles.deleted.contains(document.id) { store.saveNow(document) } }
 
     func focus() { window?.makeFirstResponder(sheet) }
 
@@ -128,6 +133,9 @@ final class EaselCanvasView: NSView {
     }
 
     func closeLives() { sheet.closeLives() }
+
+    /// A change made elsewhere (sync's merge): shown as Undo shows a step, saved, and not undoable.
+    func replace(with easel: Easel) { sheet.replace(with: easel) }
 
     var sheetView: EaselSheetView { sheet }
 
@@ -213,6 +221,8 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     var home: NSRect? { didSet { if home != oldValue { needsLayout = true } } }
     /// A tool's key was pressed (Arc: V, I, T, O, R, A, P), or Escape with a tool in hand.
     var onToolKey: (Easel.Tool) -> Void = { _ in }
+    /// Arc's capture editor (#851): the sheet lies over a capture, with no title.
+    var editsImage = false { didSet { title.isHidden = editsImage } }
     private let title = EaselTextField()
     private var texts: [UUID: NSTextField] = [:]
     /// The picked items, in the order they were picked (#580: ⌘- or ⇧-click and the drag box pick several).
@@ -327,6 +337,14 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     }
 
     private func rect(_ r: Easel.Rect) -> NSRect { NSRect(x: r.x, y: r.y, width: r.width, height: r.height) }
+
+    /// Nothing picked and no text being typed: the drawing as it goes into a capture (#851).
+    func clearPicks() {
+        window?.makeFirstResponder(self)
+        picked = []
+        needsDisplay = true
+    }
+
     private func point(_ e: NSEvent) -> Easel.Point { let p = convert(e.locationInWindow, from: nil); return .init(p.x, p.y) }
 
     /// A change, undoable as `name` (Arc's undo labels: Move, Delete, Paste…).
@@ -363,6 +381,13 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         needsDisplay = true
         onChange(document)
         syncLives()
+    }
+
+    /// The easel as changed elsewhere: nothing before it can be undone, so ⌘Z never takes the change back.
+    func replace(with easel: Easel) {
+        history = EaselHistory()
+        dragBefore = nil
+        show(easel)
     }
 
     @objc func undo(_ sender: Any?) {
@@ -1134,7 +1159,9 @@ final class EaselSheetView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
         selected = item.id
         let easel = document.id
         EaselHooks.fetchLink?(url) { [weak self] meta, picture, icon in
-            guard let self, self.document.id == easel, let i = self.document.items.firstIndex(where: { $0.id == item.id }),
+            // Deleted meanwhile: filling the card in would make the easel again.
+            guard let self, self.document.id == easel, !EaselFiles.deleted.contains(easel),
+                  let i = self.document.items.firstIndex(where: { $0.id == item.id }),
                   case .link(var link) = self.document.items[i].kind else { return }
             link.title = meta?.title ?? link.title
             link.summary = meta?.summary
@@ -1460,6 +1487,9 @@ final class EaselToolbar: NSView {
     /// Arc's eighth button, Duplicate (AX "Duplicate"), after the tools.
     var onDuplicate: () -> Void = {}
     var tool: Easel.Tool = .pointer { didSet { needsDisplay = true } }
+    /// Arc's capture editor shows the seven tools only (#851): no Duplicate and no line before it.
+    var showsDuplicate = true { didSet { needsDisplay = true } }
+    private var shownItems: [EaselToolbarLayout.Item] { EaselToolbarLayout.items.filter { showsDuplicate || $0 != .duplicate } }
 
     private static let symbols: [Easel.Tool: String] = [
         .pointer: "cursorarrow", .image: "photo", .text: "character", .ellipse: "circle",
@@ -1487,10 +1517,12 @@ final class EaselToolbar: NSView {
     override func draw(_ dirtyRect: NSRect) {
         Self.bar.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12).fill()
-        Self.line.setFill()
-        EaselToolbarLayout.divider.fill()
+        if showsDuplicate {
+            Self.line.setFill()
+            EaselToolbarLayout.divider.fill()
+        }
         let config = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold).applying(.init(paletteColors: [Self.glyph]))
-        for item in EaselToolbarLayout.items {
+        for item in shownItems {
             let r = EaselToolbarLayout.rect(of: item)
             let look = EaselToolbarLayout.look(of: item, picked: tool, hovered: hovered)
             if look.fill != .none {
@@ -1515,7 +1547,7 @@ final class EaselToolbar: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        switch EaselToolbarLayout.item(at: convert(event.locationInWindow, from: nil)) {
+        switch shownItem(at: convert(event.locationInWindow, from: nil)) {
         case .tool(let t)?: onPick(t)
         case .duplicate?: onDuplicate()
         case nil: break
@@ -1533,7 +1565,11 @@ final class EaselToolbar: NSView {
     override func mouseExited(with event: NSEvent) { hovered = nil }
 
     /// The pointer at `point` (the toolbar's coordinates), or gone (nil). Also the test hook's way in.
-    func hover(at point: NSPoint?) { hovered = point.flatMap { EaselToolbarLayout.item(at: $0) } }
+    func hover(at point: NSPoint?) { hovered = point.flatMap { shownItem(at: $0) } }
+
+    private func shownItem(at point: NSPoint) -> EaselToolbarLayout.Item? {
+        EaselToolbarLayout.item(at: point).flatMap { shownItems.contains($0) ? $0 : nil }
+    }
 
     /// For cra.log: the picked tool, the button under the pointer and each letter that shows.
     var debugLine: String {

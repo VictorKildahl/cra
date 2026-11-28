@@ -56,3 +56,36 @@ struct NowPlayingHoverTests {
         #expect(!NowPlayingHover.opens(overCards: true, cards: 0, downloadsListOpen: false))
     }
 }
+
+/// GitHub #896: a download in the list that hovering the Library button opens looked the same under
+/// the pointer and pressed as at rest, so it didn't look like something to pick.
+struct DownloadsTrayRowTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/896"))
+    func aRowLightsUpUnderThePointerAndLooksPickedWhilePressed() {
+        #expect(DownloadsTrayRow.fill(open: true, hovered: false, pressed: false, canOpen: true) == .none)
+        #expect(DownloadsTrayRow.fill(open: true, hovered: true, pressed: false, canOpen: true) == .hover)
+        #expect(DownloadsTrayRow.fill(open: true, hovered: true, pressed: true, canOpen: true) == .pressed)
+        // Dragged out past the row, it stays picked until the drag ends.
+        #expect(DownloadsTrayRow.fill(open: true, hovered: false, pressed: true, canOpen: true) == .pressed)
+    }
+
+    /// A running, failed or cancelled download has nothing to open or drag: it only gets the hover.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/896"))
+    func aRowWithNoFileOnlyHovers() {
+        #expect(DownloadsTrayRow.fill(open: true, hovered: true, pressed: true, canOpen: false) == .hover)
+    }
+
+    /// Closing, the list fades with no row lit.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/896"))
+    func aClosedListLightsNothing() {
+        #expect(DownloadsTrayRow.fill(open: false, hovered: true, pressed: true, canOpen: true) == .none)
+    }
+
+    /// The lit card is what takes the click: the 40 pt thumbnail plus 4 pt above and below, on the
+    /// 56 pt pitch, so two lit cards keep 8 pt apart.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/896"))
+    func theCardIsTheRowsClickArea() {
+        #expect(DownloadsTrayRow.height(thumbnail: 40) == 48)
+        #expect(56 - DownloadsTrayRow.height(thumbnail: 40) == 8)
+    }
+}

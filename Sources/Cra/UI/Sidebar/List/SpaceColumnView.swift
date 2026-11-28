@@ -350,8 +350,24 @@ final class SpaceHeaderView: NSView, NSTextFieldDelegate {
             if done.frame.insetBy(dx: -6, dy: -6).contains(p) { commitRename() }
             return
         }
-        store.togglePinnedCollapsed(spaceID)
+        // The pair's first click toggled here only if it came within the double-click interval (the
+        // first could have been the •••'s, which keeps its clicks).
+        let firstToggled = toggledAt.map { event.timestamp - $0 <= NSEvent.doubleClickInterval } ?? false
+        switch ToggleRowClick.action(clickCount: event.clickCount, onName: p.x >= iconRect.maxX, firstClickToggled: firstToggled) {
+        case .toggle:
+            store.togglePinnedCollapsed(spaceID)
+            toggledAt = event.timestamp
+        case .rename(let undoToggle):
+            toggledAt = nil
+            if undoToggle { store.togglePinnedCollapsed(spaceID) }
+            CraLog.note("space header double-click: rename\(undoToggle ? ", pinned tabs put back" : "")")
+            beginRename()
+        }
     }
+
+    /// When this header's last click collapsed or expanded the pinned tabs, for a double-click's
+    /// second click to put them back.
+    private var toggledAt: TimeInterval?
 
     override func menu(for event: NSEvent) -> NSMenu? {
         renameField == nil ? makeSpaceMenu() : nil
@@ -721,7 +737,7 @@ final class FavoritesGridView: NSView {
                 let cells = panes.map { p in
                     let key = p.tab?.iconKey
                     let icon = favicons.image(forKey: key)
-                    if icon == nil, let tab = p.tab {
+                    if !favicons.hasOwnImage(forKey: key), let tab = p.tab {
                         // A favorite that never loaded here: its site's icon, after those of the space on screen
                         // when this space is paged out of view.
                         SiteIconLoader.shared.want(.init(
@@ -1663,7 +1679,7 @@ final class FavoriteTileView: NSView, ArcTooltipTarget, NSDraggingSource {
         // Not while the Library covers the sidebar (the tile is still under the pointer's path there).
         guard let store = grid?.store, grid?.ui.libraryPage == nil, grid?.ui.libraryReveal == nil, !isHiddenOrHasHiddenAncestor,
               model?.selected != true, model?.cells.count == 1, let url = store.item(itemID)?.tab?.url,
-              SidebarTabPreview.kind(for: url, settings: store.settings) != nil else { return nil }
+              let kind = SidebarTabPreview.kind(for: url, settings: store.settings), kind != .pullRequest else { return nil }
         return url
     }
 

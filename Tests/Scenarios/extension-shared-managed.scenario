@@ -25,9 +25,10 @@ cra://open?url=chrome://extensions/?id=${EXTENSION_ID}
 wait 3
 cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.developerPrivate.getExtensionInfo('${EXTENSION_ID}').then(i=>'relaunched-info:'+i.mustRemainInstalled+'/'+(i.controlledInfo?i.controlledInfo.text:'none'))","awaitPromise":true}
 expect-log Cra cdp Runtime.evaluate .*relaunched-info:true/Managed by Cra
-# What the person sees there: no Remove, "Managed by Cra" as the source and on the enable switch's icon.
-cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>setTimeout(()=>{const m=document.querySelector('extensions-manager');const d=m?m.shadowRoot.querySelector('extensions-detail-view'):null;if(!d){r('detail:missing');return}const s=d.shadowRoot;const rm=s.querySelector('[id=remove-extension]');const src=s.querySelector('[id=source]');const tip=s.querySelector('[id=enable-section] cr-tooltip-icon');r('detail:remove='+(rm?(rm.hidden?'hidden':'shown'):'missing')+'/source='+(src?src.textContent.trim():'missing')+'/tip='+(tip?(tip.hidden?'hidden':tip.tooltipText):'missing'))},1500))","awaitPromise":true}
-expect-log Cra cdp Runtime.evaluate .*detail:remove=hidden/source=Managed by Cra/tip=Managed by Cra
+# What the person sees there: Remove turned off (it says to use Cra's Settings; the follow-up on discussion #595),
+# "Managed by Cra" as the source and on the enable switch's icon.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>setTimeout(()=>{const m=document.querySelector('extensions-manager');const d=m?m.shadowRoot.querySelector('extensions-detail-view'):null;if(!d){r('detail:missing');return}const s=d.shadowRoot;const rm=s.querySelector('[id=remove-extension]');const src=s.querySelector('[id=source]');const tip=s.querySelector('[id=enable-section] cr-tooltip-icon');r('detail:remove='+(rm?(rm.hidden?'hidden':(rm.disabled?'disabled':'shown')):'missing')+'/source='+(src?src.textContent.trim():'missing')+'/tip='+(tip?(tip.hidden?'hidden':tip.tooltipText):'missing'))},1500))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*detail:remove=disabled/source=Managed by Cra/tip=Managed by Cra
 cra://debug?stopSharing=${EXTENSION_ID}
 expect-log shared extension ${EXTENSION_ID}: no longer shared
 cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.developerPrivate.getExtensionInfo('${EXTENSION_ID}').then(i=>'unshared-info:'+i.mustRemainInstalled+'/'+(i.controlledInfo?i.controlledInfo.text:'none'))","awaitPromise":true}

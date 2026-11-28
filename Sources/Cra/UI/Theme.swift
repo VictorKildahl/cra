@@ -42,6 +42,10 @@ struct SpacePalette {
     var darkGradient = false
     /// Settings ▸ Tabs ▸ "Translucent sidebar" (Ideas #366): the colours over SidebarGlass's material.
     var glass = false
+    /// One colour over Arc's material, and whether macOS itself shows Dark: with the window inactive, Arc lays both
+    /// on a dark grey on macOS Dark (SidebarBackdrop.solidInactiveDark, #876).
+    var oneColour = false
+    var macOSDark = false
     /// The sidebar's colour at the bottom of the tab list, opaque, as it shows over its material: what a
     /// now-playing card in the theme's colour is laid over (NowPlayingTint.theme, Ideas #366).
     var playerGround: Color = .clear
@@ -111,6 +115,8 @@ extension SpaceTheme {
         p.lightMaterial = glass ? !theme.isDark : lightMaterial
         p.darkGradient = !glass && theme.drawnOverDarkGradientMaterial
         p.glass = glass
+        p.oneColour = !glass && theme.solid
+        p.macOSDark = SystemAppearance.shared.macOSDark
         return p
     }
 
@@ -200,6 +206,12 @@ final class SystemAppearance: @unchecked Sendable {
     /// View ▸ Appearance set to Dark (true) or Light (false), nil on Automatic: every space's sidebar
     /// takes it, as Arc's one appearance setting does (#700).
     private(set) var forcedDark: Bool?
+
+    /// macOS's own Light or Dark, also while View ▸ Appearance forces the app's: what Arc's material follows when
+    /// its window is inactive (#876). macOS writes AppleInterfaceStyle "Dark" in Dark and none in Light.
+    var macOSDark: Bool {
+        forcedDark == nil ? isDark : UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+    }
 
     /// View ▸ Appearance changed (WebsiteAppearance.forcesDark).
     @MainActor func setForced(_ dark: Bool?) { if dark != forcedDark { forcedDark = dark } }

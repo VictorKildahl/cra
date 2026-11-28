@@ -1,0 +1,14 @@
+# promise: #855
+# Open Task Manager given Chrome's ⇧⎋ in Settings ▸ Shortcuts (keybindings.json) opens it from a page that has the
+# keyboard. Arc has no shortcut for it and Cra keeps none by default; before, Settings ▸ Shortcuts couldn't record
+# ⇧⎋ (Esc stopped the recording, whatever was held).
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed keybindings.json {"taskManager":[{"key":"\u001b","modifiers":131072}]}
+pace 0.5
+
+cra://open?url=${PAGE}?n=front
+expect-log GET /page\.html\?n=front
+wait 2
+cra://debug?key=%1B,53,131072&page=1
+expect-log task manager: opened from the page in front

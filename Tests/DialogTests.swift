@@ -19,6 +19,7 @@ enum DialogTests {
                "secondary buttons brighten on hover")
         if let directory = ProcessInfo.processInfo.environment["CRA_DIALOG_SNAPSHOTS"] { try snapshots(in: directory) }
         checkEaselDeletion()
+        checkKeyBadges()
         let parent = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 900, height: 700),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         parent.isReleasedWhenClosed = false
@@ -71,6 +72,16 @@ enum DialogTests {
         var renamed: NSApplication.ModalResponse?
         rename.present(over: parent) { renamed = $0 }
         let renameWindow = sheet(over: parent)
+        let inputContainer = findInputContainer(in: renameWindow.contentView)
+        expect(inputContainer != nil, "input dialogs host a native AppKit input field outside the scroll view")
+        if let inputContainer {
+            renameWindow.makeFirstResponder(inputContainer.field)
+            expect(inputContainer.field.currentEditor() != nil, "focusing the input field opens its text editor for typing and paste")
+            inputContainer.field.currentEditor()?.insertText("https://example.com/feed.xml")
+            NotificationCenter.default.post(name: NSControl.textDidChangeNotification, object: inputContainer.field)
+            expect(rename.input == "https://example.com/feed.xml", "typing or pasting into the field updates dialog.input")
+            rename.input = ""
+        }
         renameWindow.sendEvent(key(36, window: renameWindow))
         expect(renamed == nil && renameWindow.isVisible, "empty names cannot submit")
         rename.input = "Work"
@@ -173,6 +184,63 @@ enum DialogTests {
         }
     }
 
+    // promise: #876
+    /// The key badges on Arc's Quit sheet (the reporter's 2x capture of Arc, 27 Nov 2026): ESC 35 × 20 pt,
+    /// ↩ 28 × 20 pt with the return glyph (12 × 10.5 pt of ink) in its middle. Cra's ↩ was a text arrow
+    /// 1.25 pt above the middle of a 27 × 19 pt badge.
+    @MainActor
+    private static func checkKeyBadges() {
+        let window = AppDialog(title: "Quit Cra?", actions: [DialogAction("Quit"), .cancel, DialogAction("Quit, and don’t ask again", role: .secondary)],
+                               icon: .application, buttonSpacing: 49.5, buttonOutset: 10.5).prepareWindow()
+        window.setFrameOrigin(NSPoint(x: -10000, y: -10000))
+        guard let view = window.contentView else { fatalError("Dialog content missing") }
+        // At 2x, as the Arc capture was, whatever display the test runs on: a point is two pixels, so half a point shows.
+        view.window?.colorSpace = .sRGB
+        view.layoutSubtreeIfNeeded()
+        guard let image = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width * 2), pixelsHigh: Int(view.bounds.height * 2),
+                                           bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                           bytesPerRow: 0, bitsPerPixel: 0) else { fatalError("Dialog bitmap missing") }
+        image.size = view.bounds.size
+        view.cacheDisplay(in: view.bounds, to: image)
+        let scale: CGFloat = 2
+        func near(_ c: NSColor, _ hex: (Int, Int, Int)) -> Bool {
+            abs(c.redComponent * 255 - CGFloat(hex.0)) < 6 && abs(c.greenComponent * 255 - CGFloat(hex.1)) < 6 && abs(c.blueComponent * 255 - CGFloat(hex.2)) < 6
+        }
+        // The rows that hold at least `run` pixels of a colour, then the columns filled through most of those rows: a
+        // badge's fill, not the pixels round a button's outline or a title's letters that blend to the same colour.
+        func box(in area: (Int, Int, Int, Int)? = nil, run: Int = 1, _ match: (NSColor) -> Bool) -> (Int, Int, Int, Int)? {
+            let (x0, y0, x1, y1) = area ?? (0, 0, image.pixelsWide - 1, image.pixelsHigh - 1)
+            // The raw components, as the window's sRGB draws them (the rep calls them calibrated RGB).
+            var hits = Set<Int>()
+            for y in y0...y1 { for x in x0...x1 { if let c = image.colorAt(x: x, y: y), match(c) { hits.insert(y * image.pixelsWide + x) } } }
+            let ys = (y0...y1).filter { y in (x0...x1).filter { hits.contains(y * image.pixelsWide + $0) }.count >= run }
+            guard let minY = ys.min(), let maxY = ys.max() else { return nil }
+            let xs = (x0...x1).filter { x in ys.filter { hits.contains($0 * image.pixelsWide + x) }.count * 2 >= ys.count }
+            guard let minX = xs.min(), let maxX = xs.max() else { return nil }
+            return (minX, minY, maxX, maxY)
+        }
+        func size(_ b: (Int, Int, Int, Int)) -> CGSize { CGSize(width: CGFloat(b.2 - b.0 + 1) / scale, height: CGFloat(b.3 - b.1 + 1) / scale) }
+        // The badges' fills (#464DFB on Quit, #4E4C77 on Cancel); the stroke round Quit's is lighter, so its fill sits 1 pt in.
+        guard let quit = box(run: Int(8 * scale), { near($0, (0x46, 0x4D, 0xFB)) }), let esc = box(run: Int(8 * scale), { near($0, (0x4E, 0x4C, 0x77)) }) else {
+            fatalError("Quit's and Cancel's key badges are missing")
+        }
+        let quitBadge = size(quit), escBadge = size(esc)
+        expect(abs(quitBadge.width + 2 - 28) <= 0.5 && abs(quitBadge.height + 2 - 20) <= 0.5, "Quit's ↩ badge is Arc's 28 × 20 pt, not \(quitBadge)")
+        expect(abs(escBadge.width - 35) <= 0.5 && abs(escBadge.height - 20) <= 0.5, "Cancel's ESC badge is Arc's 35 × 20 pt, not \(escBadge)")
+        var glyphBox: (Int, Int, Int, Int)?
+        for y in quit.1...quit.3 { for x in quit.0...quit.2 {
+            guard let c = image.colorAt(x: x, y: y), c.redComponent > 0.8, c.greenComponent > 0.8 else { continue }
+            glyphBox = glyphBox.map { (min($0.0, x), min($0.1, y), max($0.2, x), max($0.3, y)) } ?? (x, y, x, y)
+        } }
+        guard let glyph = glyphBox else { fatalError("The ↩ glyph is missing") }
+        let ink = size(glyph)
+        expect(ink.width >= 11.5 && ink.width <= 13.5 && ink.height >= 10 && ink.height <= 12, "the ↩ glyph is Arc's return glyph, about 12 × 10.5 pt, not \(ink)")
+        let dy = (CGFloat(glyph.1 + glyph.3) - CGFloat(quit.1 + quit.3)) / 2 / scale
+        let dx = (CGFloat(glyph.0 + glyph.2) - CGFloat(quit.0 + quit.2)) / 2 / scale
+        expect(abs(dy) <= 0.5 && abs(dx) <= 0.5, "the ↩ sits in the middle of its badge, not \(dx) pt across and \(dy) pt down")
+        window.close()
+    }
+
     // promise: #356
     /// Arc's share warning (Share Folder…, Share N Items…): Return copies the link, Escape doesn't, and the
     /// "Never show me this again." choice reaches the completion. Arc's older sheet: 560 × 308 pt.
@@ -266,5 +334,15 @@ enum DialogTests {
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
         guard condition() else { fatalError(message) }
         checks += 1
+    }
+
+    @MainActor
+    private static func findInputContainer(in view: NSView?) -> DialogInputContainer? {
+        guard let view else { return nil }
+        if let container = view as? DialogInputContainer { return container }
+        for subview in view.subviews {
+            if let found = findInputContainer(in: subview) { return found }
+        }
+        return nil
     }
 }

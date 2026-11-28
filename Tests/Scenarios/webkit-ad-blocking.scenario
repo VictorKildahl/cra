@@ -1,0 +1,93 @@
+# Ad blocking in WebKit pages (the protected-media tabs and sites switched to Safari's engine): the lists that block
+# in Chromium pages block there too (WebKitContentBlocking). Their network rules go to WebKit as content-blocker
+# lists: a third party's fetch is stopped before it leaves (the server never sees it), an exception undoes its block,
+# `$third-party` leaves the page's own server alone and a rule for fetches leaves images alone. Their scriptlets run
+# in the page's own world before its scripts, their procedural hiding hides promoted posts, and the Site Control
+# Center's Ad Blocking switch, which WebKit pages used to leave out, pauses all of it for the site.
+# ${WEBKIT} is the fixture server as localhost, which this run opens in WebKit; 127.0.0.1 is the same server as a third
+# party. No & in a script: it ends the cra:// query.
+budget rss=900 stalls50=40
+pace 0.5
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "autoPictureInPictureSites": {"localhost": false}}
+
+# Only this run's list, so the counts are its own.
+cra://debug?blockAds=off
+expect-log block ads and trackers: off
+expect-log webkit content rules: 0 lists in use
+cra://open?url=${WEBKIT}/video-player.html?n=webkit
+expect-log opens a page for localhost
+expect-log loaded localhost \(HTTP 200\)
+wait 1
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'before:'+inlineAds+','+parsedAds+','+fetchedAds+','+('userAgentData' in navigator)"}
+expect-log Cra cdp Runtime.evaluate .*"value":"before:2,3,2,false"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('${ORIGIN}/icon-blue.png?wk=fetch-unlisted',{mode:'no-cors'}).then(()=>'unlisted:sent',e=>'unlisted:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"unlisted:sent"
+expect-log GET /icon-blue\.png\?wk=fetch-unlisted
+
+cra://debug?blockLists=${ORIGIN}/webkit-page-rules.txt
+expect-log GET /webkit-page-rules\.txt
+expect-log block lists: [0-9]+ domains, 1 added list.*, 3 scriptlets, 2 procedural
+expect-log webkit content rules: 1 list in use \(6 rules\), 1 compiled
+cra://debug?pageJS=location.reload()
+wait 3
+
+# Scriptlets: the player data comes without its ads.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'after:'+inlineAds+','+parsedAds+','+fetchedAds"}
+expect-log Cra cdp Runtime.evaluate .*"value":"after:0,0,0"
+
+# Network rules: blocked before the request goes out, as Chromium's blocker does.
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('${ORIGIN}/icon-blue.png?wk=fetch',{mode:'no-cors'}).then(()=>'fetch:sent',e=>'fetch:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"fetch:TypeError"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{const i=new Image();i.onload=()=>r('image:'+i.naturalWidth);i.onerror=()=>r('image:failed');i.src='${ORIGIN}/icon-blue.png?wk=fetch-image'})","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"image:[1-9]
+expect-log GET /icon-blue\.png\?wk=fetch-image
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('${ORIGIN}/icon-blue.png?wk=excepted',{mode:'no-cors'}).then(()=>'excepted:sent',e=>'excepted:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"excepted:sent"
+expect-log GET /icon-blue\.png\?wk=excepted
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('/icon-blue.png?wk=third-own',{mode:'no-cors'}).then(()=>'own:sent',e=>'own:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"own:sent"
+expect-log GET /icon-blue\.png\?wk=third-own
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('${ORIGIN}/icon-blue.png?wk=third-party',{mode:'no-cors'}).then(()=>'third:sent',e=>'third:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"third:TypeError"
+reject-log GET /icon-blue\.png\?wk=fetch[ ]
+reject-log GET /icon-blue\.png\?wk=third-party
+
+# The Site Control Center has the Ad Blocking switch on a WebKit page. Off: the site's page loads without the lists,
+# and its scriptlets don't run.
+cra://debug?siteControls=1
+wait 1
+cra://debug?siteControlsRead=1
+expect-log site controls settings: .*Ad Blocking, On
+cra://debug?siteControlsPress=Ad Blocking, On
+wait 1
+cra://debug?pageJS=location.reload()
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'paused:'+inlineAds+','+parsedAds+','+fetchedAds"}
+expect-log Cra cdp Runtime.evaluate .*"value":"paused:2,3,2"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('${ORIGIN}/icon-blue.png?wk=fetch-paused',{mode:'no-cors'}).then(()=>'paused:sent',e=>'paused:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"paused:sent"
+expect-log GET /icon-blue\.png\?wk=fetch-paused
+cra://debug?toggleSiteFilters=${WEBKIT}/video-player.html
+wait 1
+cra://debug?pageJS=location.reload()
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"'resumed:'+inlineAds+','+parsedAds+','+fetchedAds"}
+expect-log Cra cdp Runtime.evaluate .*"value":"resumed:0,0,0"
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('${ORIGIN}/icon-blue.png?wk=fetch-resumed',{mode:'no-cors'}).then(()=>'resumed:sent',e=>'resumed:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"resumed:TypeError"
+reject-log GET /icon-blue\.png\?wk=fetch-resumed
+
+# Procedural hiding: a timeline's promoted posts, added after the page loads, are hidden; the others stay.
+cra://open?url=${WEBKIT}/social-timeline.html?n=feed
+expect-log loaded localhost \(HTTP 200\)
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"(v=>['ad1','p1','p2','sponsored-wrap'].map(id=>id+':'+v(document.getElementById(id))).join(' '))(e=>getComputedStyle(e).display!=='none')"}
+expect-log Cra cdp Runtime.evaluate .*"value":"ad1:false p1:true p2:true sponsored-wrap:false"
+
+# The list gone: WebKit pages block nothing again.
+cra://debug?blockLists=none
+expect-log block lists: [0-9]+ domains, 0 added lists
+wait 2
+cra://debug?cdp=Runtime.evaluate&params={"expression":"fetch('${ORIGIN}/icon-blue.png?wk=fetch-unlisted-again',{mode:'no-cors'}).then(()=>'again:sent',e=>'again:'+e.name)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*"value":"again:sent"
+expect-log GET /icon-blue\.png\?wk=fetch-unlisted-again

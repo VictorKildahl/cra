@@ -31,7 +31,8 @@ extension SidebarUIState {
 @MainActor
 final class DownloadsTrayView: NSView {
     private let ui: SidebarUIState
-    var colors = SidebarColors() { didSet { if colors.isDark != oldValue.isDark { for r in rows { r.colors = colors } } } }
+    // Every change: the rows' hover and pressed fills are the space's (#896), not only light or dark.
+    var colors = SidebarColors() { didSet { if colors != oldValue { for r in rows { r.colors = colors } } } }
     private var rows: [DownloadsTrayRowView] = []
     private var shownOpen = false
     private var ticker: Timer?
@@ -64,6 +65,7 @@ final class DownloadsTrayView: NSView {
             let r = DownloadsTrayRowView()
             r.colors = colors
             r.alphaValue = shownOpen ? 1 : 0
+            r.listOpen = shownOpen
             rows.append(r)
             addSubview(r)
         }
@@ -91,6 +93,7 @@ final class DownloadsTrayView: NSView {
     /// Rows rise 5 pt and fade in bottom first, 25 ms apart; they drop back faster.
     private func animate(open: Bool) {
         shownOpen = open
+        for r in rows { r.listOpen = open }
         let n = rows.count
         for (i, r) in rows.enumerated() {
             guard let layer = r.layer else { continue }
@@ -121,9 +124,12 @@ final class DownloadsTrayView: NSView {
 
     override func layout() {
         super.layout()
-        // VStack spacing 16 between 40 pt rows, 2 pt lower than the area (.offset(y: 2)).
+        // VStack spacing 16 between 40 pt rows, 2 pt lower than the area (.offset(y: 2)). Each row's
+        // view is its hover card, 4 pt past the thumbnail above and below (#896).
+        let pad = DownloadsTrayRow.pad
         for (i, r) in rows.enumerated() {
-            r.frame = NSRect(x: 0, y: 2 + CGFloat(i) * DownloadsTrayMetrics.rowPitch, width: bounds.width, height: DownloadsTrayMetrics.thumbnail)
+            r.frame = NSRect(x: 0, y: 2 + CGFloat(i) * DownloadsTrayMetrics.rowPitch - pad, width: bounds.width,
+                             height: DownloadsTrayRow.height(thumbnail: DownloadsTrayMetrics.thumbnail))
         }
     }
 
@@ -168,6 +174,20 @@ final class DownloadsTrayView: NSView {
         return "reach=\(Int(reach.rounded())) holds=\(holdsMid && holdsButton) press=\(hit === self || hit?.isDescendant(of: self) == true ? "the list" : hit.map { String(describing: type(of: $0)) } ?? "nothing")"
     }
 
+    /// For `cra://debug?downloadsTray=…&row=hover|press|release|leave` (#896): the first row as AppKit
+    /// would leave it after that pointer event, and its fill.
+    func debugFirstRow(_ action: String?) -> String {
+        guard let r = rows.first else { return "row=none" }
+        switch action {
+        case "hover": r.debugPointer(hovered: true, pressed: false)
+        case "press": r.debugPointer(hovered: true, pressed: true)
+        case "release": r.debugPointer(hovered: true, pressed: false)
+        case "leave": r.debugPointer(hovered: false, pressed: false)
+        default: break
+        }
+        return "row=\(r.fillReadout)"
+    }
+
     private func setHovered(_ h: Bool) {
         guard ui.downloadsListHovered != h else { return }
         ui.downloadsListHovered = h
@@ -188,10 +208,28 @@ private final class DownloadsTrayRowView: NSView, NSDraggingSource {
     private let name = NSTextField.sidebarLabel(size: 14)
     private let age = NSTextField.sidebarLabel(size: 12)
     private var downAt: NSPoint?
+    /// The hover card (#896): the space's hover fill under the pointer, the selected tab's while pressed.
+    private let card = CALayer()
+    private var hovered = false { didSet { if hovered != oldValue { refreshCard() } } }
+    private var pressed = false { didSet { if pressed != oldValue { refreshCard() } } }
+    /// The list is up: a closing list lights no row.
+    var listOpen = false {
+        didSet {
+            guard listOpen != oldValue else { return }
+            if !listOpen { hovered = false; pressed = false }
+            // A list opening under a resting pointer lights the row under it.
+            else if let w = window { hovered = bounds.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) }
+            refreshCard()
+        }
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        card.cornerRadius = DownloadsTrayRow.corner
+        card.cornerCurve = .continuous
+        card.actions = ["backgroundColor": NSNull(), "position": NSNull(), "bounds": NSNull()]
+        layer?.addSublayer(card)
         thumb.wantsLayer = true
         thumb.layer?.cornerRadius = 6
         thumb.layer?.cornerCurve = .continuous
@@ -217,6 +255,7 @@ private final class DownloadsTrayRowView: NSView, NSDraggingSource {
         let ink: NSColor = colors.isDark ? .white : .black
         name.textColor = ink.withAlphaComponent(0.82)
         age.textColor = ink.withAlphaComponent(0.5)
+        refreshCard()
         guard let listed else { return }
         var image: NSImage?
         switch listed {
@@ -254,13 +293,44 @@ private final class DownloadsTrayRowView: NSView, NSDraggingSource {
         if age.stringValue != s { age.stringValue = s }
     }
 
+    private var fill: DownloadsTrayRow.Fill {
+        DownloadsTrayRow.fill(open: listOpen, hovered: hovered, pressed: pressed, canOpen: entry != nil)
+    }
+
+    private func refreshCard() {
+        let color: NSColor = switch fill {
+        case .none: .clear
+        case .hover: colors.hoverFill
+        case .pressed: colors.selectedFill
+        }
+        card.backgroundColor = color.cgColor
+    }
+
+    var fillReadout: String { "\(fill)" }
+
+    func debugPointer(hovered h: Bool, pressed p: Bool) {
+        hovered = h
+        pressed = p
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for t in trackingAreas where t.owner === self { removeTrackingArea(t) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+
     override func layout() {
         super.layout()
-        let t = DownloadsTrayMetrics.thumbnail
-        thumb.frame = NSRect(x: 8, y: 0, width: t, height: t)
-        // HStack(spacing: 13); VStack(spacing: -1) of 17 + 15 with 1 pt on top, centred.
-        let x = 8 + t + 13, w = max(0, bounds.width - x)
-        let top = (t - 32) / 2 + 1
+        let t = DownloadsTrayMetrics.thumbnail, pad = DownloadsTrayRow.pad
+        card.frame = bounds.insetBy(dx: pad, dy: 0)
+        thumb.frame = NSRect(x: 8, y: pad, width: t, height: t)
+        // HStack(spacing: 13); VStack(spacing: -1) of 17 + 15 with 1 pt on top, centred. The name ends
+        // 8 pt inside the hover card, as it starts 8 pt in from the card's thumbnail.
+        let x = 8 + t + 13, w = max(0, card.frame.maxX - 8 - x)
+        let top = pad + (t - 32) / 2 + 1
         name.frame = NSRect(x: x - SidebarText.inset, y: top, width: w + 2 * SidebarText.inset, height: 17)
         age.frame = NSRect(x: x - SidebarText.inset, y: top + 16, width: w + 2 * SidebarText.inset, height: 15)
     }
@@ -269,7 +339,10 @@ private final class DownloadsTrayRowView: NSView, NSDraggingSource {
 
     override var mouseDownCanMoveWindow: Bool { false }
 
-    override func mouseDown(with event: NSEvent) { downAt = event.locationInWindow }
+    override func mouseDown(with event: NSEvent) {
+        downAt = event.locationInWindow
+        pressed = true
+    }
 
     override func mouseDragged(with event: NSEvent) {
         guard let start = downAt, let entry else { return }
@@ -283,7 +356,7 @@ private final class DownloadsTrayRowView: NSView, NSDraggingSource {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { downAt = nil }
+        defer { downAt = nil; pressed = false }
         guard downAt != nil, let entry, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
         NSWorkspace.shared.open(URL(fileURLWithPath: entry.path))
     }
@@ -295,6 +368,12 @@ private final class DownloadsTrayRowView: NSView, NSDraggingSource {
         let menu = NSMenu()
         DownloadRowMenu.fill(menu, for: listed)
         return menu.items.isEmpty ? nil : menu
+    }
+
+    /// Dragged out, the row stays picked until the drop (#896).
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        pressed = false
+        if let w = window { hovered = bounds.contains(convert(w.mouseLocationOutsideOfEventStream, from: nil)) }
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {

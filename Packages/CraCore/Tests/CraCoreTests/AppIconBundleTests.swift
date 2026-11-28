@@ -47,6 +47,17 @@ struct AppIconBundleTests {
         #expect(AppIconBundle.dockImage(picked: "custom", defaultID: "segments", bundleIconStale: false) == "custom")
     }
 
+    /// GitHub #884: the icon switches with macOS's light and dark (Icon & widget style Auto, or Dark) only when it is
+    /// the bundle's own, Segments, which macOS draws from its Icon Composer icon with a light and a dark look
+    /// (AppIconCatalogTests). The other picks, Original among them, are pictures the Dock draws as given, as Arc's
+    /// are: Arc 1.174.3's AppIcon has no dark appearance in its Assets.car.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/884")) func onlyTheBundlesOwnIconSwitchesWithLightAndDark() {
+        for picked in ["segments", "original", "midnight", "custom"] {
+            let switches = AppIconBundle.dockImage(picked: picked, defaultID: "segments", bundleIconStale: false) == nil
+            #expect(switches == (picked == "segments"), "\(picked)")
+        }
+    }
+
     /// The one case the Dock is given Segments' picture: this launch found a Finder icon an earlier Cra put on
     /// Cra.app (0.1.54, 0.1.55; #724). The Dock's cache of the bundle's icon can then still be the icon picked
     /// before, so Segments picked after Original kept Original (Victor, 23 Nov 2026), until the next launch.
@@ -61,5 +72,16 @@ struct AppIconBundleTests {
         #expect(!AppIconBundle.setsApplicationIcon(giving: false, gaveBefore: false))
         #expect(AppIconBundle.setsApplicationIcon(giving: true, gaveBefore: false))
         #expect(AppIconBundle.setsApplicationIcon(giving: false, gaveBefore: true))
+    }
+
+    /// Settings ▸ Icon's Segments tile is the icon the Dock shows: on macOS 26 the Dock draws the Icon Composer icon
+    /// (the glass Segments, #739), so the tile is its picture; on macOS 14 and 15 AppIcon.icns, the sticker. 3225cbae
+    /// changed the Dock's and left the tile the sticker (giladgd on #690). The other icons are the same everywhere.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/865")) func theSegmentsTileIsTheIconTheDockShows() {
+        #expect(AppIconBundle.previewName(for: "segments", defaultID: "segments", macOSMajor: 26) == "segments-glass")
+        #expect(AppIconBundle.previewName(for: "segments", defaultID: "segments", macOSMajor: 27) == "segments-glass")
+        #expect(AppIconBundle.previewName(for: "segments", defaultID: "segments", macOSMajor: 15) == "segments")
+        #expect(AppIconBundle.previewName(for: "segments", defaultID: "segments", macOSMajor: 14) == "segments")
+        #expect(AppIconBundle.previewName(for: "original", defaultID: "segments", macOSMajor: 26) == "original")
     }
 }

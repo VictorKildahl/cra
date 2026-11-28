@@ -1,0 +1,35 @@
+# promise: #876
+# An inactive window on macOS Dark lays a one-colour space and a dark gradient on Arc's dark grey (25 and 27.5),
+# so the sidebar goes darker when the window loses focus, as Arc's does (Arc 1.174.3, 27 Nov 2026). Cra laid them on
+# 212 and went lighter. On macOS Light the grey stays Arc's 212. deactivate=<label> makes Cra inactive without bringing
+# another app forward; systemAppearance flips the app's appearance, which Cra reads as macOS's here.
+# Active on macOS Dark, the one-colour space blurs through a darker material, 35 + 0.35 · backdrop (35 over black,
+# 124 over white), as Arc 1.174 does (28 Nov 2026); Cra used macOS Light's 66 / 198, lighter and
+# more see-through than Arc's (#876, "even with the slider all the way up it still appears semi-translucent").
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Navy","emoji":"🌙","theme":{"colors":["#26456B","#26456B"],"intensity":0.8,"noise":0,"appearance":"dark","accent":"#26456B","solid":true,"key":["#26456B"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-27T08:00:00Z"},{"id":"A0000000-0000-0000-0000-000000000002","title":"Dusk","emoji":"🌙","theme":{"colors":["#666789","#7F6589"],"intensity":0.8,"noise":0,"appearance":"dark","accent":"#666789","vibrant":true,"key":["#666789","#7F6589"]},"favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-27T08:00:00Z"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-27T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-27T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-27T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-27T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-27T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-27T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+cra://debug?systemAppearance=light
+wait 1
+cra://debug?themeShown=one-colour-light-mac-active
+expect-log Cra theme shown one-colour-light-mac-active: space=Navy .* active=1 ground=blur:66/198$
+cra://debug?systemAppearance=dark
+wait 1
+cra://debug?themeShown=one-colour-dark-mac-active
+expect-log Cra theme shown one-colour-dark-mac-active: space=Navy .* material=dark .* active=1 ground=blur:35/124$
+cra://debug?deactivate=ground
+expect-log deactivated ground: active=0
+wait 1
+cra://debug?themeShown=one-colour-dark-mac
+expect-log Cra theme shown one-colour-dark-mac: space=Navy .* material=dark .* active=0 ground=2[56]$
+cra://action/space2
+cra://debug?deactivate=ground2
+expect-log deactivated ground2: active=0
+wait 1
+cra://debug?themeShown=dark-gradient-dark-mac
+expect-log Cra theme shown dark-gradient-dark-mac: space=Dusk .* material=dark-gradient .* active=0 ground=2[78]$
+cra://debug?systemAppearance=light
+wait 1
+cra://debug?themeShown=dark-gradient-light-mac
+expect-log Cra theme shown dark-gradient-light-mac: space=Dusk .* active=0 ground=212$
+cra://debug?systemAppearance=system

@@ -81,6 +81,8 @@
 #                               and a copy of it one version on takes its place; with `chrome`, that copy's engine
 #                               is on another Chrome too (Versions/<chrome> moved), so new pages can't start (the
 #                               recorder's "launch failed" then counts as no crash)
+#   ends-a-page                the scenario ends a page's process itself (Task Manager's End task, #855): a renderer
+#                               the recorder saw "killed" then counts as no crash
 #   requires screen
 #   port <n>                   serve ${PAGE} on a fixed port (snapshots show the address)
 # The fixture server answers an address with ?delay=<s> (or &delay=<s>) that many seconds late, and /auth with an
@@ -651,7 +653,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       fi
       rm -rf "$APP" && mv "$next" "$APP"
       echo "  Cra.app replaced by $version${2:+ on another Chrome}" ;;
-    fresh|requires|port|seed|env|arg|extension|profile|home|crash-report|hold-fds) ;;
+    fresh|requires|port|seed|env|arg|extension|profile|home|crash-report|hold-fds|ends-a-page) ;;
     *) problem "unknown scenario line: $line" ;;
   esac
 done < "$FILE"
@@ -695,7 +697,8 @@ if alive; then
   if [ ! -s "$OUT/perf.json" ]; then problem "no perf.json from the performance recorder"
   else
     other_chrome=$(grep -c '^replace-app chrome' "$FILE")
-    verdict=$(python3 -I - "$OUT/perf.json" "$PERFCPU" "$hitch250" "$other_chrome" <<'PY'
+    ends_a_page=$(grep -c '^ends-a-page' "$FILE")
+    verdict=$(python3 -I - "$OUT/perf.json" "$PERFCPU" "$hitch250" "$other_chrome" "$ends_a_page" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))
 cpu, budget, hitch = r["selfCost"]["cpuPct"], float(sys.argv[2]), int(sys.argv[3])
@@ -710,6 +713,8 @@ if abs(seen - hitch) > max(2, hitch // 5): print(f"PROBLEM the recorder counted 
 ended = r["counters"].get("rendererTerminated", {})
 # A Cra.app replaced by one on another Chrome (replace-app chrome) has no helpers for this copy: that is the case.
 if sys.argv[4] != "0": ended.pop("launch failed", None)
+# A page the scenario ended itself (ends-a-page: Task Manager's End task) was killed, not crashed.
+if sys.argv[5] != "0": ended.pop("killed", None)
 if ended: print("CRASH pages crashed (“Aw, Snap!”) per the recorder: " + ", ".join(f"{k} ×{n}" for k, n in sorted(ended.items())))
 PY
 )

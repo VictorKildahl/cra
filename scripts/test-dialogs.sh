@@ -3,8 +3,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp/}cra-dialog-tests.XXXXXX")"
 trap 'rm -rf "$TEST_DIR"' EXIT
+source scripts/harness-cracore.sh
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
-  Packages/CraCore/Sources/CraCore/*.swift Packages/CraCore/Sources/CraCore/Perf/*.swift \
+  "${CRACORE[@]}" \
   Sources/Cra/UI/Colors.swift Sources/Cra/UI/BrandMark.swift \
   Sources/Cra/UI/Windows/DialogComponents.swift Sources/Cra/UI/Windows/AppDialog.swift Sources/Cra/UI/Windows/DialogClick.swift \
   Tests/DialogTests.swift -o "$TEST_DIR/dialog-tests"

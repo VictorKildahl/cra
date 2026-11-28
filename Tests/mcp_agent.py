@@ -521,6 +521,13 @@ try:
     steps = [l for l in log.splitlines() if "mcp pill: " in l]
     check("the pill's words change at most once per 0.7 s", len(shows) >= 2 and all(b - a >= 0.68 for a, b in zip(shows, shows[1:])), shows[:20])
     check("quick steps fold into fewer changes of the pill", len(shows) < len(steps), [len(shows), len(steps)])
+    # Discussion #579: in a tab nobody is looking at, the pill is only the agent's face (earlier
+    # steps in a shown tab had the whole pill, so a step out of sight shrinks it).
+    out_of_sight = value(client.tool("tab_open", url=url + "/agent.html?out-of-sight"))["tabId"]
+    value(client.tool("page_click", tabId=out_of_sight, selector="#bottom"))
+    looks = [l for l in (folder / "browser.log").read_text(errors="replace").splitlines() if "mcp pill look:" in l]
+    check("an agent in a tab out of sight shows only its face", looks and looks[-1].endswith("mcp pill look: face"), looks[-3:])
+    value(client.tool("tab_close", tabId=out_of_sight))
 
     # A tab the user watches: the agent's cursor is on it, a target below the fold comes into view
     # by a smooth scroll the user can follow (not a jump), and a wheel scroll is paced under the
@@ -542,8 +549,28 @@ try:
     scrolled = client.tool("page_scroll", tabId=tab, dy=-600)
     value(scrolled)
     check("a watched wheel scroll is paced to follow", scrolled["seconds"] >= 0.25)
+    pill_log = lambda: (folder / "browser.log").read_text(errors="replace")
+    check("the tab the user looks at gets the whole pill", "mcp pill look: full" in pill_log())
+    # A step in a tab out of sight: back to the face; a click on the face opens the whole pill.
     command("cra://debug?mcpWatched=off")
-    command("cra://debug?mcpStop=1")
+    faces = pill_log().count("mcp pill look: face")
+    out_of_sight = value(client.tool("tab_open", url=url + "/agent.html?out-of-sight-again"))["tabId"]
+    value(client.tool("page_click", tabId=out_of_sight, selector="#bottom"))
+    check("a step out of sight shrinks the whole pill to its face", eventually(lambda: pill_log().count("mcp pill look: face") > faces))
+    fulls = pill_log().count("mcp pill look: full")
+    command("cra://debug?mcpPill=open")
+    check("a click on the face opens the whole pill",
+          eventually(lambda: "mcp pill: opened from the face" in pill_log() and pill_log().count("mcp pill look: full") > fulls))
+    # The ×: the pill stays away while this agent works on, and ⌘. still takes over.
+    command("cra://debug?mcpPill=close")
+    check("the × puts the pill away", eventually(lambda: "mcp pill: closed until the session ends" in pill_log()))
+    looks = pill_log().count("mcp pill look:")
+    value(client.tool("page_click", tabId=tab, selector="#bottom"))
+    check("the agent keeps working after the ×", "bottom clicked" in events(tab)[-1:])
+    time.sleep(.5)
+    check("the pill stays away for the rest of the session", pill_log().count("mcp pill look:") == looks)
+    command("cra://debug?mcpPill=takeover")
+    check("⌘. takes over after the ×", eventually(lambda: "mcp pill: ⌘. took over" in pill_log()))
     check("Take Over ends the acting agent's session", eventually(lambda: client.proc.poll() is not None))
     check("Take Over takes its faces off the sidebar", eventually(lambda: "mcp faces: 0 tabs" in (folder / "browser.log").read_text(errors="replace")))
     check("Take Over leaves MCP on", listening())

@@ -15,6 +15,14 @@ import Foundation
     public static func extensionSettings(forProfile profile: String?) -> String? { settingsByProfile[profile ?? "Default"] }
 
     @objc public static func setManagedExtensionIDs(_ ids: [String: [String]]) { managed = ids }
+    /// What setSharedExtensionStorage last got (discussion #595's follow-up), and the switches asked for.
+    public static var storage: [String: [String: Any]] = [:]
+    public static var switched: [(id: String, on: Bool, profile: String)] = []
+    @objc public static func setSharedExtensionStorage(_ homes: [String: [String: Any]]) { storage = homes }
+    @objc public static func setExtensionEnabled(_ id: String, enabled: Bool, profilePath: String?) -> Bool {
+        switched.append((id, enabled, profilePath ?? "Default"))
+        return true
+    }
     @objc public static func loadState(ofProfile profile: String?) -> Int { settingsByProfile[profile ?? "Default"] == nil ? 0 : 2 }
     @objc public static func installWebStoreExtension(_ id: String, manifest: String, profilePath: String?,
                                                       completion: @escaping (String?) -> Void) {

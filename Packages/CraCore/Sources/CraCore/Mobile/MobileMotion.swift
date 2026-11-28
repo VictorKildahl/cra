@@ -13,6 +13,23 @@ public enum MobileMotion {
     /// How long the bottom bar takes to walk to an end once the finger lets go.
     public static let barSnap: Double = 0.25
 
+    /// Which of a view's overlapping moves is the latest. Each move takes a ticket, and a delayed
+    /// step of a move (its end, a staggered second half) only lands while its ticket is still the
+    /// current one: toggled back quickly, an older move's end must not cut the newer one short.
+    public struct Ticket: Equatable, Sendable {
+        public private(set) var current = 0
+
+        public init() {}
+
+        /// Starts a move, leaving every earlier ticket stale.
+        public mutating func next() -> Int {
+            current += 1
+            return current
+        }
+
+        public func isCurrent(_ ticket: Int) -> Bool { ticket == current }
+    }
+
     /// A spring by how long one period would take and how damped it is; 1 is critically damped
     /// (no overshoot).
     public struct Spring: Equatable, Sendable {
@@ -27,6 +44,13 @@ public enum MobileMotion {
         /// For a unit mass.
         public var stiffness: Double { pow(2 * .pi / response, 2) }
         public var damping: Double { 4 * .pi * dampingRatio / response }
+
+        /// How far past its rest the spring goes before it settles, as a share of the move: 0 when
+        /// critically damped or more.
+        public var overshoot: Double {
+            guard dampingRatio < 1 else { return 0 }
+            return exp(-.pi * dampingRatio / (1 - dampingRatio * dampingRatio).squareRoot())
+        }
 
         /// How far from rest the spring still is after `time`, as a share of where it began
         /// (released at rest). Only for a critically damped spring.
@@ -44,11 +68,16 @@ public enum MobileMotion {
         }
     }
 
-    /// The tab row settling when it is let go. In Arc Search the card's distance to its place
-    /// shrinks to 0.54 of itself every frame: a critically damped spring with a 0.34 s response.
+    /// The tab row settling as it opens out of the page. Fitted to Arc Search's row settling
+    /// (2024 footage, 30 fps): the card's distance to its place shrinks to 0.54 of itself every
+    /// frame, a critically damped spring with a 0.34 s response. Let go after a drag, the row
+    /// keeps the finger's speed instead (`MobileTabCarousel.Settle`).
     public static let tabRowSettle = Spring(response: 0.34, dampingRatio: 1)
     /// A card growing into its page: there within five frames.
     public static let tabOpen = Spring(response: 0.26, dampingRatio: 1)
+    /// A button at the field's end coming in as the field fills or empties, or the mic as
+    /// incognito goes off: a quick scale up with a clear overshoot.
+    public static let accessoryEnter = Spring(response: 0.27, dampingRatio: 0.6)
     /// The flick's arriving tab, let go, on its way into the page. Each axis of its place is on
     /// its own fully damped spring that starts at the hand's own speed, so a tab thrown sideways
     /// carries on sideways on one smooth arc before it comes in; its lean lets go on a spring of

@@ -1,0 +1,91 @@
+diff --git a/extensions/browser/ui_util.h b/extensions/browser/ui_util.h
+--- a/extensions/browser/ui_util.h
++++ b/extensions/browser/ui_util.h
+@@ -7,6 +7,7 @@
+ 
+ #include <string>
+ 
++#include "build/build_config.h"
+ #include "extensions/common/manifest.h"
+ 
+ namespace base {
+@@ -25,6 +26,14 @@
+ // Convenience method of the above taking an Extension object.
+ bool ShouldDisplayInExtensionSettings(const Extension& extension);
+ 
++#if BUILDFLAG(IS_MAC)
++// Cra: the network-filter helper Cra.app bundles (Resources/blocklist/chromium,
++// loaded with --load-extension) is part of Cra's own ad blocking, which
++// Settings > Privacy controls. Like a component extension it is shown nowhere
++// (chrome://extensions, chrome.management), so nobody removes or disables it.
++bool IsCraBundledFilter(const Extension& extension);
++#endif
++
+ // Returns the extension name to be used in UI surfaces. Name will be truncated
+ // if its very long, preventing extension name to spoof or break UI surfaces
+ // (see crbug.com/40063885).
+diff --git a/extensions/browser/ui_util.cc b/extensions/browser/ui_util.cc
+--- a/extensions/browser/ui_util.cc
++++ b/extensions/browser/ui_util.cc
+@@ -4,8 +4,10 @@
+ 
+ #include "extensions/browser/ui_util.h"
+ 
++#include "base/base_paths.h"
+ #include "base/command_line.h"
+ #include "base/files/file_path.h"
++#include "base/path_service.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/values.h"
+ #include "extensions/common/extension.h"
+@@ -45,7 +47,25 @@
+   return true;
+ }
+ 
++#if BUILDFLAG(IS_MAC)
++bool IsCraBundledFilter(const Extension& extension) {
++  base::FilePath executable_dir;
++  return extension.id() == "nddccjlgchhhajchaphmkffkclfmcemb" &&
++         extension.location() == mojom::ManifestLocation::kCommandLine &&
++         base::PathService::Get(base::DIR_EXE, &executable_dir) &&
++         extension.path() == executable_dir.DirName()
++                                 .AppendASCII("Resources")
++                                 .AppendASCII("blocklist")
++                                 .AppendASCII("chromium");
++}
++#endif
++
+ bool ShouldDisplayInExtensionSettings(const Extension& extension) {
++#if BUILDFLAG(IS_MAC)
++  if (IsCraBundledFilter(extension)) {
++    return false;
++  }
++#endif
+   return ShouldDisplayInExtensionSettings(extension.GetType(),
+                                           extension.location());
+ }
+diff --git a/extensions/browser/api/management/management_api.cc b/extensions/browser/api/management/management_api.cc
+--- a/extensions/browser/api/management/management_api.cc
++++ b/extensions/browser/api/management/management_api.cc
+@@ -43,6 +43,7 @@
+ #include "extensions/browser/requirements_checker.h"
+ #include "extensions/browser/supervised_extension_approval_result.h"
+ #include "extensions/browser/supervised_user_extensions_delegate.h"
++#include "extensions/browser/ui_util.h"
+ #include "extensions/browser/uninstall_reason.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/api/management.h"
+@@ -93,6 +94,13 @@
+ // Returns true if the extension should be exposed via the chrome.management
+ // API.
+ bool ShouldExposeViaManagementAPI(const Extension& extension) {
++#if BUILDFLAG(IS_MAC)
++  // Cra's bundled network-filter helper: other extensions and chrome://extensions
++  // can't list, disable or remove it (extensions/browser/ui_util.h).
++  if (ui_util::IsCraBundledFilter(extension)) {
++    return false;
++  }
++#endif
+   return !Manifest::IsComponentLocation(extension.location());
+ }
+ 

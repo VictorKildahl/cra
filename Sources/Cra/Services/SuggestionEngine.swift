@@ -129,6 +129,13 @@ final class SuggestionEngine {
             // Arc 1.171 lists a command the text names above it too: "sett" → Settings,
             // "clear" → Clear Cache and Refresh, "clear cook" → Clear Cookies and Refresh.
             items.insert(typed, at: 1)
+        } else if let lead = CommandBarRanking.leadingSpace(q, in: items, spaceTitle: { row in
+            if case .switchSpace(let id) = row.kind { return store.space(id)?.title }
+            return nil
+        }) {
+            // And a space whose name starts with the text, from wherever it ranked: "finan" → Focus on FINANCE.
+            items.insert(items.remove(at: lead), at: 0)
+            items.insert(typed, at: 1)
         } else {
             items.insert(typed, at: 0)
         }
@@ -151,12 +158,20 @@ final class SuggestionEngine {
                 items.insert(contentsOf: searchSuggestions(query, after: items).prefix(Self.maxRows - at), at: at)
             }
         }
+        // Arc Max's ChatGPT in the Command Bar (#828): "Ask ChatGPT" for what is typed, third.
+        if ChatGPTCommandBar.offersAskRow(query: query, enabled: store.settings.chatGPTInCommandBar, looksLikeURL: Self.looksLikeURL(query)) {
+            let site = ChatGPTCommandBar.site
+            items.insert(Suggestion(id: "askChatGPT", kind: .search, title: query, subtitle: "", url: site.searchURL(query),
+                                    faviconKey: site.host, symbol: "magnifyingglass", trailing: ChatGPTCommandBar.ask, score: 0),
+                         at: ChatGPTCommandBar.askRowIndex(rowCount: items.count))
+        }
         // Rows are scored without their subtitles; only the ones listed get them (#617). The bar holds
         // Arc's MaxSuggestions and shows five, the rest a scroll away (#805).
         result.items = items.prefix(CommandBarRowWindow.maxSuggestions).map(finished)
         result.inlineCompletion = completion?.text
         result.scope = TabSearchScope.isOffered(by: query) ? .tabs
-            : SiteSearch.match(q, completion: completion?.text, keywords: engines.keywords).map(CommandBarScope.site)
+            : SiteSearch.match(q, completion: completion?.text, keywords: engines.keywords,
+                               sites: ChatGPTCommandBar.sites(enabled: store.settings.chatGPTInCommandBar)).map(CommandBarScope.site)
         return result
     }
 
@@ -165,7 +180,7 @@ final class SuggestionEngine {
         let query = rawQuery.trimmingCharacters(in: .whitespaces)
         var result = SuggestionResult(query: query)
         guard !query.isEmpty else { return result }
-        result.items = [Suggestion(id: "typed", kind: .search, title: query, subtitle: "Search \(site.name)", url: site.searchURL(query),
+        result.items = [Suggestion(id: "typed", kind: .search, title: query, subtitle: site.rowCaption ?? "", url: site.searchURL(query),
                                    faviconKey: nil, symbol: "magnifyingglass", trailing: nil, score: 1000)]
         return result
     }
@@ -434,7 +449,7 @@ final class SuggestionEngine {
             }
             guard !urls.contains(url) else { return nil }
             return Suggestion(id: "sugg:\(url)", kind: .history, title: r.text, subtitle: "", url: url,
-                              faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil, score: 0, fromSearchEngine: true)
+                              faviconKey: FaviconKey.sectionKey(for: url), symbol: "globe", trailing: nil, score: 0, fromSearchEngine: true)
         }
     }
 
@@ -448,7 +463,7 @@ final class SuggestionEngine {
         if Self.looksLikeURL(query) {
             let url = Self.urlFromInput(query)
             return Suggestion(id: "typed", kind: .navigate, title: query, subtitle: "Open URL", url: url,
-                              faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil, score: 1000)
+                              faviconKey: FaviconKey.sectionKey(for: url), symbol: "globe", trailing: nil, score: 1000)
         }
         let engine = searchEngine
         return Suggestion(id: "typed", kind: .search, title: query, subtitle: "Search \(engine.name)",
@@ -536,7 +551,7 @@ final class SuggestionEngine {
             guard bare.hasPrefix(q) || d.hasPrefix(q) else { continue }
             let url = "https://\(d)/"
             out.append(Suggestion(id: "top:\(d)", kind: .topDomain, title: bare, subtitle: "Open URL", url: url,
-                                  faviconKey: FaviconKey.key(for: url), symbol: "globe", trailing: nil,
+                                  faviconKey: FaviconKey.sectionKey(for: url), symbol: "globe", trailing: nil,
                                   score: 72 - Double(i) * 0.1))
         }
         return out
@@ -690,7 +705,7 @@ final class SuggestionEngine {
             s.subtitle = ["Archived \(Self.relative(entry.archivedAt))", spaceName, Self.humanURL(s.url ?? "")].filter { !$0.isEmpty }.joined(separator: " · ")
         case .history where s.id.hasPrefix("hist:"):
             s.subtitle = Self.humanURL(s.url ?? "")
-            s.faviconKey = s.url.flatMap { FaviconKey.key(for: $0) }
+            s.faviconKey = s.url.flatMap { FaviconKey.sectionKey(for: $0) }
         default: break
         }
         return s
@@ -789,6 +804,12 @@ enum CommandBarScope: Equatable {
         case .tabs: return TabSearchScope.name
         case .actions: return ActionSearchScope.name
         }
+    }
+
+    /// The hint at the field's end while Tab offers the scope: "Search YouTube", ChatGPT's "Ask ChatGPT" (#828).
+    var hint: String {
+        if case .site(let site) = self { return site.hint }
+        return "Search \(name)"
     }
 }
 

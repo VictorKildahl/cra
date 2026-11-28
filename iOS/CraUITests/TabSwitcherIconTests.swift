@@ -1,3 +1,4 @@
+import CraCore
 import XCTest
 
 /// The site icon and title above each card in the tab switcher.
@@ -58,6 +59,99 @@ final class TabSwitcherIconTests: BrowserTestCase {
         XCTAssertEqual(card.frame.midX, screen.midX, accuracy: 2, "the lone card is centred: \(card.frame) in \(screen)")
     }
 
+    /// With several tabs, the first and the last card rested 23 pt right of the middle, where a
+    /// card between two others belongs. They have no neighbour on one side, and Arc Search 1.50
+    /// rests them in the middle (recordings of 25 and 26 Nov 2026). The card between them stays
+    /// left of centre.
+    func testTheFirstAndTheLastCardRestInTheMiddle() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        openTab("Third")
+        app.buttons["bar-tabs"].tap()
+        let first = app.buttons["tab-card-0"], second = app.buttons["tab-card-1"], newest = app.buttons["tab-card-2"]
+        XCTAssertTrue(newest.waitForExistence(timeout: 10))
+        sleep(1)
+        let screen = app.windows.firstMatch.frame
+        let screenClass = MobileScreenClass.of(size: screen.size, isPad: UIDevice.current.userInterfaceIdiom == .pad)
+        // Side insets are zero because the test measures against the window, as before.
+        let insets = screenClass.carouselInsets(size: screen.size, insets: (0, 0))
+        let band = CGRect(x: screen.minX + insets.left, y: screen.minY,
+                          width: screen.width - insets.left - insets.right, height: screen.height)
+        // The row opens on the card left of the page: the second tab, with a neighbour on each side.
+        XCTAssertEqual(second.frame.minX, band.minX + band.width * 0.2112, accuracy: 2, "the card between stays left of centre: \(second.frame) in \(screen)")
+        dragTheRow(from: 0.7, to: 0.3)
+        keep("last-card")
+        XCTAssertEqual(newest.frame.midX, band.midX, accuracy: 2, "the newest card is centred: \(newest.frame) in \(screen)")
+        dragTheRow(from: 0.3, to: 0.7)
+        dragTheRow(from: 0.3, to: 0.7)
+        XCTAssertEqual(first.frame.midX, band.midX, accuracy: 2, "the first card is centred: \(first.frame) in \(screen)")
+    }
+
+    /// With two tabs both cards are ends: each rests in the middle.
+    func testWithTwoTabsBothCardsRestInTheMiddle() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        app.buttons["bar-tabs"].tap()
+        let first = app.buttons["tab-card-0"], newest = app.buttons["tab-card-1"]
+        XCTAssertTrue(newest.waitForExistence(timeout: 10))
+        sleep(1)
+        let screen = app.windows.firstMatch.frame
+        // The row opens on the card left of the page: the first tab.
+        XCTAssertEqual(first.frame.midX, screen.midX, accuracy: 2, "the first card is centred: \(first.frame) in \(screen)")
+        dragTheRow(from: 0.7, to: 0.3)
+        XCTAssertEqual(newest.frame.midX, screen.midX, accuracy: 2, "the newest card is centred: \(newest.frame) in \(screen)")
+    }
+
+    /// A flick along the row moves one card, as every flick in Pri's Arc Search recording did
+    /// (25 Nov 2026). Cra projected the flick 0.18 s ahead and rounded up, so one let go three
+    /// quarters of the way to the next card went on to the card after it. The card in focus is
+    /// the titled one.
+    func testAFlickMovesOneCard() {
+        launch(["-CraOpenURL", Self.page("One"), "-CraSearch", "NO", "-CraReadCardTitles", "YES"])
+        waitForPage("One")
+        for title in ["Two", "Three", "Four", "Five"] { openTab(title) }
+        app.buttons["bar-tabs"].tap()
+        let cards = (0..<5).map { app.buttons["tab-card-\($0)"] }
+        XCTAssertTrue(cards[4].waitForExistence(timeout: 10))
+        // The row opens on the card left of the page: the fourth. Each flick drags three quarters
+        // of a card: one back, one more, then one forward.
+        waitForTheRow(toRestOn: 3, of: cards)
+        let screen = app.windows.firstMatch.frame
+        let screenClass = MobileScreenClass.of(size: screen.size, isPad: UIDevice.current.userInterfaceIdiom == .pad)
+        // Side insets are zero because the test measures against the window, as before.
+        let insets = screenClass.carouselInsets(size: screen.size, insets: (0, 0))
+        let band = CGRect(x: screen.minX + insets.left, y: screen.minY,
+                          width: screen.width - insets.left - insets.right, height: screen.height)
+        for (from, to, card) in [(0.29, 0.71, 2), (0.29, 0.71, 1), (0.71, 0.29, 2)] {
+            app.coordinate(withNormalizedOffset: CGVector(dx: (band.minX - screen.minX + band.width * from) / screen.width, dy: 0.5))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: (band.minX - screen.minX + band.width * to) / screen.width, dy: 0.5)),
+                       withVelocity: .fast, thenHoldForDuration: 0)
+            waitForTheRow(toRestOn: card, of: cards)
+        }
+    }
+
+    /// Waits for the row to stop moving with `index` the only titled card.
+    private func waitForTheRow(toRestOn index: Int, of cards: [XCUIElement], file: StaticString = #filePath, line: UInt = #line) {
+        let rests = NSPredicate { _, _ in
+            cards.indices.allSatisfy { i in
+                let value = cards[i].value as? String ?? ""
+                return i == index ? value.hasPrefix("title to") && !value.hasSuffix("moving") : value == "favicon alone"
+            }
+        }
+        let waited = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: rests, object: nil)], timeout: 10)
+        XCTAssertEqual(waited, .completed, "rests on card \(index): \(cards.map { $0.value as? String ?? "" })", file: file, line: line)
+    }
+
+    /// A flick along the row, which goes on to the next card (and stops at an end).
+    private func dragTheRow(from: CGFloat, to: CGFloat) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: from, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: to, dy: 0.5)),
+                   withVelocity: .fast, thenHoldForDuration: 0)
+        sleep(1)
+    }
+
     /// Every card's icon was a rounded square: the page's touch icon, an app icon most sites list
     /// first and largest, was fetched first, and the header clipped whatever it showed to a
     /// rounded square. The fixture names a blue square touch icon, then its own icon, a red
@@ -90,14 +184,4 @@ final class TabSwitcherIconTests: BrowserTestCase {
     private func isRed(_ c: (r: Int, g: Int, b: Int)) -> Bool { c.r > 170 && c.g < 100 && c.b < 100 }
     private func isBlue(_ c: (r: Int, g: Int, b: Int)) -> Bool { c.b > 170 && c.r < 100 }
 
-    /// The screenshot's colour at a point on the screen.
-    private func colour(_ image: UIImage, at point: CGPoint) -> (r: Int, g: Int, b: Int) {
-        guard let cg = image.cgImage, let data = cg.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return (0, 0, 0) }
-        let x = Int(point.x * image.scale), y = Int(point.y * image.scale)
-        let i = y * cg.bytesPerRow + x * (cg.bitsPerPixel / 8)
-        // Simulator screenshots are BGRA.
-        let first = Int(bytes[i]), third = Int(bytes[i + 2])
-        let bgra = cg.bitmapInfo.contains(.byteOrder32Little)
-        return (bgra ? third : first, Int(bytes[i + 1]), bgra ? first : third)
-    }
 }

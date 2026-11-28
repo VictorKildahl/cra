@@ -134,6 +134,12 @@ final class EaselTile: NSView {
         layer.zPosition = hovering ? 1 : 0
     }
 
+    /// cra://debug?easelTile=open|delete: a click on the tile (its Peek), or its menu's Delete.
+    func debugPress(_ what: String) {
+        guard let entry else { return }
+        if what == "delete" { delete(entry) } else { open(entry) }
+    }
+
     /// cra://debug?easelTileHover=1|0: the pointer over the tile, or gone; what it then shows.
     func debugHover(_ on: Bool, done: @escaping (String) -> Void) {
         hovering = on
@@ -250,21 +256,5 @@ enum EaselThumbnail {
         }
         cache[id] = (edited, image)
         return image
-    }
-}
-
-extension EaselFiles {
-    /// Deleting from Library ▸ Easels: the easel's file and its pictures.
-    /// Easels deleted this session: a tab still closing must not write one back.
-    @MainActor static var deleted: Set<UUID> = []
-
-    @MainActor static func delete(_ id: UUID) {
-        deleted.insert(id)
-        let names = [id.uuidString + ".json", id.uuidString + ".json.bak", id.uuidString]
-        let remove = { for n in names { try? FileManager.default.removeItem(at: folder.appendingPathComponent(n)) } }
-        remove()
-        // An edit made just before is written 0.4 s later (JSONStore.save): remove what it writes too.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: remove)
-        listChanged()
     }
 }

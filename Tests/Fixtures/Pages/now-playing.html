@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Now playing fixture</title>
+<!-- A track with a media session, for the island player (Discussion #761): a 120 s tone (music-notes' 440 Hz,
+     60 dB below full volume, which Chromium still counts as audible) whose navigator.mediaSession names a title,
+     an artist and artwork on this server (icon-orange.png, so the app has to fetch it through the page's network).
+     A scenario starts it with the protocol's user gesture. playPlain() is a page like Bandcamp's instead: no media
+     session, a title with a playing mark ("▶︎ Plain Song") and an og:image (the same picture), which the island
+     uses for its line and artwork. playLive() is a YouTube live stream: a finite element (YouTube's rewind window)
+     under a shown .ytp-live-badge, which the island reports live. -->
+<body>
+<script>
+  // A mono 8 kHz 16-bit WAV of `seconds` of the tone.
+  function wav(seconds) {
+    const samples = 8000 * seconds, n = samples * 2, b = new ArrayBuffer(44 + n), v = new DataView(b);
+    const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, n, true);
+    for (let i = 0; i < samples; i++) v.setInt16(44 + 2 * i, Math.round(33 * Math.sin(2 * Math.PI * 440 * i / 8000)), true);
+    return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+  }
+  let song;
+  async function play() {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'Slow Tides', artist: 'Harbour Lights', album: 'Low Season',
+      artwork: [{ src: 'icon-orange.png', sizes: '32x32', type: 'image/png' }]
+    });
+    song = document.createElement('audio');
+    song.src = wav(120);
+    document.body.append(song);
+    await song.play();
+    return 'song:' + (song.paused ? 'paused' : 'playing');
+  }
+  async function playPlain() {
+    document.title = '\u25B6\uFE0E Plain Song';
+    const og = document.createElement('meta');
+    og.setAttribute('property', 'og:image');
+    og.content = 'icon-orange.png';
+    document.head.append(og);
+    song = document.createElement('audio');
+    song.src = wav(120);
+    document.body.append(song);
+    await song.play();
+    return 'plain:' + (song.paused ? 'paused' : 'playing');
+  }
+  async function playLive() {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: 'Night Radio', artist: 'Harbour Lights' });
+    const badge = document.createElement('div');
+    badge.className = 'ytp-live-badge';
+    badge.textContent = 'Live';
+    document.body.append(badge);
+    song = document.createElement('audio');
+    song.src = wav(120);
+    document.body.append(song);
+    await song.play();
+    return 'live:' + (song.paused ? 'paused' : 'playing');
+  }
+  function where() { return 'at:' + Math.round(song.currentTime); }
+</script>

@@ -51,6 +51,50 @@ struct SiteSearchTests {
         #expect(!deactivated.takesTab)
     }
 
+    /// Arc's "New ChatGPT Message" (⌥⌘G) is a cloud AI partner Cra leaves out (docs/arc-parity.md); a site search
+    /// added on chrome://settings/searchEngines does the same from ⌘T: its shortcut, Tab, the message, Return opens
+    /// ChatGPT with it. What the reply on #828 tells people to set up.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/828"))
+    func anAddedChatSiteSearchTakesTabAndCarriesTheMessage() {
+        let chatGPT = ChromiumSearchEngine(id: 31, name: "ChatGPT", keyword: "gpt", url: "https://chatgpt.com/?q={searchTerms}")
+        #expect(chatGPT.takesTab)
+        let scope = SiteSearch.match("gpt", completion: "github.com", keywords: [Self.google, chatGPT])
+        #expect(scope?.name == "ChatGPT")
+        #expect(scope?.searchURL("Plan a trip to Rome & Florence?") == "https://chatgpt.com/?q=Plan%20a%20trip%20to%20Rome%20%26%20Florence%3F")
+    }
+
+    /// #854's own list, added on Chromium's page (Settings ▸ Profiles ▸ Search Settings…, which stores `%s` as
+    /// `{searchTerms}`): each short keyword scopes the bar to its engine, a one-letter one included, and the search
+    /// goes to its URL. Arc takes Tab only (its space trigger is off, docs/arc-reverse-engineering.md), so a
+    /// keyword with a space after it is a search of the words, not a scope. An added engine made the default
+    /// searches what's typed, as Brave Search does here.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/854"))
+    func addedEnginesTakeTheirKeywordsAndCanBeTheDefault() {
+        let github = ChromiumSearchEngine(id: 40, name: "GitHub", keyword: "gh", url: "https://github.com/search?q={searchTerms}")
+        let youtube = ChromiumSearchEngine(id: 41, name: "YouTube", keyword: "yt", url: "https://www.youtube.com/results?search_query={searchTerms}")
+        let wikipedia = ChromiumSearchEngine(id: 42, name: "Wikipedia", keyword: "w", url: "https://en.wikipedia.org/w/index.php?search={searchTerms}")
+        let brave = ChromiumSearchEngine(id: 43, name: "Brave Search", keyword: "br", url: "https://search.brave.com/search?q={searchTerms}")
+        let added = [Self.google, github, youtube, wikipedia, brave]
+        #expect(added.allSatisfy { $0.takesTab })
+
+        let gh = SiteSearch.match("gh", completion: "github.com", keywords: added)
+        #expect(gh?.name == "GitHub")
+        #expect(gh?.searchURL("swift testing") == "https://github.com/search?q=swift%20testing")
+        #expect(gh?.color == "#743FC7")   // GitHub's pill, as Arc keys it on the URL
+        #expect(SiteSearch.match("yt", completion: nil, keywords: added)?.searchURL("lofi") == "https://www.youtube.com/results?search_query=lofi")
+        #expect(SiteSearch.match("w", completion: nil, keywords: added)?.name == "Wikipedia")
+        #expect(SiteSearch.match("br", completion: nil, keywords: added)?.name == "Brave Search")
+        #expect(SiteSearch.match("GH", completion: nil, keywords: added)?.name == "GitHub")
+
+        // Tab, not Space.
+        #expect(SiteSearch.match("gh ", completion: nil, keywords: added) == nil)
+        #expect(SiteSearch.match("gh swift", completion: nil, keywords: added) == nil)
+
+        // Picked as the default on that page (Chromium's pref), the bar's plain search goes to it.
+        let picked = ChromiumSearchEngine(templateURLData: brave.templateURLData)
+        #expect(picked?.searchURL("privacy browser") == "https://search.brave.com/search?q=privacy%20browser")
+    }
+
     @Test func keywordsAroundArcsSites() {
         let keywords = [Self.google, Self.duck, Self.autoYouTube, Self.history, Self.wiki]
         // Typed out in full: the keyword, before Arc's sites ("goo" for a Google edited to that).

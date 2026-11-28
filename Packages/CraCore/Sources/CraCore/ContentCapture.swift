@@ -255,4 +255,30 @@ public enum ContentCapture {
         })()
         """
     }
+
+    // MARK: Little Window host selection (#835)
+
+    /// A candidate browser window that can host Capture for a standalone Little Window.
+    public struct HostWindow: Equatable, Sendable {
+        public let id: UUID
+        public let isStandalone: Bool
+
+        public init(id: UUID, isStandalone: Bool) {
+            self.id = id
+            self.isStandalone = isStandalone
+        }
+    }
+
+    /// Picks the normal browser window that hosts Capture for an ordinary Little Window:
+    /// prefers `lastNormalWindowID` (when non-standalone), else the first non-standalone window,
+    /// else `fallbackID` (#835).
+    public static func hostWindowID(
+        from windows: [HostWindow],
+        lastNormalWindowID: UUID?,
+        fallbackID: UUID? = nil
+    ) -> UUID? {
+        windows.first { $0.id == lastNormalWindowID && !$0.isStandalone }?.id
+            ?? windows.first { !$0.isStandalone }?.id
+            ?? fallbackID
+    }
 }

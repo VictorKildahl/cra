@@ -80,6 +80,16 @@ public enum SidebarMoreMenu {
         clamped(RGB.black.mixed(with: ink, 0.15).mixed(with: ink, 0.41).mixed(with: .white, 0.13))
     }
 
+    /// The menu's colours (#822). It is Arc's ArcMenu, the + menu's (the same measured fill and hover on both spaces):
+    /// in Light mode the space's light palette with black titles (ArcMenuTones), in Dark mode the tones measured above,
+    /// white titles and shortcuts at white 30 %.
+    public static func tones(theme: SpaceTheme, dark: Bool) -> ArcMenuTones {
+        guard dark else { return ArcMenuTones(theme: theme, dark: false) }
+        let ink = theme.shadedDark
+        return ArcMenuTones(fill: fill(shadedDark: ink), hover: highlight(shadedDark: ink), separator: highlight(shadedDark: ink),
+                            shortcut: RGB(1, 1, 1).mixed(with: fill(shadedDark: ink), 0.7))
+    }
+
     private static func clamped(_ c: RGB) -> RGB {
         RGB(min(max(c.r, 0), 1), min(max(c.g, 0), 1), min(max(c.b, 0), 1))
     }

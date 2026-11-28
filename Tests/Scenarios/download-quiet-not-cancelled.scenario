@@ -1,0 +1,25 @@
+# A download Chromium has gone quiet about stays running (GitHub #895). ${TRICKLE} sends the first
+# 64 KB of a 10 MB file and holds the rest; closing the tab that started it leaves the profile with
+# no page for the engine to report it to, so nothing comes for longer than the watchdog's 5 s. With
+# Safe Browsing on, the engine writes it to "Unconfirmed <n>.crdownload", neither the file nor
+# <file>.crdownload: the watchdog read that as cancelled, and the row said Cancelled while the
+# download carried on. A page in the profile again, its reports come back, and it is cancelled
+# from its row, so the quit doesn't ask "Downloads in progress".
+# promise: #895
+home
+budget rss=600 stalls50=5
+cra://open?url=${TRICKLE}/quiet.bin
+wait 2
+cra://debug?downloadState=started
+expect-log download state started: running=true progress=0.007 rows=\["66 KB of 10 MB
+cra://action/closeTab
+wait 10
+cra://debug?downloadState=quiet
+expect-log download state quiet: running=true progress=0.007 rows=\["66 KB of 10 MB
+cra://open?url=${PAGE}?n=after-quiet
+wait 2
+cra://debug?download=cancel
+expect-log download control: cancel
+wait 1
+cra://debug?downloadState=cancelled
+expect-log download state cancelled: running=false progress=none rows=\["Cancelled"\]

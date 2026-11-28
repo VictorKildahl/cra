@@ -11,6 +11,7 @@ enum BackForwardMenuViewTests {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         try historyMenuCase()
+        commandPickCase()
         print("Back and Forward history menu: \(checks) checks passed")
     }
 
@@ -126,8 +127,44 @@ enum BackForwardMenuViewTests {
         parent.close()
     }
 
-    private static func key(_ code: UInt16, characters: String = "") -> NSEvent {
-        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+    /// ⌘-click or ⌘Return on a row: its page in a new tab (BackForwardMenu.pick), not the tab going there;
+    /// a plain click or Return still goes there, and a menu with nowhere to open a tab takes ⌘ as plain.
+    @MainActor
+    private static func commandPickCase() {
+        let items = ["One", "Two"].map { BackForwardMenuItem(title: $0, icon: nil, flip: false) }
+        var picks: [Int?] = []
+        var newTabs: [Int] = []
+        let menu = BackForwardMenuView(items: items) { picks.append($0) }
+        menu.onNewTab = { newTabs.append($0) }
+        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 232, height: 114),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = menu
+        let second = menu.convert(NSPoint(x: 100, y: 80), to: nil)
+        menu.mouseDown(with: mouse(.leftMouseDown, point: second, window: window, modifiers: .command))
+        menu.mouseUp(with: mouse(.leftMouseUp, point: second, window: window, modifiers: .command))
+        expect(newTabs == [1] && picks.isEmpty, "a ⌘-click opens that row's page in a new tab and the tab doesn't go there")
+        menu.mouseDown(with: mouse(.leftMouseDown, point: second, window: window, modifiers: [.command, .shift]))
+        menu.mouseUp(with: mouse(.leftMouseUp, point: second, window: window, modifiers: [.command, .shift]))
+        expect(newTabs == [1, 1] && picks.isEmpty, "⇧ with ⌘ opens it in a new tab too")
+        menu.mouseDown(with: mouse(.leftMouseDown, point: second, window: window))
+        menu.mouseUp(with: mouse(.leftMouseUp, point: second, window: window))
+        expect(picks == [1] && newTabs.count == 2, "a plain click still goes there in the tab")
+        _ = menu.handleKey(key(126))
+        _ = menu.handleKey(key(36, modifiers: .command))
+        expect(newTabs == [1, 1, 1] && picks == [1], "⌘Return on the picked row opens it in a new tab")
+        _ = menu.handleKey(key(36))
+        expect(picks == [1, 1], "Return goes there")
+        let plain = BackForwardMenuView(items: items) { picks.append($0) }
+        window.contentView = plain
+        plain.mouseDown(with: mouse(.leftMouseDown, point: second, window: window, modifiers: .command))
+        plain.mouseUp(with: mouse(.leftMouseUp, point: second, window: window, modifiers: .command))
+        expect(picks == [1, 1, 1], "without a new-tab handler a ⌘-click goes there")
+        window.close()
+    }
+
+    private static func key(_ code: UInt16, characters: String = "", modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0,
                          context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!
     }
 

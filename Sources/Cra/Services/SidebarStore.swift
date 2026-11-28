@@ -66,6 +66,8 @@ final class SidebarStore {
     /// Per window, the tab shown before the selected one: a close goes back to it (CloseSuccessor).
     /// Not saved: after a relaunch it has no page, so Arc wouldn't go back to it either.
     @ObservationIgnored private var previousTab: [UUID: UUID] = [:]
+    /// Per window, every tab it showed before, newest first: a Favorite's ⌘W walks back through them (#870).
+    @ObservationIgnored private var shownTabs: [UUID: ShownTabs<UUID>] = [:]
     /// Per window and space, the pinned row a collapsed pinned section keeps in sight (PinnedPeek).
     /// Not saved, like Arc's peekedPinnedSidebarItemID. Observed: the collapsed list draws it.
     private var pinnedPeeks: [UUID: [UUID: UUID]] = [:]
@@ -190,6 +192,10 @@ final class SidebarStore {
             it.children = it.children.filter { items[$0] != nil && items[$0]?.parentID == id }
             items[id] = it
         }
+        // A split with no panes, or one, that a sync merge made before the fix: a row with nothing
+        // to close, on every Mac (#921). Its pane, if any, takes its place.
+        var table = items.all
+        for id in ThinSplits.collapse(&table) { items[id] = table[id] }
         for (id, it) in items.all where it.container == nil {
             if let p = it.parentID, let parent = items[p], parent.children.contains(id) { continue }
             // Orphan: put it in the first space's today list rather than losing it.
@@ -287,7 +293,10 @@ final class SidebarStore {
         // Whatever changes what the window shows (a pick, a close, a space switch), the tab it
         // showed is the one a close goes back to (CloseSuccessor; Arc counts space switches too).
         let shown = { (s: WindowSession) in s.focusedSpaceID.flatMap { s.selectedTabPerSpace[$0] } }
-        if shown(w) != shown(prefs.windows[i]) { previousTab[w.id] = shown(prefs.windows[i]) }
+        if shown(w) != shown(prefs.windows[i]) {
+            previousTab[w.id] = shown(prefs.windows[i])
+            if let left = shown(prefs.windows[i]) { shownTabs[w.id, default: ShownTabs()].left(left) }
+        }
         // A pinned tab coming on screen is the one its collapsed section keeps in sight; a
         // favorite or a Today tab leaves the one before (Arc's peekedPinnedSidebarItemID).
         var peeks = pinnedPeeks[w.id] ?? [:]
@@ -769,7 +778,7 @@ final class SidebarStore {
     /// as in Arc (RecentTabOrder.listsPane, #784). Not saved: a relaunch unloads them anyway.
     var favoritesClosedWithCmdW: Set<UUID> = []
 
-    func selectTab(_ id: UUID?, window: UUID? = nil) {
+    func selectTab(_ id: UUID?, in preferredSpace: UUID? = nil, window: UUID? = nil) {
         var w = self.window(window).id
         // A space's tab picked while an incognito or Blank Window is in front (a link from
         // another app, the Library) opens in the last normal window.
@@ -780,7 +789,10 @@ final class SidebarStore {
             touch()
             return
         }
-        let sid = spaceID(ofItem: id, window: w) ?? focused
+        // A shared favorite belongs to every space on its profile; callers that know which space
+        // the action started in (Picture in Picture's Back to Tab, #843) pass it so it returns
+        // there rather than the window's current space or the first space in sidebar order.
+        let sid = preferredSpace.flatMap { isInSpace(id, $0) ? $0 : nil } ?? spaceID(ofItem: id, window: w) ?? focused
         // Incognito and Blank Windows show only their own tabs, and only there.
         guard isStandalone(window: w) ? sid == focused : !isStandalone(space: sid) else { return }
         updateWindow(w) {
@@ -1064,6 +1076,7 @@ final class SidebarStore {
         for (id, _) in spaces where !isStandalone(space: id) { invalidateTidySpace(id); spaces[id] = nil }
         storedThemes = [:]
         previousTab = [:]
+        shownTabs = [:]
         for s in doc.spaces { spaces[s.id] = s }
         profiles = doc.profiles ?? []
         defaultProfileName = doc.defaultProfileName
@@ -1705,6 +1718,7 @@ final class SidebarStore {
             }
             prefs.windows = windows
             for (w, tid) in previousTab { if let r = replaced[tid] { previousTab[w] = r } }
+            for w in shownTabs.keys { for (old, new) in replaced { shownTabs[w]?.replace(old, with: new) } }
         }
         if changed { touch() }
     }
@@ -1813,6 +1827,22 @@ final class SidebarStore {
             moveTabAndFollow(open, toSpace: sid, window: window)
         } else {
             moveTab(id, toSpace: sid)
+        }
+    }
+
+    /// Air Traffic Control redirect routing (#868): moves a newly opened non-pinned tab to `sid`,
+    /// following with `window` when it was in front while restoring `activeTabBeforeCreationID` in the
+    /// originating space so switching back keeps the originating tab selected.
+    func rerouteTab(_ id: UUID, toSpace sid: UUID, window: UUID?) {
+        guard items[id]?.isTab == true, !isPinned(id), spaces[sid] != nil, !isStandalone(space: sid) else { return }
+        let from = spaceID(ofItem: id)
+        let previous = items[id]?.tab?.activeTabBeforeCreationID
+        moveTab(id, toSpace: sid, window: window)
+        guard let from, from != sid, let previous, items[previous]?.isTab == true, isInSpace(previous, from) else { return }
+        let w = self.window(window).id
+        if prefs.windows.first(where: { $0.id == w })?.selectedTabPerSpace[from] == nil {
+            updateWindow(w) { $0.selectedTabPerSpace[from] = previous }
+            touch()
         }
     }
 
@@ -2340,7 +2370,23 @@ final class SidebarStore {
     /// tabs while `id` is still among them, empty for a pinned tab.
     private func closeSuccessor(of id: UUID, in sid: UUID, window w: UUID, list: [UUID]) -> UUID? {
         let back = previousTab[w].flatMap { isInSpace($0, sid) ? $0 : nil }
-        return CloseSuccessor.next(closing: id, previous: back, hasPage: hasPage, list: list)
+        return CloseSuccessor.next(closing: id, previous: back, hasPage: isOpenToGoBackTo, list: list)
+    }
+
+    /// A tab a close can go back to: loaded, and not a Favorite closed with ⌘W, whose page runs on (#740, #870).
+    private func isOpenToGoBackTo(_ id: UUID) -> Bool {
+        CloseSuccessor.counts(hasPage: hasPage(id), closedWithCmdW: favoritesClosedWithCmdW.contains(id))
+    }
+
+    /// A Favorite ⌘W deselected while selected (#740, #804): the tab to show instead, walking back through the tabs the
+    /// window showed before, so repeated ⌘W goes F3 → F2 → F1 as in Arc, not back and forth (#870). Call it after the
+    /// Favorite's panes are in `favoritesClosedWithCmdW`.
+    func closeSuccessor(ofDeselectedFavorite id: UUID, window w: UUID) -> UUID? {
+        guard let sid = spaceID(ofItem: id, window: w) else { return nil }
+        return CloseSuccessor.afterDeselectedFavorite(closing: id, isSplit: splitContaining(id) != nil,
+                                                      shownBefore: shownTabs[w]?.newestFirst ?? []) {
+            items[$0]?.isTab == true && isInSpace($0, sid) && isOpenToGoBackTo($0)
+        }
     }
 
     /// A pinned tab, favorite or pinned split closed (unloaded) while selected: the tab to show
@@ -2348,7 +2394,7 @@ final class SidebarStore {
     func closeSuccessor(ofPinned id: UUID, window w: UUID) -> UUID? {
         guard let sid = spaceID(ofItem: id, window: w) else { return nil }
         let back = previousTab[w].flatMap { isInSpace($0, sid) ? $0 : nil }
-        return CloseSuccessor.afterPinned(closing: id, isSplit: splitContaining(id) != nil, previous: back, hasPage: hasPage)
+        return CloseSuccessor.afterPinned(closing: id, isSplit: splitContaining(id) != nil, previous: back, hasPage: isOpenToGoBackTo)
     }
 
     @discardableResult

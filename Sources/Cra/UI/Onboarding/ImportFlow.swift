@@ -69,6 +69,8 @@ final class ImportFlowModel {
     private(set) var source: ImportSource?
     private(set) var plan: ImportPlan?
     private(set) var loadError: String?
+    /// Reads the picked browser's plan; a later pick drops an earlier one's.
+    private let planLoader = ImportPlanLoader()
     /// macOS won't let Cra read the picked browser's folder until Cra has Full Disk Access.
     private(set) var needsFullDiskAccess = false
 
@@ -253,14 +255,15 @@ final class ImportFlowModel {
         exportFileName = nil
         exportError = nil
         exportTopSites = []
+        plan = nil
         if s.needsExportedFile || needsFullDiskAccess {
-            plan = nil
+            planLoader.cancel()
         } else {
-            do {
-                setPlan(try s.plan())
-            } catch {
-                plan = nil
-                loadError = error.localizedDescription
+            planLoader.load({ try s.plan() }) { result in
+                switch result {
+                case .success(let p): self.setPlan(p)
+                case .failure(let error): self.loadError = error.localizedDescription
+                }
             }
         }
         credentialProfiles = s.credentialProfiles
@@ -285,7 +288,7 @@ final class ImportFlowModel {
         switch source.kind {
         case .safari: go(.safariExport)
         case .firefox, .zen: go(.passwordsFile)
-        case .arc, .dia, .yab, .ardia, .phi, .chromium: credentialProfiles.isEmpty ? goToSpaces() : go(.unlock)
+        case .arc, .dia, .yab, .ardia, .phi, .crest, .chromium: credentialProfiles.isEmpty ? goToSpaces() : go(.unlock)
         }
     }
 

@@ -4,8 +4,7 @@ import AppKit
 struct BackForwardMenuItem {
     let title: String
     let icon: NSImage?
-    /// A one-colour glyph (GitHub's) drawn white, as on the sidebar's dark fills. No icon: Arc's
-    /// grey square.
+    /// A one-colour dark glyph (GitHub's), drawn white on the dark menu. No icon: Arc's grey square.
     let flip: Bool
 }
 
@@ -18,6 +17,9 @@ final class BackForwardMenuView: NSView, ArcMenuContent {
     var rowCount: Int { items.count }
     private let colors: SidebarCreationMenuColors
     private let onPick: (Int?) -> Void
+    /// A row picked with ⌘ held (a click or ⌘Return): its page in a new tab (BackForwardMenu.pick).
+    /// Unset, a ⌘-pick goes there in the tab as a plain one does.
+    var onNewTab: ((Int) -> Void)?
     /// Nothing is picked until the pointer or an arrow key picks a row.
     private(set) var selected: Int? { didSet { if selected != oldValue { needsDisplay = true } } }
     private var pressed: Int?
@@ -56,7 +58,7 @@ final class BackForwardMenuView: NSView, ArcMenuContent {
             icon.layer?.cornerCurve = .continuous
             if let image = item.icon {
                 icon.imageScaling = .scaleProportionallyUpOrDown
-                if item.flip {
+                if item.flip, colors.isDark {
                     let t = image.copy() as! NSImage
                     t.isTemplate = true
                     icon.image = t
@@ -67,11 +69,11 @@ final class BackForwardMenuView: NSView, ArcMenuContent {
                 icon.layer?.cornerRadius = L.faviconSize * 0.22
                 icon.layer?.masksToBounds = true
             } else {
-                // Arc's stand-in for a page with no favicon: a 14 pt rounded square, white at 35 %.
+                // Arc's stand-in for a page with no favicon: a 14 pt rounded square, the titles' colour at 35 %.
                 let inset = (L.faviconSize - L.placeholderSize) / 2
                 let square = NSView(frame: NSRect(x: inset, y: inset, width: L.placeholderSize, height: L.placeholderSize))
                 square.wantsLayer = true
-                square.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.35).cgColor
+                square.layer?.backgroundColor = colors.ink.withAlphaComponent(0.35).cgColor
                 square.layer?.cornerRadius = 3
                 square.layer?.cornerCurve = .continuous
                 icon.addSubview(square)
@@ -105,7 +107,7 @@ final class BackForwardMenuView: NSView, ArcMenuContent {
             colors.hover.setFill()
             NSBezierPath(roundedRect: L.rowRect(selected), xRadius: L.rowCornerRadius, yRadius: L.rowCornerRadius).fill()
         }
-        let attributes: [NSAttributedString.Key: Any] = [.font: Self.titleFont, .foregroundColor: NSColor.white]
+        let attributes: [NSAttributedString.Key: Any] = [.font: Self.titleFont, .foregroundColor: colors.ink]
         for (index, item) in items.enumerated() {
             let rect = L.rowRect(index)
             let text = Self.fitted(item.title) as NSString
@@ -133,6 +135,15 @@ final class BackForwardMenuView: NSView, ArcMenuContent {
 
     @objc private func choose(_ sender: NSButton) { onPick(sender.tag) }
 
+    /// Row `index` picked by a click or Return, ⌘ held or not.
+    private func pick(_ index: Int, _ event: NSEvent) {
+        if BackForwardMenu.pick(commandHeld: event.modifierFlags.contains(.command)) == .newTab, let onNewTab {
+            onNewTab(index)
+        } else {
+            onPick(index)
+        }
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
@@ -149,14 +160,14 @@ final class BackForwardMenuView: NSView, ArcMenuContent {
     override func mouseExited(with event: NSEvent) { selected = nil }
     override func mouseDown(with event: NSEvent) { pressed = index(at: event) }
     override func mouseUp(with event: NSEvent) {
-        if let pressed, index(at: event) == pressed { onPick(pressed) }
+        if let pressed, index(at: event) == pressed { pick(pressed, event) }
         pressed = nil
     }
     func handleKey(_ event: NSEvent) -> Bool {
         switch event.keyCode {
         case 53: onPick(nil)
         case 36, 76:
-            if let selected { onPick(selected) }
+            if let selected { pick(selected, event) }
         case 125, 126:
             guard !items.isEmpty else { return true }
             let step = event.keyCode == 125 ? 1 : -1

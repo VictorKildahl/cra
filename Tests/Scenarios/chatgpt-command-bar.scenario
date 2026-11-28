@@ -1,0 +1,36 @@
+# promise: #828
+# Arc Max's ChatGPT in the Command Bar, as Arc 1.174 does it (measured live 27 Nov 2026, GitHub #828): with the switch
+# on, "chatg" in ⌘T offers ChatGPT ("Ask ChatGPT  Tab"), Tab scopes the bar to it ("Send a Message…") and its row asks
+# ChatGPT on chatgpt.com; a question in the plain bar gets the "Ask ChatGPT" row; ⌥⌘G (New ChatGPT Message) opens the
+# bar already scoped to ChatGPT. Nothing is sent: the rows are read, not opened.
+budget rss=700 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "searchSuggestions": false, "chatGPTInCommandBar": true}
+pace 0.5
+cra://open?url=${PAGE}?n=gpt
+wait 2
+
+cra://commandbar?query=chatg
+wait 1
+cra://debug?commandBarScope=offered
+expect-log command bar scope offered: none, .* hint Ask ChatGPT
+cra://debug?commandBarScope=enter
+expect-log command bar scope enter: ChatGPT, .* placeholder Send a Message…
+cra://commandbar?query=what%20is%202%2B2
+wait 1
+cra://debug?commandBarRows=scoped
+expect-log Cra command bar rows scoped: open=1 mode=newTab selected=0 other:https://chatgpt\.com/\?q=what%20is%202\+2 
+cra://dismiss
+wait 1
+
+cra://commandbar?query=what%20is%20two%20plus%20two
+wait 1
+cra://debug?commandBarRows=plain
+expect-log Cra command bar rows plain: open=1 .*other:https://chatgpt\.com/\?q=what%20is%20two%20plus%20two
+cra://dismiss
+wait 1
+
+cra://action/newChatGPTMessage
+wait 1
+cra://debug?commandBarScope=gpt
+expect-log command bar scope gpt: ChatGPT, .* placeholder Send a Message…
+cra://dismiss

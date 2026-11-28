@@ -24,7 +24,7 @@ final class SidebarMorePanel: NSPanel {
     private var monitors: [Any] = []
     private var closing = false
 
-    init(items: [Item], ink: RGB) {
+    init(items: [Item], colors: SidebarCreationMenuColors) {
         let size = NSSize(width: SidebarMoreMenu.width,
                           height: SidebarMoreMenu.height(rows: items.count) + SidebarMoreMenu.arrowHeight)
         super.init(contentRect: NSRect(origin: .zero, size: size),
@@ -34,8 +34,8 @@ final class SidebarMorePanel: NSPanel {
         hasShadow = true
         hidesOnDeactivate = false
         animationBehavior = .none
-        appearance = NSAppearance(named: .darkAqua)
-        let view = SidebarMoreMenuView(frame: NSRect(origin: .zero, size: size), items: items, ink: ink)
+        appearance = NSAppearance(named: colors.isDark ? .darkAqua : .aqua)
+        let view = SidebarMoreMenuView(frame: NSRect(origin: .zero, size: size), items: items, colors: colors)
         view.onPick = { [weak self] item in
             self?.dismiss()
             item.run()
@@ -97,20 +97,14 @@ final class SidebarMorePanel: NSPanel {
 private final class SidebarMoreMenuView: NSView {
     var onPick: ((SidebarMorePanel.Item) -> Void)?
     private let items: [SidebarMorePanel.Item]
-    private let fill: NSColor
-    private let highlight: NSColor
+    private let colors: SidebarCreationMenuColors
     private var hovered: Int? { didSet { if hovered != oldValue { needsDisplay = true } } }
 
     private static let titleFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
     private static let keyFont = NSFont.systemFont(ofSize: 13)
-    /// Measured on Arc's popover: a disabled row's icon and text, an enabled row's shortcut.
-    private static let disabled = NSColor(srgbRed: 121 / 255, green: 120 / 255, blue: 129 / 255, alpha: 1)
-    private static let shortcut = NSColor.white.withAlphaComponent(0.3)
-
-    init(frame: NSRect, items: [SidebarMorePanel.Item], ink: RGB) {
+    init(frame: NSRect, items: [SidebarMorePanel.Item], colors: SidebarCreationMenuColors) {
         self.items = items
-        fill = NSColor(SidebarMoreMenu.fill(shadedDark: ink))
-        highlight = NSColor(SidebarMoreMenu.highlight(shadedDark: ink))
+        self.colors = colors
         super.init(frame: frame)
         hovered = items.firstIndex { $0.enabled }
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
@@ -152,17 +146,17 @@ private final class SidebarMoreMenuView: NSView {
         arrow.line(to: NSPoint(x: mid, y: 0))
         arrow.line(to: NSPoint(x: mid + m.arrowWidth / 2, y: m.arrowHeight + 0.5))
         arrow.close()
-        fill.setFill()
+        colors.fill.setFill()
         body.fill()
         arrow.fill()
 
         for (i, item) in items.enumerated() {
             let r = rowRect(i)
             if hovered == i {
-                highlight.setFill()
+                colors.hover.setFill()
                 NSBezierPath(roundedRect: r, xRadius: m.highlightRadius, yRadius: m.highlightRadius).fill()
             }
-            let ink = item.enabled ? NSColor.white : Self.disabled
+            let ink = item.enabled ? colors.ink : colors.disabled
             if let img = NSImage(systemSymbolName: item.symbol, accessibilityDescription: nil)?
                 .withSymbolConfiguration(.init(pointSize: 15, weight: .medium).applying(.init(paletteColors: [ink]))) {
                 let s = img.size
@@ -173,7 +167,7 @@ private final class SidebarMoreMenuView: NSView {
             let ts = title.size()
             title.draw(at: NSPoint(x: m.titleX, y: (r.midY - ts.height / 2).rounded()))
             let keys = NSAttributedString(string: item.keys.joined(separator: " "),
-                                          attributes: [.font: Self.keyFont, .foregroundColor: item.enabled ? Self.shortcut : Self.disabled])
+                                          attributes: [.font: Self.keyFont, .foregroundColor: item.enabled ? colors.shortcut : colors.disabled])
             let ks = keys.size()
             keys.draw(at: NSPoint(x: (w - m.shortcutTrailing - ks.width).rounded(), y: (r.midY - ks.height / 2).rounded()))
         }

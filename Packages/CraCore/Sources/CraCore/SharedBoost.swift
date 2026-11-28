@@ -38,6 +38,8 @@ public struct SharedBoost: Codable, Equatable, Sendable {
     public var preview: String?
     public var hue: Double?
     public var strength: Double?
+    /// Where the small wheel handle sits, when it was moved off Arc's eighth-turn default.
+    public var darkHue: Double?
     public var invert: Bool?
     public var contrast: Double?
     public var brightness: Double?
@@ -63,7 +65,10 @@ public struct SharedBoost: Codable, Equatable, Sendable {
     /// site's own are left out, so the link is as short as the boost.
     public init(_ boost: Boost) {
         self.init(name: boost.name, host: boost.host)
-        if boost.strength > 0 { hue = boost.hue; strength = boost.strength }
+        if boost.strength > 0 {
+            hue = boost.hue; strength = boost.strength
+            if boost.darkHue != BoostWheel.accentOffset { darkHue = boost.darkHue }
+        }
         if boost.invert { invert = true }
         if boost.contrast != 50 { contrast = boost.contrast }
         if boost.brightness != 50 { brightness = boost.brightness }
@@ -81,6 +86,7 @@ public struct SharedBoost: Codable, Equatable, Sendable {
         var b = Boost(host: host, name: name)
         b.hue = hue ?? 0
         b.strength = strength ?? 0
+        b.darkHue = darkHue ?? BoostWheel.accentOffset
         b.invert = invert ?? false
         b.contrast = contrast ?? 50
         b.brightness = brightness ?? 50
@@ -114,6 +120,7 @@ public struct SharedBoost: Codable, Equatable, Sendable {
         }
         range(hue, 0...1, "The hue")
         range(strength, 0...1, "The tint")
+        range(darkHue, 0...1, "The secondary hue")
         range(contrast, 0...100, "Contrast")
         range(brightness, 0...100, "Brightness")
         range(saturation, 0...100, "Saturation")

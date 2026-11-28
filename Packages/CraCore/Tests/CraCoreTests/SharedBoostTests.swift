@@ -50,6 +50,25 @@ struct SharedBoostTests {
         #expect(back.stylesheet == mine.stylesheet)
     }
 
+    /// A moved small handle is part of the look, so it goes in the link; an untouched one stays out.
+    @Test func theSmallHandlesHueTravels() throws {
+        var mine = Boost(host: "example.com")
+        mine.hue = 0.3; mine.strength = 0.6; mine.darkHue = 0.42
+        mine.css = "a { color: red }"
+        let shared = SharedBoost(mine)
+        #expect(shared.darkHue == 0.42)
+        let link = try #require(shared.link)
+        let back = try #require(SharedBoost.from(link: link)).boost()
+        #expect(back.darkHue == 0.42)
+        let tint = try #require(back.tint)
+        #expect(abs(tint.darkHue - 0.42) < 1e-9)
+        mine.darkHue = BoostWheel.accentOffset
+        #expect(SharedBoost(mine).darkHue == nil)
+        var bad = shared
+        bad.darkHue = 2
+        #expect(bad.problems.contains("The secondary hue is out of range."))
+    }
+
     /// A link someone hand-made with a js key: it installs without it.
     @Test func ignoresAScriptInTheLink() throws {
         let json = #"{"v":1,"name":"Sneaky","host":"example.com","css":"body{color:red}","js":"alert(1)"}"#

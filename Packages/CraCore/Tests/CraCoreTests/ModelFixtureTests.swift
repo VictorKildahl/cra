@@ -207,6 +207,19 @@ struct ModelFixtureTests {
         #expect(NSDictionary(dictionary: saved).isEqual(to: file))
     }
 
+    /// Since easels sync, each bundle in sync-history.json keeps its easels (without pictures), what
+    /// Easel.merge merges against. An entry, or a whole history, from an older Cra has none.
+    @Test func syncHistoryWithEaselsLoadsAsRecorded() throws {
+        let (loaded, recorded) = try Self.load("sync-history-easels.json", as: SyncHistory.self)
+        #expect(loaded == recorded)
+        #expect(loaded.entries.map { $0.easels?.map(\.title) } == [["Board", "Plan"], nil])
+        #expect(try Self.load("sync-history.json", as: SyncHistory.self).loaded.entries.allSatisfy { $0.easels == nil })
+        #expect(try Self.roundTrips(loaded))
+        let saved = try #require(JSONSerialization.jsonObject(with: Self.encoder.encode(loaded)) as? [String: Any])
+        let file = try #require(JSONSerialization.jsonObject(with: Self.data("recorded", "sync-history-easels.json")) as? [String: Any])
+        #expect(NSDictionary(dictionary: saved).isEqual(to: file))
+    }
+
     @Test func archiveHistoryAndRankingLoadAsRecorded() throws {
         let archive = try Self.load("archive.json", as: [ArchivedItem].self)
         #expect(archive.loaded == archive.recorded)
@@ -304,6 +317,21 @@ struct ModelFixtureTests {
         #expect(loaded.profiles(of: "nngceckbapebfimnlniiiahkandclblb", allProfiles: all) == all)
         #expect(loaded.plan(profile: all[2], installed: ["cjpalhdlnbpafiamejdnhcphjbkeiagm", "nngceckbapebfimnlniiiahkandclblb"])
                 == .init(uninstall: ["cjpalhdlnbpafiamejdnhcphjbkeiagm"]))
+    }
+
+    /// shared-extensions.json after discussion #595's follow-up: an opt-in share (its profiles, the profile whose data
+    /// it uses, switched off) beside a share from before (every profile but the excluded), which keeps its shape.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/595"))
+    func optInSharedExtensionsLoadAsRecorded() throws {
+        let (loaded, recorded) = try Self.load("shared-extensions-opt-in.json", as: SharedExtensions.self)
+        #expect(loaded == recorded)
+        #expect(try Self.roundTrips(loaded))
+        let all = ["Default", "Profile B0000000-0000-0000-0000-000000000001", "Profile B0000000-0000-0000-0000-000000000002"]
+        #expect(loaded.profiles(of: "bpoadfkcbjbfhfodiogcnhhhpibjhbnh", allProfiles: all) == Array(all.prefix(2)))
+        #expect(loaded.home(of: "bpoadfkcbjbfhfodiogcnhhhpibjhbnh") == all[1])
+        #expect(!loaded.isOn("bpoadfkcbjbfhfodiogcnhhhpibjhbnh"))
+        #expect(loaded.profiles(of: "cjpalhdlnbpafiamejdnhcphjbkeiagm", allProfiles: all) == Array(all.prefix(2)))
+        #expect(loaded.home(of: "cjpalhdlnbpafiamejdnhcphjbkeiagm") == nil)
     }
 
     /// imported-browsers.json (#757): the browsers imported from, whose own folders Cra may read

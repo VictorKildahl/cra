@@ -1,0 +1,52 @@
+# promise: #595
+# Discussion #595's follow-up (Anoninz): an extension shared across Profiles uses the data of the profile it was set up
+# in from every profile it is shared with, so it is signed in and set up once. A value its options page keeps in
+# chrome.storage.local in Personal (Default, the home) is there in Random (on the profile Hobbies), a change made in
+# Random reaches storage.onChanged there and lands in Personal's data, and one switch turns it off in both. Settings
+# lists it under Shared across Profiles, and chrome://extensions shows its Remove turned off with where to remove it.
+budget rss=900 stalls50=20
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}
+seed sidebar.json {"version":1,"spaceOrder":["A0000000-0000-0000-0000-000000000001","A0000000-0000-0000-0000-000000000002"],"spaces":[{"id":"A0000000-0000-0000-0000-000000000001","title":"Personal","emoji":"🏠","favoritesContainerID":"C0000000-0000-0000-0000-000000000011","pinnedContainerID":"C0000000-0000-0000-0000-000000000012","todayContainerID":"C0000000-0000-0000-0000-000000000013","createdAt":"2026-11-06T08:00:00Z","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}},{"id":"A0000000-0000-0000-0000-000000000002","title":"Random","emoji":"🎲","favoritesContainerID":"C0000000-0000-0000-0000-000000000021","pinnedContainerID":"C0000000-0000-0000-0000-000000000022","todayContainerID":"C0000000-0000-0000-0000-000000000023","createdAt":"2026-11-06T08:00:00Z","profileID":"B0000000-0000-0000-0000-000000000001","theme":{"colors":["#8389FF","#8389FF"],"intensity":0.5,"noise":0,"appearance":"light","accent":"#8389FF","solid":true,"key":["#8389FF"]}}],"profiles":[{"id":"B0000000-0000-0000-0000-000000000001","name":"Hobbies"}],"items":[{"id":"C0000000-0000-0000-0000-000000000011","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000012","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000013","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000001"}}}}},{"id":"C0000000-0000-0000-0000-000000000021","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"favorites":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000022","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"pinned":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}},{"id":"C0000000-0000-0000-0000-000000000023","children":[],"isUnread":false,"createdAt":"2026-11-06T08:00:00Z","data":{"container":{"_0":{"today":{"spaceID":"A0000000-0000-0000-0000-000000000002"}}}}}]}
+extension ${FIXTURES}/Extension
+cra://open?url=${PAGE}?n=personal&space=A0000000-0000-0000-0000-000000000001
+wait 3
+cra://debug?shareExtension=${EXTENSION_ID}&home=Default&with=Default,Profile%20B0000000-0000-0000-0000-000000000001
+expect-log shared extension ${EXTENSION_ID}: shared from Default with Default, Profile B0000000-0000-0000-0000-000000000001
+cra://open?url=${PAGE}?n=random&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?extensionSections=shared
+expect-log extension sections shared: Shared across Profiles \[${EXTENSION_ID}\]
+expect-log extension sections shared: ${EXTENSION_ID} home Default on=1
+# Personal (the home) keeps a value.
+cra://open?url=chrome-extension://${EXTENSION_ID}/options.html&space=A0000000-0000-0000-0000-000000000001
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.storage.local.set({shared595:'from-personal'}).then(()=>'personal-set:ok')","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*personal-set:ok
+cra://action/closeTab
+# Random reads it, and its own change reaches storage.onChanged there.
+cra://open?url=chrome-extension://${EXTENSION_ID}/options.html&space=A0000000-0000-0000-0000-000000000002
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.storage.local.get('shared595').then(v=>'random-get:'+v.shared595)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*random-get:from-personal
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>{chrome.storage.onChanged.addListener((c,a)=>r('random-changed:'+a+':'+c.shared595.newValue));chrome.storage.local.set({shared595:'from-random'})})","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*random-changed:local:from-random
+cra://action/closeTab
+# chrome://extensions (in Personal): Remove is there, turned off, and says where it is removed.
+cra://open?url=${PAGE}?n=personal-again&space=A0000000-0000-0000-0000-000000000001
+wait 2
+cra://open?url=chrome://extensions/?id=${EXTENSION_ID}
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"new Promise(r=>setTimeout(()=>{const m=document.querySelector('extensions-manager');const d=m?m.shadowRoot.querySelector('extensions-detail-view'):null;const rm=d?d.shadowRoot.querySelector('[id=remove-extension]'):null;r('remove-row:'+(rm?(rm.hidden?'hidden':(rm.disabled?'disabled':'enabled'))+'/'+rm.getAttribute('sub-label'):'missing'))},1500))","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*remove-row:disabled/Cra manages this extension. Remove it, or choose its profiles, in Cra’s Settings ▸ Extensions.
+# Back in Personal, the value Random wrote is Personal's.
+cra://open?url=chrome-extension://${EXTENSION_ID}/options.html&space=A0000000-0000-0000-0000-000000000001
+wait 3
+cra://debug?cdp=Runtime.evaluate&params={"expression":"chrome.storage.local.get('shared595').then(v=>'personal-get:'+v.shared595)","awaitPromise":true}
+expect-log Cra cdp Runtime.evaluate .*personal-get:from-random
+# One switch: off in Settings is off in both profiles.
+cra://debug?extensionOn=${EXTENSION_ID}&on=0
+expect-log shared extension ${EXTENSION_ID}: turned off in all its profiles
+expect-log shared extension ${EXTENSION_ID}: off in Default$
+expect-log shared extension ${EXTENSION_ID}: off in Profile B0000000-0000-0000-0000-000000000001$
+cra://debug?extensionOn=${EXTENSION_ID}&on=1
+expect-log shared extension ${EXTENSION_ID}: on in Profile B0000000-0000-0000-0000-000000000001$

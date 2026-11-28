@@ -158,6 +158,7 @@
 #include "components/url_formatter/url_formatter.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/common/api/extension_action/action_info.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_registrar.h"
 #include "chrome/browser/extensions/menu_manager.h"
 #include "extensions/browser/extension_system.h"
@@ -187,6 +188,8 @@ extern "C" int CraEngineMain(int argc, const char** argv);
 
 @interface CraBrowser ()
 - (void)adoptContents:(content::WebContents*)contents;
+/// The new setDocumentStartScript: scripts for the page's next document (#845).
+- (void)refreshDocumentStartScripts;
 /// The page's Boost colorize for its WebPreferences (#602), empty for none.
 - (std::string)boostTintForPrefs;
 - (void)contentsCreated:(content::WebContents*)contents;
@@ -254,10 +257,14 @@ std::string UTF8(NSString* s) {
 NSString* g_cache_path = nil;
 NSString* g_log_path = nil;
 NSString* g_locale = nil;
+// Features Cra turns on for the Mac it runs on (ChromiumStartFeatures, +setEnabledFeatures:).
+NSArray<NSString*>* g_start_features = nil;
 BOOL g_mock_keychain = NO;
 NSArray<NSString*>* g_extension_paths = nil;
 // Page.addScriptToEvaluateOnNewDocument params every page gets once it exists (setDocumentStartScript:…).
 NSArray<NSString*>* g_document_start_params = nil;
+// Which setDocumentStartScript: call the params are from: a page drops what an older one installed (#845).
+NSUInteger g_document_start_generation = 0;
 NSString* g_extension_profiles = nil;
 int g_exit_code = 0;
 bool g_ready = false;
@@ -316,6 +323,21 @@ std::map<content::WebContents*, CraBrowser* __weak>& PagesByContents() {
   static auto* pages = new std::map<content::WebContents*, CraBrowser* __weak>();
   return *pages;
 }
+// A page's entry in PagesByContents goes with the page itself. -pageDestroyed alone left it behind when the app let
+// the CraBrowser go before Chrome deleted the page, as a favorite's preview does with its hidden page (close, then
+// nil, and -close deletes on the next turn): its observer went with it, and the next walk over every page
+// (+setWebsiteAppearance:, View ▸ Appearance) read the deleted page (0.1.56/0.1.57 crash reports,
+// crash-website-appearance-closed-page).
+const char kPageEntry = 0;
+class PageEntry : public base::SupportsUserData::Data {
+ public:
+  explicit PageEntry(content::WebContents* contents) : contents_(contents) {}
+  ~PageEntry() override { PagesByContents().erase(contents_); }
+
+ private:
+  // The page this is part of, so never dangling while this lives; only its address is used.
+  raw_ptr<content::WebContents, DisableDanglingPtrDetection> contents_;
+};
 NSInteger g_live_browsers = 0;
 // Pages made ahead for the next tab, outside any tab strip: they go before Chrome destroys their profile at quit,
 // which CHECKs that no page of it is left (WebContentsOfBrowserContext).
@@ -2238,6 +2260,19 @@ bool HandleDebugMethod(content::WebContents* contents,
 
 #pragma mark - CraBrowser
 
+// Chrome CHECKs an uninstall of an extension the profile doesn't have ("callers should not send us nonexistent
+// extensions"), so a Remove that reached a profile without it crashed Cra (crash-extension-remove-other-profile).
+// Like Chrome's own callers, look it up first: a profile without it has nothing to remove.
+static BOOL UninstallExtensionIn(content::BrowserContext* context, NSString* extensionID) {
+  const std::string id = base::SysNSStringToUTF8(extensionID);
+  if (!extensions::ExtensionRegistry::Get(context)->GetInstalledExtension(id)) {
+    return NO;
+  }
+  std::u16string error;
+  return extensions::ExtensionRegistrar::Get(context)->UninstallExtension(
+      id, extensions::UNINSTALL_REASON_USER_INITIATED, &error);
+}
+
 @implementation CraBrowser {
   NSView* _container;
   // The page's empty document draws in Arc's canvas colour until it first draws something of its own (#712).
@@ -2282,6 +2317,9 @@ bool HandleDebugMethod(content::WebContents* contents,
   NSView* __weak _devToolsFrontendView;
   // An agent page (MCP) renders while never on screen, as the CEF bridge's windowless page did.
   base::ScopedClosureRunner _agentCapture;
+  // The identifiers of the document-start scripts installed in the page, and the generation they're from (#845).
+  NSMutableArray<NSString*>* _documentStartIdentifiers;
+  NSUInteger _documentStartGeneration;
   // The download the agent asked for (startAgentDownload:…); anything else the site starts is cancelled.
   BOOL _agentDownloadActive;
   BOOL _agentDownloadCancelled;
@@ -2485,25 +2523,70 @@ bool HandleDebugMethod(content::WebContents* contents,
 // page agent runs new-document scripts only while its domain is enabled. Protocol messages run in order, so
 // they are in before the page's first load.
 - (void)installDocumentStartScripts {
+  _documentStartGeneration = g_document_start_generation;
+  if (!_documentStartIdentifiers) {
+    _documentStartIdentifiers = [NSMutableArray array];
+  }
   if (!g_document_start_params.count) {
     return;
   }
   [self sendDevToolsMethod:@"Page.enable" params:@"{}" completion:^(NSString*, NSString*) {}];
+  NSUInteger generation = _documentStartGeneration;
+  CraBrowser* __weak weakSelf = self;
   for (NSString* params in g_document_start_params) {
     [self sendDevToolsMethod:@"Page.addScriptToEvaluateOnNewDocument"
                       params:params
-                  completion:^(NSString*, NSString* error) {
+                  completion:^(NSString* result, NSString* error) {
                     if (error) {
                       NSLog(@"Cra: document start script not installed: %@", error);
+                      return;
                     }
+                    [weakSelf keepDocumentStartScript:result generation:generation];
                   }];
   }
+}
+
+// An installed script's identifier, kept to take it out again; one from an older generation goes at once.
+- (void)keepDocumentStartScript:(NSString*)result generation:(NSUInteger)generation {
+  NSData* data = [result dataUsingEncoding:NSUTF8StringEncoding];
+  NSDictionary* json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+  NSString* identifier = [json isKindOfClass:[NSDictionary class]] ? json[@"identifier"] : nil;
+  if (![identifier isKindOfClass:[NSString class]]) {
+    return;
+  }
+  if (generation != _documentStartGeneration) {
+    [self removeDocumentStartScript:identifier];
+    return;
+  }
+  [_documentStartIdentifiers addObject:identifier];
+}
+
+- (void)removeDocumentStartScript:(NSString*)identifier {
+  NSString* params = JSONString(@{@"identifier" : identifier});
+  [self sendDevToolsMethod:@"Page.removeScriptToEvaluateOnNewDocument"
+                    params:params
+                completion:^(NSString*, NSString*) {}];
+}
+
+// setDocumentStartScript: again (the filter lists' scriptlets changed, a site was paused; #845): the page's next
+// document runs the new scripts instead of the ones it was made with.
+- (void)refreshDocumentStartScripts {
+  if (!_contents || _documentStartGeneration == g_document_start_generation) {
+    return;
+  }
+  for (NSString* identifier in _documentStartIdentifiers) {
+    [self removeDocumentStartScript:identifier];
+  }
+  [_documentStartIdentifiers removeAllObjects];
+  [self installDocumentStartScripts];
 }
 
 - (void)contentsCreated:(content::WebContents*)contents {
   _contents = contents;
   contents->SetUserData(views::CraHostedPageKey(), std::make_unique<base::SupportsUserData::Data>());
   _observer = std::make_unique<PageObserver>(contents, self);
+  // Before the entry: a page adopted again replaces its PageEntry, whose going erases what's there.
+  contents->SetUserData(&kPageEntry, std::make_unique<PageEntry>(contents));
   PagesByContents()[contents] = self;
   _isCreated = YES;
   if (_audioMuted || _isAgent) {
@@ -3802,9 +3885,7 @@ static NSString* CraSiteAccessName(extensions::PermissionsManager::UserSiteAcces
   if (!_contents) {
     return NO;
   }
-  std::u16string error;
-  return extensions::ExtensionRegistrar::Get(_contents->GetBrowserContext())
-      ->UninstallExtension(base::SysNSStringToUTF8(extensionID), extensions::UNINSTALL_REASON_USER_INITIATED, &error);
+  return UninstallExtensionIn(_contents->GetBrowserContext(), extensionID);
 }
 - (void)probeBackgroundColor {
   if (_contents) {
@@ -4119,6 +4200,10 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
   [g_ready_blocks addObject:[block copy]];
 }
 
++ (void)setEnabledFeatures:(NSArray<NSString*>*)features {
+  g_start_features = [features copy];
+}
+
 + (void)runMessageLoop {
   NSArray<NSString*>* given = NSProcessInfo.processInfo.arguments;
   std::vector<std::string> args;
@@ -4175,6 +4260,9 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
   // CraEngineMain adds AperitifHelpers to this one.
   std::vector<std::string> enabled = {"ForceWebRequestProxyForTest", "WebContentsDiscard", "InfiniteTabsFreezing",
                                       "VideoPipForceTrustedForMediaPlaybackForTesting", "HideDelegatedFrameHostMac"};
+  for (NSString* name in g_start_features) {
+    enabled.push_back(UTF8(name));
+  }
   std::erase_if(enabled, [&](const std::string& name) { return std::ranges::contains(givenDisabled, name); });
   enabled.insert(enabled.end(), givenEnabled.begin(), givenEnabled.end());
   for (const std::string& name : givenDisabled) {
@@ -4325,7 +4413,21 @@ class RendererReuseOnExit : public content::RenderProcessHostObserver {
       [all addObject:[[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]];
     }
   }
+  if ([all isEqualToArray:g_document_start_params ?: @[]]) {
+    return;
+  }
   g_document_start_params = all;
+  g_document_start_generation += 1;
+  // Pages already open take the new scripts for their next document (#845).
+  std::vector<CraBrowser*> pages;
+  for (const auto& entry : PagesByContents()) {
+    if (CraBrowser* page = entry.second) {
+      pages.push_back(page);
+    }
+  }
+  for (CraBrowser* page : pages) {
+    [page refreshDocumentStartScripts];
+  }
 }
 + (void)setBundledNetworkRulesExpected:(BOOL)expected {
   if (g_bundled_network_rules_expected.exchange(expected) != expected) {
@@ -4651,6 +4753,9 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
 + (void)setWebsiteAppearance:(NSInteger)mode {
   cra::SetWebsiteAppearance(mode);
   for (const auto& [contents, page] : PagesByContents()) {
+    if (!page) {
+      continue;  // Let go by the app while its page closes.
+    }
     [page applyPageCanvasTo:contents->GetRenderWidgetHostView()];
     [page refreshCanvasBase:contents];
   }
@@ -4718,9 +4823,43 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
   if (!profile) {
     return NO;
   }
-  std::u16string error;
-  return extensions::ExtensionRegistrar::Get(profile)->UninstallExtension(
-      base::SysNSStringToUTF8(extensionID), extensions::UNINSTALL_REASON_USER_INITIATED, &error);
+  return UninstallExtensionIn(profile, extensionID);
+}
++ (void)setSharedExtensionStorage:(NSDictionary<NSString*, NSDictionary<NSString*, id>*>*)homes {
+  std::map<std::string, cra::SharedStorage> map;
+  for (NSString* extensionID in homes) {
+    NSDictionary* entry = homes[extensionID];
+    NSString* home = [entry[@"home"] isKindOfClass:NSString.class] ? entry[@"home"] : nil;
+    if (!home.length) {
+      continue;
+    }
+    cra::SharedStorage& shared = map[base::SysNSStringToUTF8(extensionID)];
+    shared.home = base::SysNSStringToUTF8(home);
+    for (id profile in [entry[@"profiles"] isKindOfClass:NSArray.class] ? entry[@"profiles"] : @[]) {
+      if ([profile isKindOfClass:NSString.class]) {
+        shared.profiles.insert(base::SysNSStringToUTF8(profile));
+      }
+    }
+  }
+  cra::SetSharedExtensionStorage(std::move(map));
+}
++ (BOOL)setExtensionEnabled:(NSString*)extensionID enabled:(BOOL)enabled profilePath:(NSString*)profilePath {
+  Profile* profile = [self loadedProfile:profilePath];
+  if (!profile) {
+    return NO;
+  }
+  const std::string id = base::SysNSStringToUTF8(extensionID);
+  extensions::ExtensionRegistry* registry = extensions::ExtensionRegistry::Get(profile);
+  if (!registry || !registry->GetInstalledExtension(id)) {
+    return NO;
+  }
+  extensions::ExtensionRegistrar* registrar = extensions::ExtensionRegistrar::Get(profile);
+  if (enabled) {
+    registrar->EnableExtension(id);
+  } else {
+    registrar->DisableExtension(id, {extensions::disable_reason::DISABLE_USER_ACTION});
+  }
+  return YES;
 }
 + (NSString*)preference:(NSString*)name forProfile:(NSString*)profilePath {
   return cra::PreferenceJSON([self loadedProfile:profilePath], name);

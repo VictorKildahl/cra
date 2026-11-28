@@ -1,0 +1,11 @@
+[Adblock Plus 2.0]
+! Title: Fixture regional list
+! A list as people add it in Settings ▸ Privacy ▸ Block lists (#507), in the syntax ABPindo uses.
+||judi-slot.example^
+||iklan.example^$third-party
+##.iklan-banner
+news.example##.ad
+@@||allowed.example^
+reader.example##aside:has(> div:not([id]) > div[data-ad-unit-id])
+#@#[id^="div-gpt-ad"]
+~except.example##[id^="div-gpt-ad"]:not([style^="width: 1px; height: 1px;"])

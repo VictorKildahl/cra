@@ -19,6 +19,8 @@ import UniformTypeIdentifiers
 final class CaptureOverlay {
     enum Action: Equatable {
         case copy, save, message, newEasel, retake
+        /// Arc's image editor over the capture (#851); the capture stays, edited.
+        case edit
         /// The easel picked in the menu.
         case sendToEasel(UUID)
 
@@ -53,7 +55,8 @@ final class CaptureOverlay {
         view.finish = { [weak self] action, png in self?.finish(action, png) }
         panel.onResignKey = { [weak self] in
             // Another window took the keys (the sidebar, another app): the mode ends, as in Arc.
-            guard let self, !self.closed, self.view.isSettled, !self.staysWithoutKeys else { return }
+            // Not while the editor is open: its Image tool's file picker takes them (#851).
+            guard let self, !self.closed, self.view.isSettled, self.view.editor == nil, !self.staysWithoutKeys else { return }
             CraLog.note("capture: another window took the keys, the mode ends")
             self.finish(nil, nil)
         }
@@ -79,6 +82,8 @@ final class CaptureOverlay {
     var pickedElement: CGRect? { view.pickedElement }
     /// cra://debug?captureMenu=: `typed` goes in the menu's field; its rows, then `run` is chosen.
     func debugMenu(typed: String, run: String?) -> String { view.debugMenu(typed: typed, run: run) }
+    /// The capture editor, while it is open (#851).
+    var editor: (any CaptureEditing)? { view.editor }
 
     private func finish(_ action: Action?, _ png: Data?) {
         guard !closed else { return }
@@ -132,15 +137,19 @@ enum CaptureStyle {
     static let bubbleText = NSColor(srgbRed: 0.204, green: 0.021, blue: 0.58, alpha: 0.78)
     static let bubbleBlue = NSColor(srgbRed: 0, green: 0.278, blue: 1, alpha: 0.5)
     static let bubblePink = NSColor(srgbRed: 1, green: 0.6, blue: 0.6, alpha: 0.5)
-    static let menuFill = NSColor(srgbRed: 0.071, green: 0.059, blue: 0.18, alpha: 1)
-    static let menuText = NSColor(white: 1, alpha: 0.9)
-    static let menuIcon = NSColor(white: 1, alpha: 0.3)
-    static let menuDivider = NSColor(white: 1, alpha: 0.07)
-    /// The "Send To…" field: a lighter box on the menu, its prompt dimmer than a row's text.
-    static let menuField = NSColor(white: 1, alpha: 0.07)
-    static let menuPrompt = NSColor(white: 1, alpha: 0.45)
-    static let menuHover = NSColor(srgbRed: 0.161, green: 0.18, blue: 0.757, alpha: 1)
-    static let menuHoverText = NSColor(white: 1, alpha: 0.95)
+}
+
+/// The capture menu's colours for the Mac's appearance: white with black text in Light mode, Arc's dark navy in Dark
+/// (CraCore CaptureMenuTones, #822).
+struct CaptureMenuColors {
+    let fill, text, icon, divider, field, prompt, hover, hoverText: NSColor
+
+    init(dark: Bool = SystemAppearance.shared.isDark) {
+        let t = CaptureMenuTones(dark: dark)
+        func color(_ i: CaptureMenuTones.Ink) -> NSColor { NSColor(srgbRed: i.rgb.r, green: i.rgb.g, blue: i.rgb.b, alpha: i.alpha) }
+        (fill, text, icon, divider) = (color(t.fill), color(t.text), color(t.icon), color(t.divider))
+        (field, prompt, hover, hoverText) = (color(t.field), color(t.prompt), color(t.hover), color(t.hoverText))
+    }
 }
 
 // MARK: - The page, the lens and the pointer
@@ -170,6 +179,12 @@ final class CaptureView: NSView {
     private var lifted = false
     private let bubble = CaptureBubble()
     private var actionsMenu: CaptureMenu?
+    /// The capture as the menu's rows take it: what was taken, or that with what the editor put on it (#851).
+    private var capturedImage: CGImage?
+    private var capturedPNG: Data?
+    /// The edited capture, shown where the capture stays lit.
+    private let editedLayer = CALayer()
+    private(set) var editor: (any CaptureEditing)?
 
     // The lens: where it is, where it is going, and how much of it shows.
     private var lens: CGRect?
@@ -240,6 +255,12 @@ final class CaptureView: NSView {
         liftLayer.cornerRadius = ContentCapture.lensInnerRadius
         liftLayer.masksToBounds = true
         root.addSublayer(liftLayer)
+        editedLayer.isHidden = true
+        editedLayer.contentsGravity = .resize
+        editedLayer.contentsScale = scale
+        editedLayer.cornerRadius = ContentCapture.lensInnerRadius
+        editedLayer.masksToBounds = true
+        root.addSublayer(editedLayer)
         root.addSublayer(ringShadow)
         root.addSublayer(ring)
         CATransaction.commit()
@@ -334,6 +355,7 @@ final class CaptureView: NSView {
             if let actionsMenu, actionsMenu.frame.contains(p) { return }
             // A press beside the capture starts over, from this press.
             dropMenu()
+            editedLayer.isHidden = true
             if lifted {
                 lifted = false
                 liftLayer.isHidden = true
@@ -437,16 +459,19 @@ final class CaptureView: NSView {
     // MARK: Keys
 
     override func keyDown(with event: NSEvent) {
+        if editor != nil { return }
         if let actionsMenu, actionsMenu.handleKey(event) { return }
         if event.keyCode == 53 { finish?(nil, nil); return }
         super.keyDown(with: event)
     }
 
-    override func cancelOperation(_ sender: Any?) { finish?(nil, nil) }
+    override func cancelOperation(_ sender: Any?) { if editor == nil { finish?(nil, nil) } }
 
     /// Any other shortcut (a new tab, another space) ends the mode before the menu bar runs it; the
     /// capture shortcut is left to the menu bar, which closes the mode itself.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // The editor's sheet keeps ⌘Z, ⌘C, ⌘V and the rest for what is drawn on the capture.
+        if editor != nil { return super.performKeyEquivalent(with: event) }
         // With a capture taken, ⌘C and ⌘S copy and save it.
         if case .captured = mode, let menu = actionsMenu,
            event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
@@ -539,6 +564,7 @@ final class CaptureView: NSView {
         snapLens(to: clear)
         let px = ContentCapture.pixelRect(for: rect, pageSize: bounds.size, imageSize: CGSize(width: shot.width, height: shot.height))
         guard let cropped = shot.cropping(to: px), let png = Self.png(cropped) else { finish?(nil, nil); return }
+        took(cropped, png: png)
         CaptureSound.play()
         bubble.show(false)
         showMenu(png: png)
@@ -551,6 +577,7 @@ final class CaptureView: NSView {
     func lift(_ rect: CGRect) {
         let px = ContentCapture.pixelRect(for: rect, pageSize: bounds.size, imageSize: CGSize(width: shot.width, height: shot.height))
         guard let cropped = shot.cropping(to: px), let png = Self.png(cropped) else { finish?(nil, nil); return }
+        took(cropped, png: png)
         let menu = makeMenu(png: png)
         let layout = ContentCapture.liftedLayout(image: rect.size, menu: menu.intrinsicContentSize, in: bounds)
         mode = .captured(layout.image)
@@ -577,6 +604,51 @@ final class CaptureView: NSView {
         NSCursor.arrow.set()
     }
 
+    /// A new capture: nothing edited on it yet.
+    private func took(_ image: CGImage, png: Data) {
+        capturedImage = image
+        capturedPNG = png
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        editedLayer.isHidden = true
+        editedLayer.contents = nil
+        CATransaction.commit()
+    }
+
+    // MARK: Edit (#851)
+
+    /// Arc's Edit row: the capture opens in Arc's image editor over the page; a click on the dark page around it
+    /// brings the capture back, with what was drawn, and the menu stays to copy, save or send it.
+    func openEditor() {
+        guard editor == nil, case .captured = mode, let image = capturedImage, let e = CaptureEditors.make(bounds, image) else { return }
+        e.autoresizingMask = [.width, .height]
+        e.onDone = { [weak self] edited in self?.edited(edited) }
+        addSubview(e)
+        editor = e
+        e.layoutSubtreeIfNeeded()
+        e.focus()
+    }
+
+    private func edited(_ image: CGImage) {
+        editor = nil
+        guard image !== capturedImage, let png = Self.png(image) else { actionsMenu?.focus(); return }
+        capturedImage = image
+        capturedPNG = png
+        if case .captured(let rect) = mode {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            if lifted {
+                liftLayer.contents = image
+            } else {
+                editedLayer.frame = rect
+                editedLayer.contents = image
+                editedLayer.isHidden = false
+            }
+            CATransaction.commit()
+        }
+        actionsMenu?.focus()
+    }
+
     static func png(_ image: CGImage) -> Data? {
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
@@ -589,11 +661,12 @@ final class CaptureView: NSView {
         let room = bounds.height - 2 * ContentCapture.menuMargin
         let menu = CaptureMenu(easels: CaptureOverlay.easels(), maxHeight: room) { [weak self] action in
             guard let self else { return }
+            if action == .edit { self.openEditor(); return }
             self.isSettled = false
             if action == .retake {
                 self.finish?(.retake, nil)
             } else {
-                self.finish?(action, png)
+                self.finish?(action, self.capturedPNG ?? png)
             }
         }
         menu.onCancel = { [weak self] in self?.finish?(nil, nil) }
@@ -859,12 +932,12 @@ final class CaptureBubble: NSView {
 
 // MARK: - The menu after a capture
 
-/// Arc's CapturedImageActionsView, dark whatever the theme (Arc 1.173.1, 17 Nov 2026): 273 pt
-/// wide, 10 pt corners, fill (18,15,46); a "Send To…" field on top that takes the keyboard and
+/// Arc's CapturedImageActionsView (Arc 1.173.1, 17 Nov 2026): 273 pt wide, 10 pt corners, its colours from the Mac's
+/// appearance, whatever the space (CaptureMenuColors, #822): fill (18,15,46) in Dark mode, white in Light; a "Send To…" field on top that takes the keyboard and
 /// narrows the rows as you type; 40 pt rows with a 13 pt symbol centred 25 pt in at white 30 % and
 /// 14 pt medium text from 41 pt at white 90 %; sections apart by 9 pt with a hairline 10 pt in from
 /// both sides. The last section is where the capture can go: New Easel, then each easel by name
-/// (CraCore CaptureMenuLayout). Arc's Save to Library and Edit rows Cra doesn't have yet.
+/// (CraCore CaptureMenuLayout). Edit opens Arc's image editor (#851); Arc's Save to Library row Cra doesn't have.
 final class CaptureMenu: NSView, NSTextFieldDelegate {
     static let cornerRadius: CGFloat = 10
 
@@ -879,6 +952,7 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
     private let field = NSTextField()
     private var selected: Int? { didSet { for (i, r) in rowViews.enumerated() { r.highlighted = i == selected } } }
     private let choose: (CaptureOverlay.Action) -> Void
+    private let colors = CaptureMenuColors()
     /// Escape in the field.
     var onCancel: () -> Void = {}
 
@@ -889,7 +963,7 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
         sections = CaptureMenuLayout.sections(easels: easels, maxHeight: maxHeight)
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = CaptureStyle.menuFill.cgColor
+        layer?.backgroundColor = colors.fill.cgColor
         layer?.cornerRadius = Self.cornerRadius
         layer?.cornerCurve = .continuous
         shadow = {
@@ -901,7 +975,7 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
         }()
         let m = CaptureMenuLayout.self
         fieldBox.wantsLayer = true
-        fieldBox.layer?.backgroundColor = CaptureStyle.menuField.cgColor
+        fieldBox.layer?.backgroundColor = colors.field.cgColor
         fieldBox.layer?.cornerRadius = 7
         fieldBox.layer?.cornerCurve = .continuous
         fieldBox.frame = NSRect(x: m.fieldInset, y: m.fieldTop, width: m.width - 2 * m.fieldInset, height: m.fieldHeight)
@@ -911,8 +985,8 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
         field.drawsBackground = false
         field.focusRingType = .none
         field.font = font
-        field.textColor = CaptureStyle.menuText
-        field.placeholderAttributedString = NSAttributedString(string: "Send To…", attributes: [.font: font, .foregroundColor: CaptureStyle.menuPrompt])
+        field.textColor = colors.text
+        field.placeholderAttributedString = NSAttributedString(string: "Send To…", attributes: [.font: font, .foregroundColor: colors.prompt])
         field.cell?.usesSingleLineMode = true
         field.cell?.lineBreakMode = .byTruncatingTail
         field.delegate = self
@@ -925,6 +999,11 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    /// For scenarios (#822): the fill and the rows' text colour the menu opens with.
+    var debugColors: (fill: NSColor, ink: NSColor) {
+        (layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) ?? .clear, field.textColor ?? .clear)
+    }
+
     override var isFlipped: Bool { true }
 
     private static func symbol(_ item: CaptureMenuLayout.Item) -> String {
@@ -932,6 +1011,7 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
         case .copy: "doc.on.doc.fill"
         case .save: "square.and.arrow.down.fill"
         case .message: "message.fill"
+        case .edit: "pencil.tip.crop.circle"
         case .retake: "arrow.counterclockwise"
         case .newEasel: "plus"
         case .easel: "scribble"
@@ -943,6 +1023,7 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
         case .copy: .copy
         case .save: .save
         case .message: .message
+        case .edit: .edit
         case .retake: .retake
         case .newEasel: .newEasel
         case .easel(let id): .sendToEasel(id)
@@ -962,14 +1043,14 @@ final class CaptureMenu: NSView, NSTextFieldDelegate {
             if si > 0 {
                 let line = NSView(frame: NSRect(x: 10, y: y + 4.25, width: m.width - 20, height: 0.5))
                 line.wantsLayer = true
-                line.layer?.backgroundColor = CaptureStyle.menuDivider.cgColor
+                line.layer?.backgroundColor = colors.divider.cgColor
                 addSubview(line)
                 lines.append(line)
                 y += m.sectionGap
             }
             for row in section {
                 let index = rowViews.count
-                let v = CaptureMenuRow(title: row.title, symbol: Self.symbol(row.item)) { [weak self] in self?.choose(Self.action(row.item)) }
+                let v = CaptureMenuRow(title: row.title, symbol: Self.symbol(row.item), colors: colors) { [weak self] in self?.choose(Self.action(row.item)) }
                 v.onHover = { [weak self] inside in
                     if inside { self?.selected = index } else if self?.selected == index { self?.selected = nil }
                 }
@@ -1079,8 +1160,11 @@ final class CaptureMenuRow: NSView {
     var onHover: ((Bool) -> Void)?
     var highlighted = false { didSet { paint() } }
 
-    init(title: String, symbol: String, action: @escaping () -> Void) {
+    private let colors: CaptureMenuColors
+
+    init(title: String, symbol: String, colors: CaptureMenuColors, action: @escaping () -> Void) {
         self.action = action
+        self.colors = colors
         label = NSTextField(labelWithString: title)
         super.init(frame: .zero)
         wantsLayer = true
@@ -1134,10 +1218,10 @@ final class CaptureMenuRow: NSView {
     private func paint() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        fill.backgroundColor = highlighted ? CaptureStyle.menuHover.cgColor : nil
+        fill.backgroundColor = highlighted ? colors.hover.cgColor : nil
         CATransaction.commit()
-        label.textColor = highlighted ? CaptureStyle.menuHoverText : CaptureStyle.menuText
-        icon.contentTintColor = highlighted ? CaptureStyle.menuHoverText : CaptureStyle.menuIcon
+        label.textColor = highlighted ? colors.hoverText : colors.text
+        icon.contentTintColor = highlighted ? colors.hoverText : colors.icon
     }
 }
 

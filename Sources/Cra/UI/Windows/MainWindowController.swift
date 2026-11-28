@@ -71,6 +71,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Settings ▸ Tabs ▸ "Translucent sidebar" as the window last drew it (#366).
     private var shownGlass: Bool?
     private var shownLightMaterial: Bool?
+    /// macOS's own Dark, which picks an inactive window's grey under the sidebar (#876).
+    private var shownMacOSDark: Bool?
     private var lastSidebarWidth: CGFloat = 0
     private var commandBarOpenedAt = Date.distantPast
     /// The sidebar address the open bar hangs from (#663), nil while it is the centred bar.
@@ -681,10 +683,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         // every view, so all of these follow the theme only when it changes. What the root
         // views show beyond the palette they observe themselves.
         // The material too: View ▸ Appearance picks it for every space without changing the theme (#700).
-        if shownTheme != space.theme.shown || shownGlass != palette.glass || shownLightMaterial != palette.lightMaterial {
+        if shownTheme != space.theme.shown || shownGlass != palette.glass || shownLightMaterial != palette.lightMaterial
+            || shownMacOSDark != palette.macOSDark {
             shownTheme = space.theme.shown
             shownGlass = palette.glass
             shownLightMaterial = palette.lightMaterial
+            shownMacOSDark = palette.macOSDark
             // A swipe in the floating sidebar changes space under it (issue #12).
             floatingSidebar?.refreshBackdrop()
             shell.isDarkTheme = palette.isDark
@@ -701,7 +705,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             shell.vibrancy.isHidden = !palette.vibrant
             shell.vibrancyLift.isHidden = !palette.vibrant
             shell.setTheme(vibrantDark: palette.isDark, vibrantLight: palette.vibrant && !palette.isDark, solid: palette.solid,
-                           lightMaterial: palette.lightMaterial, darkGradient: palette.darkGradient, glass: palette.glass)
+                           lightMaterial: palette.lightMaterial, darkGradient: palette.darkGradient, glass: palette.glass,
+                           oneColour: palette.oneColour, macOSDark: palette.macOSDark)
             window?.isOpaque = !palette.vibrant
             window?.backgroundColor = palette.vibrant ? .clear : NSColor(palette.gradientColors.first ?? .gray)
         }
@@ -755,6 +760,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             // Arc: a tab switch puts a playing video in Picture in Picture, a space switch doesn't (#703).
             let autoPiP = AutoPictureInPictureMoment.opensOnLeaving(from: pagesShownForSpace, to: focusedSpaceID)
             browsers.show(live, focused: liveFocus, focus: !commandBar.isOpen, autoPictureInPicture: autoPiP)
+        } else if pagesShownForSpace != focusedSpaceID {
+            browsers.spaceChanged(to: focusedSpaceID)
         }
         pagesShownForSpace = focusedSpaceID
         if overlay.findVisible { syncAskOnPage() } else { askOnPage.service.refresh() }
@@ -876,7 +883,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// `cra://debug?dropLink`: a link from a page or another app let go on the focused space's list
     /// (#419), from a pasteboard holding what Mail or a page's link drag holds: its address and,
-    /// with `name`, its text. It goes through the drop's own pasteboard read, placement and tab.
+    /// with `name`, its text; a file:// address as the downloads tray writes a file. It goes through the drop's own pasteboard read, placement and tab.
     func testDropLink(_ url: String, name: String?, row text: String?, onto: Bool) {
         func list(in v: NSView) -> SpaceListView? {
             if let l = v as? SpaceListView, l.spaceID == focusedSpaceID { return l }
@@ -887,7 +894,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         defer { pb.releaseGlobally() }
         pb.clearContents()
         let item = NSPasteboardItem()
-        item.setString(url, forType: .URL)
+        // A file:// address goes as the downloads tray's drag writes it: `public.file-url`.
+        item.setString(url, forType: url.hasPrefix("file:") ? .fileURL : .URL)
         if let name { item.setString(name, forType: .urlName) }
         pb.writeObjects([item])
         guard let link = SpaceListView.link(on: pb) else { CraLog.note("dropLink: refused \(url)"); return }
@@ -1546,10 +1554,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// Downloads logged as stuck, once each.
     private var stuckDownloads: Set<UInt32> = []
 
-    /// Chromium stops reporting a download once the tab that started it is gone (the
-    /// download carries on, or ends, silently), which left its row "in progress" for
-    /// good. A row that hasn't heard from Chromium for a while reads the file instead:
-    /// gone means it ended, the full size with no .crdownload beside it means it's done.
+    /// CEF stops reporting a download once the tab that started it is gone (the download
+    /// carries on, or ends, silently), which left its row "in progress" for good. A row that
+    /// hasn't heard from Chromium for a while reads the file instead (DownloadList.quietEnding):
+    /// the full size with no .crdownload beside it means it's done; gone means it ended on CEF
+    /// only, since the engine writes a running download to "Unconfirmed <n>.crdownload" (#895).
     private func checkStalledDownloads() {
         // A paused download hears nothing from Chromium until it resumes, and isn't stalled.
         let inProgress = DownloadHistory.shared.live.filter { $0.running && windowDownloads.contains($0.id) }
@@ -1566,12 +1575,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         let fm = FileManager.default
         for t in inProgress where !t.paused && !t.path.isEmpty && Date().timeIntervalSince(t.updated) > 5 {
-            guard !fm.fileExists(atPath: t.path + ".crdownload") else { continue }
             let size = (try? fm.attributesOfItem(atPath: t.path))?[.size] as? Int64
-            let state: CraDownloadState
-            if size == nil { state = .cancelled }
-            else if let size, t.total > 0, size >= t.total { state = .complete }
-            else { continue }
+            guard let ending = DownloadList.quietEnding(total: t.total, partialBesideIt: fm.fileExists(atPath: t.path + ".crdownload"),
+                                                        size: size, chromiumEngine: EngineFramework.isChromiumEngine) else { continue }
+            let state: CraDownloadState = ending == .complete ? .complete : .cancelled
             let info = CraDownloadInfo()
             info.identifier = t.id
             info.fullPath = t.path
@@ -3136,16 +3143,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         b.sendDevToolsMethod("Page.getNavigationHistory", params: "{}") { [weak self] result, _ in
             MainActor.assumeIsolated {
                 guard let self, let result, let page = BackForwardMenu.newTabPage(history: result, direction: direction) else { return }
-                self.store.createTab(url: page.url, title: page.title, in: self.store.spaceID(ofItem: id), select: true,
-                                     window: self.windowID, referrer: id)
-                CraLog.note("history new tab: \(direction == .back ? "back" : "forward") \(page.url)")
+                self.openHistoryPage(page, direction, from: id)
             }
         }
     }
 
+    /// A page of tab `id`'s history in a new tab that comes to the front, where new tabs go, opened from
+    /// `id`, which stays on its page: ⌘-click on Back or Forward (#797) or on a row of their menu.
+    private func openHistoryPage(_ page: BackForwardMenu.Row, _ direction: BackForwardMenu.Direction, from id: UUID) {
+        store.createTab(url: page.url, title: page.title, in: store.spaceID(ofItem: id), select: true, window: windowID, referrer: id)
+        CraLog.note("history new tab: \(direction == .back ? "back" : "forward") \(page.url)")
+    }
+
     /// Right-click or hold Back or Forward (#416): the pages that way in tab `tab`'s history (a
     /// split pane's, or the tab in front), in Arc's menu under the button; a row goes straight to
-    /// its page. Chromium's history comes over DevTools, so the main thread never waits for it.
+    /// its page, or with ⌘ held opens it in a new tab in front, as ⌘-click on the button does (#797).
+    /// Chromium's history comes over DevTools, so the main thread never waits for it.
     func showBackForwardMenu(tab: UUID?, direction: BackForwardMenu.Direction, anchor: NSView) {
         // The sidebar's ← → while its address field shows a Peek: the Peek's history (#648).
         let peek = tab == nil ? sidebarPeek?.browser : nil
@@ -3160,14 +3173,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 guard !rows.isEmpty else { return }
                 let favicons = self.app.favicons
                 let items = rows.map { row in
-                    let key = FaviconKey.key(for: row.url)
+                    let key = FaviconKey.sectionKey(for: row.url)
                     return BackForwardMenuItem(title: row.title, icon: favicons.image(forKey: key), flip: favicons.glyphIsDark(forKey: key) == true)
                 }
-                let tones = ArcMenuTones(theme: self.store.focusedSpace(window: self.windowID).theme.shown)
-                func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
-                let colors = SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
-                                                       shortcut: ink(tones.shortcut), disabled: ink(tones.disabled))
-                let menu = BackForwardMenuView(items: items, colors: colors) { [weak self, weak b] index in
+                let menu = BackForwardMenuView(items: items, colors: self.backForwardMenuColors()) { [weak self, weak b] index in
                     guard let self else { return }
                     self.backForwardMenu.close()
                     guard let index, let b = forPeek ? b : self.browsers.runtime(for: id)?.browser else { return }
@@ -3176,6 +3185,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                         if let error { CraLog.note("back-forward menu: \(error)") }
                     }
                 }
+                menu.onNewTab = { [weak self] index in
+                    guard let self else { return }
+                    self.backForwardMenu.close()
+                    guard let page = BackForwardMenu.newTabPage(history: result, entryID: rows[index].entryID) else { return }
+                    self.openHistoryPage(page, direction, from: id)
+                }
                 let rect = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
                 let screen = parent.screen?.visibleFrame ?? rect.insetBy(dx: -1000, dy: -1000)
                 let place = BackForwardMenu.Layout.placement(button: rect, screen: screen, rows: items.count)
@@ -3183,6 +3198,28 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                 self.backForwardMenu.present(menu, frame: place.frame, from: anchor, systemShadow: false)
             }
         }
+    }
+
+    /// Back and Forward's history menu is Arc's ArcMenu, the + menu's, coloured from the space for the Mac's
+    /// appearance (#416, #822).
+    func backForwardMenuColors() -> SidebarCreationMenuColors {
+        SidebarCreationMenuColors(ArcMenuTones(theme: store.focusedSpace(window: windowID).theme.shown, dark: SystemAppearance.shared.isDark))
+    }
+
+    /// cra://debug?arcMenus=<label> (#822): the fill and title colour the capture menu, Back's history menu and the
+    /// sidebar's ••• menu open with, as sRGB hex, and the Mac's appearance.
+    func debugArcMenuColors(_ label: String) -> String {
+        func hex(_ c: NSColor) -> String {
+            let s = c.usingColorSpace(.sRGB) ?? c
+            return String(format: "#%02X%02X%02X", Int(s.redComponent * 255 + 0.5), Int(s.greenComponent * 255 + 0.5), Int(s.blueComponent * 255 + 0.5))
+        }
+        let capture = CaptureMenu(easels: [], choose: { _ in }).debugColors
+        let back = backForwardMenuColors()
+        let more = (shell.sidebarHost as? SidebarView)?.moreMenuColors()
+        return "arc menus \(label): capture=\(hex(capture.fill)) captureInk=\(hex(capture.ink))"
+            + " history=\(hex(back.fill)) historyInk=\(hex(back.ink))"
+            + " more=\(more.map { hex($0.fill) } ?? "-") moreInk=\(more.map { hex($0.ink) } ?? "-")"
+            + " dark=\(SystemAppearance.shared.isDark ? 1 : 0)"
     }
 
     /// cra://debug?historyMenu=<label> (#416): the history menu's rows, width, the tail's offset
@@ -3246,12 +3283,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
                                               audible: audible, awayFromPinnedPage: !away.isEmpty) {
             case .deselectKeepingPage:
                 store.favoritesClosedWithCmdW.formUnion(panes)
-                if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
+                if wasSelected { store.selectTab(store.closeSuccessor(ofDeselectedFavorite: id, window: windowID), window: windowID) }
                 CraLog.note("close tab: favorite deselected, its page kept")
                 return
             case .deselectGoingHome:
                 store.favoritesClosedWithCmdW.formUnion(panes)
-                if wasSelected { store.selectTab(store.closeSuccessor(ofPinned: id, window: windowID), window: windowID) }
+                if wasSelected { store.selectTab(store.closeSuccessor(ofDeselectedFavorite: id, window: windowID), window: windowID) }
                 for p in away { resetPinnedTab(p) }
                 CraLog.note("close tab: favorite deselected, back to its pinned page")
                 return
@@ -3336,9 +3373,36 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         store.selectTab(tabs[((idx + delta) % n + n) % n].id)
     }
 
-    func zoom(by delta: Double) {
-        guard let b = currentBrowser else { return }
-        b.setZoomLevel(b.zoomLevel() + delta)
+    /// View ▸ Zoom In / Zoom Out (⌘+ ⌘−): Chrome's next step, and Arc's toast names it ("125%", #856).
+    func zoom(in zoomIn: Bool) {
+        guard let label = currentBrowser?.zoomStep(in: zoomIn) else { return }
+        showToast(label)
+    }
+
+    /// View ▸ Zoom to Actual Size (⌘0), with Arc's "100%" toast (#856).
+    func resetPageZoom() {
+        guard let label = currentBrowser?.resetZoomShowing() else { return }
+        showToast(label)
+    }
+
+    /// cra://debug?pageScale=<factor> pinches the front page to that scale (as a trackpad pinch does);
+    /// pageScale=read:<label> logs "page scale <label>: <visualViewport.scale> zoom level: <n>".
+    func debugPageScale(_ value: String) {
+        guard let b = currentBrowser else { return CraLog.note("page scale: no page") }
+        if let factor = Double(value) {
+            b.sendDevToolsMethod("Emulation.setPageScaleFactor", params: #"{"pageScaleFactor":\#(factor)}"#) { _, error in
+                CraLog.note("page scale set \(factor)\(error.map { ": \($0)" } ?? "")")
+            }
+            return
+        }
+        let label = value.hasPrefix("read:") ? String(value.dropFirst(5)) : value
+        b.sendDevToolsMethod("Runtime.evaluate", params: #"{"expression":"window.visualViewport.scale","returnByValue":true}"#) { result, error in
+            let object = result.flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+            let scale = ((object?["result"] as? [String: Any])?["value"] as? NSNumber)?.doubleValue
+            DispatchQueue.main.async {
+                CraLog.note("page scale \(label): \(scale.map { String(format: "%.2f", $0) } ?? "? \(error ?? "")") zoom level: \(b.zoomLevel())")
+            }
+        }
     }
 
     var captureOverlay: CaptureOverlay?
@@ -3444,28 +3508,31 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         case .save?:
             if let png { saveCapture(png, over: peek?.window) }
         case .message?:
-            if let png { sendCaptureViaMessages(png) }
+            if let png { sendCaptureViaMessages(png, in: peek) }
         case .newEasel?:
             guard let png, let easel = EaselFiles.create(withPicture: png, source: source) else { return }
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: windowID)
+            revealForLittleWindowEasel(from: peek)
         case .sendToEasel(let id)?:
             guard let png else { return }
             sendCapture(png, toEasel: id, source: source)
+            revealForLittleWindowEasel(from: peek)
         case .retake?:
             capturePage(in: peek)
-        case nil:
+        case .edit?, nil:
+            // Edit stays in the capture (its editor); it never ends the mode.
             break
         }
     }
 
     /// Arc's "Send via iMessage…": Messages' compose sheet with the capture attached.
-    private func sendCaptureViaMessages(_ png: Data) {
+    private func sendCaptureViaMessages(_ png: Data, in peek: LittleWindowController? = nil) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Cra Captures", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent(PageCommands.captureFileName())
         guard (try? png.write(to: url)) != nil, let service = NSSharingService(named: .composeMessage),
               service.canPerform(withItems: [url]) else {
-            showToast("Messages Isn't Available")
+            showCaptureToast("Messages Isn't Available", in: peek)
             return
         }
         service.perform(withItems: [url])
@@ -4870,8 +4937,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         actions.addExtension = { [weak self] in self?.openTab("https://chromewebstore.google.com/category/extensions") }
         actions.manageExtensions = { [weak self] in self?.openTab("chrome://extensions") }
-        actions.clearCache = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: false) }
-        actions.clearCookies = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(cookies: true) }
+        actions.clearCache = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(.cache) }
+        actions.clearCookies = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(.cookies) }
+        actions.clearSiteData = { [weak self] in self?.currentBrowser?.clearSiteDataAndReload(.siteData) }
         let ssl = currentBrowser?.sslStatus()
         let secure = ConnectionSecurity.isSecure(url: url, status: ssl.map {
             ConnectionSecurity.Status(secureConnection: $0.secureConnection, certStatus: $0.certStatus, contentStatus: $0.contentStatus)
@@ -4991,7 +5059,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             guard let self else { return }
             CraLog.note("command bar scope \(step): \(self.commandBar.scope?.name ?? "none"), fill \(self.commandHost.debugFill), "
-                + "panel \(self.commandHost.debugPanel)")
+                + "panel \(self.commandHost.debugPanel), placeholder \(self.commandBar.placeholder), "
+                + "hint \(self.commandBar.result.scope?.hint ?? "-")")
         }
     }
 
@@ -5424,6 +5493,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// `fromSidebarAddress`: a click on the sidebar's address, which opens Arc's panel hanging from it
     /// (#663); ⌘L and the rest keep the centred bar.
+    /// Arc's ⌥⌘G (gptMessage, #828): the ⌘T bar scoped to ChatGPT, or the plain bar with the switch off.
+    func newChatGPTMessage() {
+        openCommandBar(.newTab)
+        guard commandBar.isOpen, ChatGPTCommandBar.newMessage(enabled: store.settings.chatGPTInCommandBar) == .scopedToChatGPT else { return }
+        commandBar.openScoped(to: ChatGPTCommandBar.site)
+    }
+
     func openCommandBar(_ mode: CommandBarMode, fromSidebarAddress: Bool = false) {
         guard let window else { return }
         // The bar takes over from the sidebar's address field edited in place (#344).
@@ -5592,20 +5668,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
             case .search: url = commandBar.engine.searchURL(typed); entered = false
             }
             store.recordQuerySelection(query: query, url: url)
-            if entered { store.recordTyped(url: url, profile: store.profileID(space: focusedSpaceID)) }
             let fillsEmptyPane = selectedTab?.isEmptyTab == true
             // A pinned tab keeps to its host: another host's address opens a Today tab (Arc).
             let leavesPinned = !fillsEmptyPane && selectedTabID.map(store.isPinned) == true
                 && PinnedNavigation.typedURLOpensNewTab(url, from: selectedTab?.tab?.url ?? "")
-            if mode == .editURL || fillsEmptyPane, selectedTabID != nil, !leavesPinned {
-                loadInSelectedTab(url)
-            } else if !isStandalone, let space = store.settings.space(forTypedURL: url), space != focusedSpaceID,
-                      store.orderedSpaces.contains(where: { $0.id == space }) {
-                // Air Traffic Control routes a typed URL too (#421): the tab opens in the route's
-                // space and the window goes there, as in Arc.
-                store.createTab(url: url, in: space, window: windowID)
-            } else {
-                store.createTab(url: url, window: windowID)
+            // Air Traffic Control routes a typed URL too (#421): the tab opens in the route's space and the window
+            // goes there, as in Arc.
+            let route = isStandalone ? nil : store.settings.space(forTypedURL: url).flatMap { id in
+                store.orderedSpaces.contains(where: { $0.id == id }) ? id : nil
+            }
+            let destination = TypedDestination.of(loadsInSelectedTab: (mode == .editURL || fillsEmptyPane) && selectedTabID != nil && !leavesPinned,
+                                                  route: route, focused: focusedSpaceID)
+            // Counted in the profile it opens in, not the one it was typed in (#864).
+            if entered { store.recordTyped(url: url, profile: store.profileID(space: destination.space(focused: focusedSpaceID))) }
+            switch destination {
+            case .selectedTab: loadInSelectedTab(url)
+            case .routed(let space): store.createTab(url: url, in: space, window: windowID)
+            case .newTab:
+                let tab = store.createTab(url: url, window: windowID)
+                if !isStandalone { browsers.beginRedirectRouting(for: tab.id, space: focusedSpaceID) }
             }
         }
         guard let s else {
@@ -5715,6 +5796,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
 
     /// cra://debug?toastShown=<label>: whether a toast is up in this window.
     var toastIsShown: Bool { toast.isShown }
+    var toastText: String { toast.text }
 
     /// ⌥Return in the bar: the row opens as a split pane beside the current tab instead of in its
     /// place, an open tab of this space joining the split as it is. False takes it as Return: no
@@ -5804,15 +5886,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// An MCP agent's pill at the bottom of the page (AgentPill): its face, what it does, Take Over (⌘.).
     private lazy var agentPill = AgentPill()
 
-    /// ⌘. (Stop Loading) while an agent's pill is up here stops the agent instead of the page.
-    func takeOverFromAgent() -> Bool { agentPill.takeOverIfUp() }
+    /// ⌘. (Stop Loading) while an agent's pill is up here, or while an agent whose pill was closed
+    /// with its × still acts here, stops the agent instead of the page.
+    func takeOverFromAgent() -> Bool { agentPill.takeOverIfUp() || MCPServer.shared.takeOverClosedPill(in: windowID) }
 
-    func showAgentPill(_ text: String, takeOver: @escaping () -> Void) {
+    /// `tabWatched`: the agent acts in a tab the user is looking at (the whole pill), else only its face.
+    func showAgentPill(_ text: String, tabWatched: Bool, lingers: TimeInterval, takeOver: @escaping () -> Void, close: @escaping () -> Void) {
         guard let window else { return }
-        agentPill.show(text, page: { [weak self] in
+        agentPill.show(text, tabWatched: tabWatched, lingers: lingers, page: { [weak self] in
             guard let self else { return nil }
             return self.shell.webContainer.convert(self.shell.webContainer.bounds, to: nil)
-        }, in: window, takeOver: takeOver)
+        }, in: window, takeOver: takeOver, close: close)
+    }
+
+    /// Tests (cra://debug?mcpPill=open|close|takeover): a click on the pill's face, on its ×, or ⌘.
+    func pressAgentPill(_ part: String) {
+        switch part {
+        case "close": agentPill.pressClose()
+        case "takeover": CraLog.note("mcp pill: ⌘. \(takeOverFromAgent() ? "took over" : "found no agent")")
+        default: agentPill.open()
+        }
     }
 
     // MARK: An agent's cursor
@@ -5887,6 +5980,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
         }
         let wasEmpty = store.item(id)?.isEmptyTab == true
         store.updateTab(id, url: url)
+        browsers.noteExplicitNavigation(id)
         if let rt = browsers.ensureRuntime(for: id), !wasEmpty { rt.browser.loadURL(url) }
         refresh()
         browsers.show(store.visiblePaneTabIDs(in: focusedSpaceID, window: windowID), focused: id, focus: true)
@@ -6352,7 +6446,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, BrowserM
     /// What the window server has in front of `window`, its own parts (its child windows, Chrome's page
     /// host windows) told apart. Asked only after macOS said the window isn't visible, and by
     /// `cra://debug?windowCoverage=1`.
-    private static func coverage(of window: NSWindow) -> WindowCoverage.Reading {
+    static func coverage(of window: NSWindow) -> WindowCoverage.Reading {
         let number = CGWindowID(window.windowNumber)
         let own = number > 0 ? (CGWindowListCopyWindowInfo(.optionIncludingWindow, number) as? [[String: Any]])?.first : nil
         let inFront = number > 0 ? CGWindowListCopyWindowInfo(.optionOnScreenAboveWindow, number) as? [[String: Any]] ?? [] : []

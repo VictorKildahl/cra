@@ -1,0 +1,23 @@
+# promise: #923
+# ⌘T, "Add Split View", Return, then an address and Return: the page opens in the new pane beside the one
+# open, not in a new tab (reported on X, 27 Nov 2026).
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+
+cra://open?url=${PAGE}?n=left
+expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
+wait 2
+cra://commandbar?query=Add%20Split%20View
+wait 1
+cra://debug?commandBarRows=action
+expect-log Cra command bar rows action: open=1 mode=newTab selected=0 other:Add Split View
+cra://debug?commandBarReturn=action
+wait 1.5
+cra://debug?commandBarRows=pane
+expect-log Cra command bar rows pane: open=1 mode=newTab
+cra://commandbar?query=${PAGE}?n=right
+wait 1
+cra://debug?commandBarReturn=address
+wait 2
+cra://debug?split=filled
+expect-log split filled: panes=\S*n=left \| \S*n=right selected=\S*n=right

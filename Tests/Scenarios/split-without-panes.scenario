@@ -1,0 +1,18 @@
+# promise: #921
+# A split with no panes, and one with one, as a sync merge wrote them to every Mac before the fix (reported on
+# X, 27 Nov 2026): a row with only a close button that did nothing, which no Mac could get rid of. They go
+# when the sidebar loads, the lone pane in its split's place; scenario.sh's store check at the end finds no
+# split under two panes.
+budget rss=900 stalls50=40
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}
+seed sidebar.json {"version": 1, "spaceOrder": ["A0000000-0000-0000-0000-000000000001"], "spaces": [{"id": "A0000000-0000-0000-0000-000000000001", "title": "Home", "emoji": "\ud83c\udfe0", "theme": {"colors": ["#8389FF", "#8389FF"], "intensity": 0.5, "noise": 0, "appearance": "light", "accent": "#8389FF", "solid": true, "key": ["#8389FF"]}, "favoritesContainerID": "C0000000-0000-0000-0000-000000000011", "pinnedContainerID": "C0000000-0000-0000-0000-000000000012", "todayContainerID": "C0000000-0000-0000-0000-000000000013", "createdAt": "2026-11-27T18:00:00Z"}], "items": [{"id": "C0000000-0000-0000-0000-000000000011", "children": [], "isUnread": false, "createdAt": "2026-11-27T18:00:00Z", "data": {"container": {"_0": {"favorites": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}}, {"id": "C0000000-0000-0000-0000-000000000012", "children": [], "isUnread": false, "createdAt": "2026-11-27T18:00:00Z", "data": {"container": {"_0": {"pinned": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}}, {"id": "C0000000-0000-0000-0000-000000000013", "children": ["B0000000-0000-0000-0000-000000000101", "D0000000-0000-0000-0000-000000000201", "D0000000-0000-0000-0000-000000000202", "B0000000-0000-0000-0000-000000000102"], "isUnread": false, "createdAt": "2026-11-27T18:00:00Z", "data": {"container": {"_0": {"today": {"spaceID": "A0000000-0000-0000-0000-000000000001"}}}}}, {"id": "B0000000-0000-0000-0000-000000000101", "parentID": "C0000000-0000-0000-0000-000000000013", "children": [], "isUnread": false, "createdAt": "2026-11-27T18:00:00Z", "data": {"tab": {"_0": {"url": "http://127.0.0.1/page.html?n=left", "savedURL": "http://127.0.0.1/page.html?n=left", "savedTitle": "Left"}}}}, {"id": "B0000000-0000-0000-0000-000000000102", "parentID": "C0000000-0000-0000-0000-000000000013", "children": [], "isUnread": false, "createdAt": "2026-11-27T18:00:00Z", "data": {"tab": {"_0": {"url": "http://127.0.0.1/page.html?n=right", "savedURL": "http://127.0.0.1/page.html?n=right", "savedTitle": "Right"}}}}, {"id": "D0000000-0000-0000-0000-000000000201", "parentID": "C0000000-0000-0000-0000-000000000013", "children": [], "isUnread": false, "createdAt": "2026-11-27T18:00:00Z", "data": {"split": {"_0": {}}}}, {"id": "D0000000-0000-0000-0000-000000000202", "parentID": "C0000000-0000-0000-0000-000000000013", "children": ["B0000000-0000-0000-0000-000000000103"], "isUnread": false, "createdAt": "2026-11-27T18:00:00Z", "data": {"split": {"_0": {}}}}, {"id": "B0000000-0000-0000-0000-000000000103", "parentID": "D0000000-0000-0000-0000-000000000202", "children": [], "isUnread": false, "createdAt": "2026-11-27T18:00:00Z", "data": {"tab": {"_0": {"url": "http://127.0.0.1/page.html?n=lone", "savedURL": "http://127.0.0.1/page.html?n=lone", "savedTitle": "Lone"}}}}]}
+
+wait 2
+cra://debug?clickRow=D0000000-0000-0000-0000-000000000201
+cra://debug?clickRow=D0000000-0000-0000-0000-000000000202
+cra://debug?clickRow=B0000000-0000-0000-0000-000000000103
+expect-log click row: Lone
+wait 1
+cra://debug?split=lone
+expect-log split lone: panes=none selected=\S*n=lone
+reject-log click row: (Split View|Untitled|1 Tabs|0 Tabs)

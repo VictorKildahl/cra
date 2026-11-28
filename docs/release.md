@@ -9,6 +9,10 @@ Everything is scripted; the only manual part is obtaining the certificate once.
 ## One-time setup
 
 1. **Apple Developer Program** membership for the account that will sign.
+1. **Xcode 27**, on the Mac that builds a release and on the runners (`runs-on: xcode-27`). Cra's icon
+   (`resources/AppIcon.icon`, Gilad's Icon Composer icon) uses macOS 27 features only Xcode 27's actool and
+   ictool read; `scripts/compile-app-icon.sh` stops a release (`CRA_RELEASE=1`) on an older Xcode. Day-to-day
+   builds on Xcode 26 still work, with the icon flattened and a warning.
 2. **Developer ID Application certificate.** In Xcode → Settings → Accounts → Manage
    Certificates, add "Developer ID Application". Export it from Keychain Access as a
    `.p12` with a password. Note the identity string, for example

@@ -1,0 +1,17 @@
+# promise: #822
+# Arc's other menus follow the Mac's appearance as its + menu does: the capture menu (Send To…, Copy, Save…, ARC_Capture.bundle
+# has a light value for each colour: white fill, black text) and the ArcMenu that Back's history and the sidebar's ••• open
+# (the space's light palette, black titles). Reported after the + menu fix: the capture menu still opened dark in Light mode.
+# View ▸ Appearance stands in for the Mac's setting here.
+budget rss=700 stalls50=10
+cra://open?url=${PAGE}?n=1
+wait 2
+cra://action/appearanceLight
+wait 1
+cra://debug?arcMenus=light
+expect-log arc menus light: capture=#FFFFFF captureInk=#000000 history=#F[0-9A-F]{5} historyInk=#000000 more=#F[0-9A-F]{5} moreInk=#000000 dark=0
+cra://action/appearanceDark
+wait 1
+cra://debug?arcMenus=dark
+expect-log arc menus dark: capture=#120F2E captureInk=#FFFFFF history=#[0-2][0-9A-F]{5} historyInk=#FFFFFF more=#[0-2][0-9A-F]{5} moreInk=#FFFFFF dark=1
+cra://action/appearanceAutomatic

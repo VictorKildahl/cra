@@ -92,13 +92,16 @@ final class AppIconManager {
     }
 
     func image(for id: String) -> NSImage? {
-        // app-icons/segments.png is the bundled icon on the grid, for the picker; the Dock
-        // gets AppIcon.icns itself (apply()).
+        // app-icons/segments.png (macOS 14, 15) and segments-glass.png (macOS 26, the Icon Composer icon) are the bundled
+        // icon on the grid, for the picker; the Dock draws the bundle's own icon itself (apply(), #865).
         id == Self.customID ? customImage : imageURL(for: id).flatMap(NSImage.init(contentsOf:))
     }
 
     private func imageURL(for id: String) -> URL? {
-        id == Self.customID ? Self.customURL : Bundle.main.url(forResource: id, withExtension: "png", subdirectory: "app-icons")
+        id == Self.customID ? Self.customURL
+            : Bundle.main.url(forResource: AppIconBundle.previewName(for: id, defaultID: Self.defaultID,
+                                                                     macOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
+                              withExtension: "png", subdirectory: "app-icons")
     }
 
     /// `remember` false (cra://debug?appIcon=) shows the icon without writing the defaults, which a test

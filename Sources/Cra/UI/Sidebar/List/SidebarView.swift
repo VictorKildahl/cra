@@ -76,6 +76,8 @@ final class SidebarView: NSView {
     func debugSpaceCreationTip(_ row: String) -> String { creationHost?.debugTip(row) ?? "none" }
     /// For scenarios (#822): the colours the dock's + menu opens with.
     func debugCreationMenuColors() -> String { dock.debugCreationMenuColors() }
+    /// The colours the header's ••• menu opens with (#822).
+    func moreMenuColors() -> SidebarCreationMenuColors { topBar.moreMenuColors() }
     func closeSpaceCreationPopovers() { creationHost?.closeIconPicker() }
     func focusSpaceCreationName() { creationHost?.focusName() }
     /// The creation animation, then `done`; at once when the page isn't up.
@@ -177,6 +179,9 @@ final class SidebarView: NSView {
 
     /// cra://debug's readout of the now-playing cards' fill (Ideas #366).
     var debugPlayerFill: String { player.debugFillHex }
+    /// cra://debug's readout of the player's cards, front first (Discussion #761).
+    var debugPlayerCards: [String] { player.debugCards }
+    func debugSetPlayerOpen(_ open: Bool) { player.debugSetOpen(open) }
 
     required init?(coder: NSCoder) { fatalError() }
 
@@ -188,6 +193,7 @@ final class SidebarView: NSView {
             let space = store.focusedSpace(window: ui.windowID)
             _ = SystemAppearance.shared.isDark
             _ = store.settings.nowPlayingTint
+            _ = store.settings.nowPlayingStyle
             _ = SidebarGlassSetting.shared.isOn
             bannerHeight = UpdateBannerView.preferredHeight
             return (space, ui.libraryPage, ui.downloadsListOpen, DownloadHistory.shared.recent.count)
@@ -195,6 +201,7 @@ final class SidebarView: NSView {
             Task { @MainActor in self?.observe() }
         }
         let playerLook = (tint: store.settings.nowPlayingTint, glass: SidebarGlassSetting.shared.isOn)
+        player.setStyle(store.settings.nowPlayingStyle)
         let paletteChanged = lastSpaceID == nil || space.theme.shown != shownTheme || space.id != lastSpaceID
             || shownPlayerLook.map { $0 != playerLook } ?? true
         shownTheme = space.theme.shown
@@ -471,7 +478,7 @@ final class SidebarView: NSView {
         bannerHost.frame = NSRect(x: 0, y: bannerTop, width: b.width, height: bannerHeight)
         // The player rests where the list ends and takes that room from it; opened, it grows over the list.
         player.frame = NSRect(x: 0, y: th, width: b.width, height: max(0, bannerTop - th))
-        let listBottom = bannerTop - NowPlayingMetrics.restHeight(cards: player.shownCount)
+        let listBottom = bannerTop - player.restHeight
         // While a space is being made its page stands where the column was, and the column is off to the left.
         pager.frame = NSRect(x: creationHost != nil ? -b.width * (1 - creationPull) : 0, y: th, width: b.width, height: max(0, listBottom - th))
         creationClip?.frame = creationFrame
@@ -752,16 +759,17 @@ final class SidebarTopBarView: NSView {
         // Arc draws it from 20 pt in (glyph 20–38.5 pt), in the floating panel too (#315); a windowed
         // floating panel draws stand-in lights.
         // It moves left to stay 2 pt clear of ← when the sidebar is just wide enough for both.
+        // Every glyph in the row is centred on the lights, as in Arc (#876: Cra drew them 1 pt higher).
         let lights = !fullscreen
         let nav = toggleShown ? Array(rowButtons.dropFirst()) : rowButtons
         let afterLights: CGFloat = lights ? 6 + 71 + 2 : 13
         if toggleShown, let t = rowButtons.first {
             let size = t.size.width
-            t.frame = NSRect(x: afterLights, y: CraMetrics.titleRowCenter - 1 - size / 2, width: size, height: size)
+            t.frame = NSRect(x: afterLights, y: CraMetrics.titleRowCenter - size / 2, width: size, height: size)
         }
         if narrow {
             for (b, box) in zip(nav, SidebarHeaderLayout.navButtons(width: Double(w))) {
-                b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - 1 - box.size / 2, width: box.size, height: box.size)
+                b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - box.size / 2, width: box.size, height: box.size)
             }
         }
         if compact {
@@ -769,7 +777,7 @@ final class SidebarTopBarView: NSView {
             // edge, centred on the same line.
             if !narrow {
                 for (b, box) in zip(nav, SidebarHeaderLayout.navButtons(width: Double(w))) {
-                    b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - 1 - box.size / 2, width: box.size, height: box.size)
+                    b.frame = NSRect(x: box.x, y: CraMetrics.titleRowCenter - box.size / 2, width: box.size, height: box.size)
                 }
             }
             pill.frame = NSRect(x: 8, y: CraMetrics.titleAreaHeight + 2, width: w - 16, height: pill.height)
@@ -791,6 +799,13 @@ final class SidebarTopBarView: NSView {
         }
     }
 
+    /// The ••• menu's colours: Arc's ArcMenu, dark in Dark mode and the space's light palette in Light (#287, #822).
+    func moreMenuColors() -> SidebarCreationMenuColors {
+        let dark = SystemAppearance.shared.isDark
+        let theme = store.focusedSpace(window: ui.windowID).theme
+        return SidebarCreationMenuColors(SidebarMoreMenu.tones(theme: dark ? theme : theme.shown, dark: dark))
+    }
+
     /// The narrow header's ••• (Arc 1.17x, #287): Reload and Toggle Sidebar with their shortcuts,
     /// in a popover under the button, which shows ✕ while it's open.
     private func toggleMorePanel() {
@@ -801,7 +816,7 @@ final class SidebarTopBarView: NSView {
         let panel = SidebarMorePanel(items: [
             .init(symbol: "arrow.clockwise", title: "Reload", keys: keys("reload"), enabled: hasTab) { [weak self] in self?.actions.reload() },
             .init(symbol: store.settings.sidebarSide.toggleSymbol, title: "Toggle Sidebar", keys: keys("toggleSidebar"), enabled: true) { [weak self] in self?.actions.toggleSidebar() },
-        ], ink: store.focusedSpace(window: ui.windowID).theme.shadedDark)
+        ], colors: moreMenuColors())
         panel.onClose = { [weak self] in
             self?.morePanel = nil
             self?.apply()
@@ -871,7 +886,7 @@ enum ReloadMenu {
     static func make(_ actions: SidebarActions) -> NSMenu {
         let m = NSMenu()
         m.autoenablesItems = false
-        for group in [["reload", "hardReload"], ["clearCookies", "clearCache"], ["viewSource", "devTools"]] {
+        for group in [["reload", "hardReload"], ["clearCookies", "clearCache", "clearSiteData"], ["viewSource", "devTools"]] {
             if m.numberOfItems > 0 { m.addItem(.separator()) }
             for id in group { MenuItems.add(m, action: id, on: id == "reload" ? true : nil) { actions.performAction(id) } }
         }
@@ -1287,10 +1302,7 @@ final class SpaceDockView: NSView {
     /// The + menu's colours: Arc's menu takes the space's palette for the Mac's appearance, dark in Dark mode and light
     /// in Light (#822).
     private func creationMenuColors() -> SidebarCreationMenuColors {
-        let tones = ArcMenuTones(theme: store.focusedSpace(window: ui.windowID).theme.shown, dark: SystemAppearance.shared.isDark)
-        func ink(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
-        return SidebarCreationMenuColors(fill: ink(tones.fill), hover: ink(tones.hover), separator: ink(tones.separator),
-                                         shortcut: ink(tones.shortcut), disabled: ink(tones.disabled), ink: ink(tones.ink))
+        SidebarCreationMenuColors(ArcMenuTones(theme: store.focusedSpace(window: ui.windowID).theme.shown, dark: SystemAppearance.shared.isDark))
     }
 
     /// For scenarios (#822): the colours the + menu opens with, as sRGB hex.
@@ -1989,5 +2001,15 @@ final class LibraryButtonView: NSView {
         } else if bounds.contains(p) {
             actions.toggleLibrary()
         }
+    }
+}
+
+/// An ArcMenu's colours from CraCore's tones (the + menu, the ••• menu, Back and Forward's history; #822).
+extension SidebarCreationMenuColors {
+    init(_ tones: ArcMenuTones) {
+        func color(_ c: RGB) -> NSColor { NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: 1) }
+        self.init(fill: color(tones.fill), hover: color(tones.hover), separator: color(tones.separator),
+                  shortcut: color(tones.shortcut), disabled: color(tones.disabled), ink: color(tones.ink),
+                  isDark: tones.ink == RGB(1, 1, 1))
     }
 }

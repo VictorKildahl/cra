@@ -347,8 +347,10 @@ private struct BoostEditorView: View {
 
     private var controls: some View {
         VStack(spacing: 14) {
-            ColorWheel(hue: model.boost.hue, strength: model.boost.strength) { h, s in
+            ColorWheel(hue: model.boost.hue, strength: model.boost.strength, darkHue: model.boost.darkHue) { h, s in
                 model.change { $0.hue = h; $0.strength = s }
+            } setDarkHue: { d in
+                model.change { $0.darkHue = d }
             }
             .frame(width: 147, height: 147)
             .padding(.top, 18)
@@ -357,7 +359,7 @@ private struct BoostEditorView: View {
                 square("slider.horizontal.3", on: model.showingColors, help: "Advanced color controls") { model.showingColors.toggle() }
                     .popover(isPresented: $model.showingColors, arrowEdge: .bottom) { advanced }
                 square("nosign", on: false, help: "Reset to original colors") {
-                    model.change { $0.hue = 0; $0.strength = 0; $0.invert = false; $0.contrast = 50; $0.brightness = 50; $0.saturation = 50 }
+                    model.change { $0.hue = 0; $0.strength = 0; $0.darkHue = BoostWheel.accentOffset; $0.invert = false; $0.contrast = 50; $0.brightness = 50; $0.saturation = 50 }
                 }
                 .opacity(model.boost.colorsUntouched ? 0.45 : 1)
             }
@@ -568,58 +570,116 @@ struct BoostFontCell: View {
 }
 
 /// Arc's colour wheel (BoostWheel, measured 17 Nov 2026, #478): a rounded square in a frame, dotted
-/// inside. The big handle is the tint (hue clockwise from 3 o'clock, strength out from the middle);
-/// the small one trails it an eighth of a turn on the same circle, joined to it by a line. Untinted,
-/// the frame is brushed grey; tinted, it is a ring of every hue in the wheel's order.
+/// inside. Both handles can be dragged: the big one is the tint (hue clockwise from 3 o'clock,
+/// strength out from the middle) and the small one sets the hue dark pixels take, an eighth of a turn
+/// from it until moved. A line joins them on the same circle. Untinted, the frame is brushed grey;
+/// tinted, it is a ring of every hue in the wheel's order.
 private struct ColorWheel: View {
     let hue: Double
     let strength: Double
+    let darkHue: Double
     let set: (Double, Double) -> Void
+    let setDarkHue: (Double) -> Void
+
+    @State private var dragging: BoostWheel.Handle?
+    @State private var hovered: BoostWheel.Handle?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private func color(_ c: BoostWheel.HSB) -> Color { Color(hue: c.hue, saturation: c.saturation, brightness: c.brightness) }
+
+    /// Three sizes: at rest, under the pointer, and under the pointer while held.
+    private func scale(_ handle: BoostWheel.Handle) -> CGFloat {
+        if dragging == handle, hovered == handle { return Self.draggedScale }
+        if hovered == handle { return ColorPillButtonStyle.hovered }
+        return 1
+    }
+
+    private static let draggedScale: CGFloat = 1.16
+
+    /// Arc's hairline around each handle: the handle's own hue, washed almost to white.
+    private func rim(_ c: BoostWheel.HSB) -> Color {
+        color(BoostWheel.HSB(c.hue, c.saturation * 0.2, min(1, c.brightness + 0.65 * (1 - c.brightness))))
+    }
 
     var body: some View {
         GeometryReader { geo in
             let c = geo.size.width / 2
-            let h = BoostWheel.handles(hue: hue, strength: strength)
+            let h = BoostWheel.handles(hue: hue, strength: strength, darkHue: darkHue)
             let big = CGPoint(x: c + h.big.x, y: c + h.big.y), small = CGPoint(x: c + h.small.x, y: c + h.small.y)
-            let accent = color(BoostWheel.accent(hue: hue, strength: strength))
+            let accentHSB = BoostWheel.accent(hue: hue, strength: strength, darkHue: darkHue)
+            let accent = color(accentHSB)
+            let tint = BoostWheel.tint(hue: hue, strength: strength)
             ZStack {
-                if strength > 0 {
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .fill(AngularGradient(stops: BoostWheel.ringStops.map { .init(color: color(BoostWheel.ring($0.hue)), location: $0.hue) }, center: .center))
-                } else {
-                    // Arc's frame: brushed metal, dark at the top left and right, light at the bottom.
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .fill(AngularGradient(colors: [Color(white: 0.55), Color(white: 0.25), Color(white: 0.45), Color(white: 0.85),
-                                                       Color(white: 0.95), Color(white: 0.7), Color(white: 0.55)], center: .center, angle: .degrees(180)))
-                }
-                RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white).padding(7)
-                Canvas { ctx, s in
-                    for x in stride(from: 12.0, to: s.width - 12, by: 6) {
-                        for y in stride(from: 12.0, to: s.height - 12, by: 6) {
-                            ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)), with: .color(.black.opacity(0.12)))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(Color.white)
+                        .overlay(AngularGradient(stops: BoostWheel.ringGradient.map { .init(color: Color(red: $0.1, green: $0.2, blue: $0.3), location: $0.0) }, center: .center).opacity(0.06))
+                    Canvas { ctx, s in
+                        for x in stride(from: 3.0, to: s.width - 3, by: 4) {
+                            for y in stride(from: 3.0, to: s.height - 3, by: 4) {
+                                ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)), with: .color(.black.opacity(0.095)))
+                            }
+                        }
+                        // The orbit both handles are on, and the arc from the big one to the small one.
+                        let r = hypot(h.big.x, h.big.y)
+                        ctx.stroke(Path(ellipseIn: CGRect(x: c - r, y: c - r, width: 2 * r, height: 2 * r)), with: .color(Color(white: 0.92)), lineWidth: 1.5)
+                        let sweep = BoostWheel.connectorSweep(big: h.big, small: h.small)
+                        if sweep > 0 {
+                            var line = Path()
+                            let start = atan2(h.big.y, h.big.x)
+                            line.addArc(center: CGPoint(x: c, y: c), radius: r,
+                                        startAngle: Angle(radians: start), endAngle: Angle(radians: start + sweep),
+                                        clockwise: false)
+                            ctx.stroke(line, with: .color(accent), lineWidth: 2)
                         }
                     }
-                    // The orbit both handles are on, and the line between them.
-                    let r = hypot(h.big.x, h.big.y)
-                    ctx.stroke(Path(ellipseIn: CGRect(x: c - r, y: c - r, width: 2 * r, height: 2 * r)), with: .color(Color(white: 0.92)), lineWidth: 1.5)
-                    var line = Path()
-                    line.move(to: small)
-                    line.addLine(to: big)
-                    ctx.stroke(line, with: .color(accent), lineWidth: 2)
                 }
-                Circle().fill(accent).frame(width: 22, height: 22).overlay(Circle().stroke(.white, lineWidth: 3)).shadow(radius: 1.5)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                if strength > 0 {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .inset(by: 3.5)
+                        .stroke(AngularGradient(stops: BoostWheel.ringGradient.map { .init(color: Color(red: $0.1, green: $0.2, blue: $0.3), location: $0.0) }, center: .center), lineWidth: 7)
+                } else {
+                    // Arc's frame: brushed metal, dark at the top left and right, light at the bottom.
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .inset(by: 3.5)
+                        .stroke(AngularGradient(colors: [Color(white: 0.55), Color(white: 0.25), Color(white: 0.45), Color(white: 0.85),
+                                                         Color(white: 0.95), Color(white: 0.7), Color(white: 0.55)], center: .center, angle: .degrees(180)), lineWidth: 7)
+                }
+                Circle().fill(accent)
+                    .frame(width: BoostWheel.smallHandleRadius * 2, height: BoostWheel.smallHandleRadius * 2)
+                    .overlay(Circle().stroke(.white, lineWidth: 3))
+                    .overlay(Circle().inset(by: -2).stroke(rim(accentHSB), lineWidth: 0.75))
+                    .scaleEffect(scale(.small))
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovered == .small)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.10), value: dragging == .small)
+                    .onHover { if $0 { hovered = .small } else if hovered == .small { hovered = nil } }
                     .position(small)
-                Circle().fill(color(BoostWheel.tint(hue: hue, strength: strength)))
-                    .frame(width: 32, height: 32).overlay(Circle().stroke(.white, lineWidth: 3)).shadow(radius: 2)
+                Circle().fill(color(tint))
+                    .frame(width: BoostWheel.bigHandleRadius * 2, height: BoostWheel.bigHandleRadius * 2)
+                    .overlay(Circle().stroke(.white, lineWidth: 3))
+                    .overlay(Circle().inset(by: -2).stroke(rim(tint), lineWidth: 0.75))
+                    .scaleEffect(scale(.big))
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovered == .big)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.10), value: dragging == .big)
+                    .onHover { if $0 { hovered = .big } else if hovered == .big { hovered = nil } }
                     .position(big)
             }
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { g in
-                let picked = BoostWheel.pick(CGPoint(x: g.location.x - c, y: g.location.y - c))
-                set(picked.hue, picked.strength)
-            })
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { g in
+                    let offset = CGPoint(x: g.location.x - c, y: g.location.y - c)
+                    // A press takes the handle under it; one on the small dot keeps the big one still.
+                    let grabbed = dragging ?? BoostWheel.grabbedHandle(at: g.startLocation, big: big, small: small)
+                    dragging = grabbed
+                    if grabbed == .small {
+                        setDarkHue(BoostWheel.darkHue(pickedAt: offset, hue: hue))
+                    } else {
+                        let picked = BoostWheel.pick(offset)
+                        set(picked.hue, picked.strength)
+                    }
+                }
+                .onEnded { _ in dragging = nil })
         }
     }
 }

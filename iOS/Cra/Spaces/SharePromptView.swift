@@ -18,7 +18,6 @@ struct SharePromptView: View {
             let middle = geometry.size.height / 2
             let width = geometry.size.width
             ZStack(alignment: .topLeading) {
-                SyncGlow(background: .white)
                 ForEach(Array(lines(MobileSyncIntro.shareTitle).enumerated()), id: \.offset) { index, line in
                     textLine(line, size: 31, weight: .heavy, color: Self.blue)
                         .position(x: width / 2, y: Self.center(baseline: middle - 136 + CGFloat(index) * 29.7, size: 31, weight: .heavy))
@@ -50,6 +49,9 @@ struct SharePromptView: View {
             }
         }
         .ignoresSafeArea(edges: .bottom)
+        .background {
+            SyncGlow(background: .white).ignoresSafeArea(edges: [.horizontal, .bottom])
+        }
         .environment(\.colorScheme, .light)
     }
 
@@ -153,6 +155,9 @@ struct ShareGuideView: View {
             }
             .buttonStyle(.plain)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { shareFrame = $0 }
+            // No wider than SheetHost's content on a wide screen (the open iPhone Duo, #866).
+            .frame(maxWidth: MobileScreenClass.contentCap)
+            .frame(maxWidth: .infinity)
             .padding(.leading, 27)
             .padding(.trailing, 32)
             .padding(.top, 862 - 832)

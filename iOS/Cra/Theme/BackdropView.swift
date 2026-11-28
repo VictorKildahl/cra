@@ -15,9 +15,6 @@ final class BackdropView: UIView {
         (CGPoint(x: 0.2, y: 0.66), CGSize(width: 0.36, height: 0.13)),
         (CGPoint(x: 0.48, y: 0.93), CGSize(width: 0.5, height: 0.12)),
     ]
-    /// Incognito drains the colour: a flat grey-lavender.
-    var isIncognito = false { didSet { if isIncognito != oldValue { applyColors() } } }
-
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
@@ -49,14 +46,9 @@ final class BackdropView: UIView {
         let dark = traitCollection.userInterfaceStyle == .dark
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        var patch: UIColor = .clear
-        if isIncognito {
-            base.colors = [Palette.rgb(0xb0aec5).cgColor, Palette.rgb(0xaaa8bd).cgColor]
-        } else {
-            base.colors = dark ? [Palette.rgb(0x101010).cgColor, Palette.rgb(0x141313).cgColor]
-                : [Palette.rgb(0xf5f4f2).cgColor, Palette.rgb(0xf0eeeb).cgColor]
-            patch = dark ? Palette.rgb(0x2a2624) : Palette.rgb(0xebe7e3)
-        }
+        base.colors = dark ? [Palette.rgb(0x101010).cgColor, Palette.rgb(0x141313).cgColor]
+            : [Palette.rgb(0xf5f4f2).cgColor, Palette.rgb(0xf0eeeb).cgColor]
+        let patch: UIColor = dark ? Palette.rgb(0x2a2624) : Palette.rgb(0xebe7e3)
         for layer in patches {
             layer.colors = [patch.cgColor, patch.withAlphaComponent(0).cgColor]
         }

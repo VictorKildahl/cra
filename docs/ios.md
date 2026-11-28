@@ -54,12 +54,14 @@ Launch arguments put the app in a state for a screenshot or a test:
 | `-CraSummarize YES` | Summarizes the first page once it has loaded |
 | `-CraSyncDir <folder>` or `demo` | The folder the Mac's sidebar syncs into, or a made-up sidebar |
 | `-CraHoldConnecting YES` | Keeps the Spaces sheet on "Connecting", for a screenshot |
+| `-CraDemoSpaces <n>` | With `-CraSyncDir demo`, n more empty Spaces, more than the icon bar fits (#885) |
 | `-CraHoldPill YES` | Keeps the New Tab pill pressed in, as under a finger |
 | `-CraSyncDelay <seconds>` | Makes each read of the synced sidebar take that long |
 | `-CraFakeVoice <text>` | What voice search hears instead of the microphone |
 | `-CraShowVoice YES` | Holds the voice overlay up, for a screenshot |
 | `-CraOnboarding YES` | Shows onboarding on a test's data folder |
 | `-CraCountHaptics YES` | Counts each haptic tick in its control's accessibility value and a hidden `haptic-count` element, for UI tests; pull to refresh has no control, so it only adds to the total |
+| `-CraTraceNewTabDrawer YES` | Keeps the new tab drawer's rise, field morph, material and side-button state in hidden `new-tab-drawer-trace` and `new-tab-drawer-drag-trace` elements, for UI tests |
 
 Writing a UI test (`iOS/CraUITests`): pages are `data:` addresses passed with `-CraOpenURL`, so
 no test needs the network. The exceptions are the tests that need a real http(s) page (`PopupTests`' form POSTs, `PlainHTTPTests`, `CertificateTests`, `ExternalLinkTests`, `TabSwitcherIconTests`):
@@ -108,6 +110,20 @@ Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <t
 
 ### On the iPhone Duo
 
+The Duo needs the app linked against the iOS 27.1 SDK or newer. iOS keeps an app linked on an older SDK in
+compatibility mode there: App Store 0.1.2 (build 1478, iOS 26.5 SDK, Xcode 26.6) showed a black column beside every
+page on the closed screen and a phone-sized window in the middle of the open one, while builds from source filled
+both. `scripts/ios-testflight.sh` runs `scripts/ios-sdk-check.sh` on the archive and won't upload an older one.
+
+On the Duo, the Spaces sheet's backgrounds (sync intro, Connecting, share prompt, icon bar) run under the status column, while its content stays in the safe area.
+
+The open Duo is treated like a small iPad (#866, Victor's call on 0xJeu's proposal, 27 Nov 2026), decided by
+`MobileScreenClass` (an iPhone whose screen's short side is at least 600 pt is `wide`): App Settings and the App Icon
+picker open at full height, the bottom bar's tab and menu buttons keep within 540 pt in the middle, the onboarding
+Next button and the Spaces buttons are no wider than 540 pt (SheetHost's cap), and the tab switcher stays a carousel
+laid out as on the widest iPhone (440 pt) in the middle of the screen. The closed Duo keeps its status icons following
+the page, and neither screen has a status band. iPads and iPhones keep their layouts.
+
 On the closed screen, the search field and the tab switcher’s cards stay left of the status column; the rule applies only to a portrait-shaped window with a side inset, so iPhones keep their layout.
 
 The icon grid's width cap (54074522) already fixed the open-screen icon-step overflow; the onboarding fit rule fixes the demo steps.
@@ -133,13 +149,19 @@ CRA_IOS_SIM="Cra Duo" scripts/ios.sh test CraUITests/GestureTests CraUITests/Set
 ```
 
 `scripts/ios.sh` would otherwise create an iPhone 17 under that name. Set posture (closed,
-half open, open) in Simulator, not in the script. The harness takes geometry from the app's
+half open, open) in Simulator, not in the script. With Xcode 27.2, `xcodebuild -downloadPlatform iOS` also installs
+the Duo's own runtime (`com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4`), Simulator is
+`Xcode.app/Contents/Applications/DeviceHub.app`, and its posture buttons (help "Closed", "Partially Open", "Open") can
+be pressed through Accessibility without the pointer. The closed and open screens are separate `--display` UUIDs in
+`simctl io <udid> enumerate` (1398 × 2034 and 2007 × 2853 px), listed once DeviceHub shows the device. To see what an
+older SDK does, stamp a copy of the built app with `vtool -set-build-version iossim 17.0 26.5 -replace` and re-sign it
+ad hoc with its entitlements. The harness takes geometry from the app's
 window because `app.frame` is portrait-swapped when open. XCTest screenshots can be black on
 the inner screen; `CRA_IOS_SIM="Cra Duo" scripts/ios.sh shot /tmp/duo.png` is the picture to
 trust. Pass `--display` to `simctl io screenshot` too, or it can return the Duo's unlit display.
 On the open screen, `app.windows.firstMatch.screenshot()` produces pixels. The colour check
 tries screen, window, then app captures and reports which produced pixels. If all are blank,
-it skips.
+it skips, except the promised Spaces background test, which fails on blank or mismatched captures.
 
 StatusBandTests skips on the Duo: the right-hand column or
 top-right status cluster has no top safe area, and band placement is an open product question
@@ -161,6 +183,9 @@ remain enabled):
 | `PlainHTTPTests/testBackFromARefusedAddressReturnsToThePageBefore` | Menu below the 678 pt screen after typing, on a reused simulator only; passes on a fresh Duo (unresolved) |
 | `ShareExtensionTests/testTheShareSheetSavesThroughTheExtension` | iOS 27 extension unresolved |
 | `AppIconDockTests/testChangeAppIconShowsTheDock` | Intermittent in research; passed rerun |
+| `TabSwitcherIconTests/testALoneCardSitsInTheMiddle` | Cards stay left of the status column (closed-screen rule); the test centres on the whole window |
+| `TabSwitcherIconTests/testTheFirstAndTheLastCardRestInTheMiddle` | Cards stay left of the status column (closed-screen rule); the test centres on the whole window |
+| `TabSwitcherIconTests/testWithTwoTabsBothCardsRestInTheMiddle` | Cards stay left of the status column (closed-screen rule); the test centres on the whole window |
 
 Expected failures on the **open and half-open** Duo:
 
@@ -174,6 +199,9 @@ Expected failures on the **open and half-open** Duo:
 | `LinkMenuTests/testAPrivateBackgroundTabWaitsInTheRow` | Title never arrives |
 | `PageBasicsTests/testADownloadIsSavedAnnouncedAndListed` | Download name numbering |
 | `SpacesTests/testTheMacsSpacesOpenFromTheTabRow` | Synced Spaces unresolved |
+| `SpacesTests/testManySpacesKeepTheSheetOnScreen` | Spaces sheet extends beyond the screen |
+| `TabSwitcherIconTests/testATabCardShowsTheSitesOwnIconInItsOwnShape` | Icon pixel check samples the row background on the wide screen |
+| `SpacesTests/testSpacesBackgroundsReachTheWindowEdges` | XCTest inner-screen capture does not match the window |
 | `CustomSearchEngineTests/testACustomEngineTakesTheSearch` | Alert Save |
 
 These lists record the research expectations, not exemptions in the harness. Other failures

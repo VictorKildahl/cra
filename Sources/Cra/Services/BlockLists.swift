@@ -22,6 +22,11 @@ final class BlockLists {
     @ObservationIgnored private var started = false
     @ObservationIgnored private var loaded = false
     private(set) var networkFailure: String?
+    /// The rules in use and how many lists they come from (Settings ▸ Privacy ▸ Block lists); nil until
+    /// the first set is built, and while a selection over Chromium's limit leaves the previous one active.
+    private(set) var inUse: (rules: Int, lists: Int)?
+    /// Each built-in list's rules ("adaway", "anudeep"), switched on or not.
+    private(set) var builtInCounts: [String: BlockListCount] = [:]
     @ObservationIgnored private var refreshTimer: ScheduledWork?
     @ObservationIgnored private var clock: Scheduler = LiveScheduler.shared
     /// What the engine was last given: each address with its fetch date.
@@ -34,6 +39,8 @@ final class BlockLists {
 
     @ObservationIgnored var hidingChanged: (() -> Void)?
     @ObservationIgnored private var hiding = DesktopHidingRules(lines: [])
+    /// The lists' procedural hiding (#845), by host; their scriptlets go to FilterPageScripts.
+    @ObservationIgnored private var procedural = ProceduralTable()
     @ObservationIgnored private let styles = NSCache<NSString, NSString>()
     @ObservationIgnored private var personal = ""
     @ObservationIgnored private var bundledSources: [String] = []
@@ -90,7 +97,13 @@ final class BlockLists {
         return value
     }
 
-    static var folder: URL {
+    /// The procedural selectors a page on `host` runs (#845): none while the site is paused.
+    func procedural(for host: String) -> [String] {
+        if pausedHosts.contains(host.lowercased()) { return [] }
+        return procedural.selectors(for: host)
+    }
+
+    nonisolated static var folder: URL {
         let url = AppPaths.supportDir.appendingPathComponent("Blocklists", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
@@ -140,6 +153,16 @@ final class BlockLists {
         guard bundledSources != sources else { return }
         bundledSources = sources
         publish()
+    }
+
+    /// A fetched list's rules, as it applies on this engine; nil without a copy yet.
+    func count(_ address: String) -> BlockListCount? {
+        cached[address].map { BlockListCount($0, networkRules: ChromiumFilterLists.available) }
+    }
+
+    /// The person's own filters: what Cra reads in them.
+    func personalCount(_ text: String?) -> BlockListCount {
+        BlockListCount(DesktopHidingRules.read(text ?? "", address: "", fetched: .distantPast), networkRules: ChromiumFilterLists.available)
     }
 
     /// Fetches the lists that are old, or that have no copy yet.
@@ -193,9 +216,25 @@ final class BlockLists {
         let selected = bundledSources
         queue.async {
             for source in selected where Self.bundled[source] == nil {
-                let path = Bundle.main.path(forResource: source, ofType: "txt", inDirectory: "blocklist")
-                Self.bundled[source] = path.flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }.map { ParsedBlocklist(text: $0).domains } ?? []
+                Self.bundled[source] = Self.readBundled(source)
             }
+            if Self.builtInCounts == nil {
+                let counts = Dictionary(uniqueKeysWithValues: Self.builtInSources.map { source in
+                    (source, BlockListCount(applied: (Self.bundled[source] ?? Self.readBundled(source)).count))
+                })
+                Self.builtInCounts = counts
+                DispatchQueue.main.async { [self] in builtInCounts = counts }
+            }
+            // Hide explicitly marked ad regions when built-in ad blocking is enabled.
+            // Use normal cosmetic rules so personal exceptions still apply.
+            let adRegions = selected.isEmpty ? [] : [
+                #"##[data-component="ad-slot"]"#,
+                "##.ad-container",
+                "##.dfp-slot",
+                "##[data-ad][data-ad-unit]:empty",
+                #"##[id^="div-gpt-ad"]"#,
+                #"##[class~="adContainer"][aria-label="Advertisement"]"#,
+            ]
             let base = selected.flatMap { Self.bundled[$0] ?? [] }
             let user = DesktopHidingRules.read(personalText, address: "", fetched: .distantPast)
             let sources = lists + [user]
@@ -203,8 +242,12 @@ final class BlockLists {
             let useNetwork = ChromiumFilterLists.available && !lines.isEmpty
             let hosts = useNetwork ? CustomBlocklist.merged([base] + sources.map(\.plainDomains)) : []
             let candidate = AcceptedFilters(domains: CustomBlocklist.merged([base] + sources.map(\.domains)),
-                                            hiding: sources.flatMap(\.hidingRules),
+                                            hiding: adRegions + sources.flatMap(\.hidingRules),
                                             rules: useNetwork ? DesktopNetworkRules.compile(domains: hosts, lines: lines) : [])
+            // WebKit pages get the same network rules as content-blocker lists (WebKitContentBlocking). Chromium's
+            // limit of 30,000 isn't WebKit's, so they get the whole selection, on the CEF engine too.
+            let webKitLists = WebKitContentRules.build(from: useNetwork ? candidate.rules : DesktopNetworkRules.compile(
+                domains: lines.isEmpty ? candidate.domains : CustomBlocklist.merged([base] + sources.map(\.plainDomains)), lines: lines))
             var active = candidate
             var notice: String?
             let count = candidate.rules.count
@@ -215,12 +258,35 @@ final class BlockLists {
                 notice = "Selection needs \(count) network rules. Chromium allows \(DesktopNetworkRules.dynamicRuleLimit). " + kept
             }
             let limitNotice = notice
+            let personalRules = BlockListCount(user, networkRules: useNetwork).applied
+            let total = BlockListCount.total(builtIn: selected.map { Self.bundled[$0] ?? [] }, builtInHiding: adRegions,
+                                             lists: sources, networkRules: useNetwork)
+            let listsInUse = selected.filter { !(Self.bundled[$0] ?? []).isEmpty }.count
+                + lists.filter { BlockListCount($0, networkRules: useNetwork).applied > 0 }.count + (personalRules > 0 ? 1 : 0)
+            let usage: (rules: Int, lists: Int)? = notice == nil ? (total, listsInUse) : nil
             let domains = active.domains
             let hiding = DesktopHidingRules(lines: active.hiding)
+            // Scriptlets and procedural hiding (#845), each list with its own trust (`trusted-` scriptlets and
+            // `:style()` only from uBlock Origin's lists and My filters).
+            var scriptlets = ScriptletTable()
+            var procedural = ProceduralTable()
+            for list in lists {
+                let trusted = Scriptlets.isTrusted(source: list.url)
+                scriptlets.add(lines: list.hidingRules, trusted: trusted)
+                procedural.add(lines: list.hidingRules, trusted: trusted)
+            }
+            scriptlets.add(lines: user.hidingRules, trusted: true)
+            procedural.add(lines: user.hidingRules, trusted: true)
+            let scriptletTable = scriptlets.json(paused: pauses)
+            let pageRuleCounts = (scriptlets.count, procedural.count)
             DispatchQueue.main.async { [self] in
                 guard publishedKey == key else { return }
+                inUse = usage
                 self.hiding = hiding
+                self.procedural = procedural
                 styles.removeAllObjects()
+                FilterPageScripts.install(table: scriptletTable)
+                WebKitContentBlocking.shared.set(webKitLists.lists, rules: webKitLists.rules)
                 hidingChanged?()
             }
             let rules = active.rules
@@ -245,7 +311,9 @@ final class BlockLists {
                     }
                 }
             }
-            CraLog.note("block lists: \(domains.count) domains, \(lists.count) added \(lists.count == 1 ? "list" : "lists")")
+            CraLog.note("block lists: \(domains.count) domains, \(lists.count) added \(lists.count == 1 ? "list" : "lists")"
+                + (usage.map { ", \($0.rules) rules in use from \($0.lists)" } ?? "")
+                + ", \(pageRuleCounts.0) scriptlets, \(pageRuleCounts.1) procedural")
         }
     }
 
@@ -302,6 +370,16 @@ final class BlockLists {
         } catch {
             CraLog.note("Could not save the accepted filters for restart: " + error.localizedDescription)
         }
+    }
+
+    /// Cra's own lists in resources/blocklist, which the Privacy pane switches one by one.
+    nonisolated static let builtInSources = ["adaway", "anudeep"]
+    nonisolated(unsafe) private static var builtInCounts: [String: BlockListCount]? // only accessed on queue
+
+    /// A built-in list's domains. Only called on the publication queue.
+    nonisolated private static func readBundled(_ source: String) -> [String] {
+        let path = Bundle.main.path(forResource: source, ofType: "txt", inDirectory: "blocklist")
+        return path.flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }.map { ParsedBlocklist(text: $0).domains } ?? []
     }
 
     /// Only called on the publication queue.

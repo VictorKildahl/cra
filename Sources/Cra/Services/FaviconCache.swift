@@ -15,23 +15,31 @@ final class FaviconCache {
     /// FaviconKey.key(for:), for code written before it moved to CraCore (#51).
     static func key(for urlString: String) -> String? { FaviconKey.key(for: urlString) }
 
+    /// The icon under `key`, else under what it falls back to: a tab's own icon not on disk (cleared, or
+    /// saved by an incognito page) shows its section's (#909), then its site's (#211).
     func image(forKey key: String?) -> NSImage? {
         guard let key else { return nil }
-        if let img = images[key] { return img }
-        if !attemptedDiskLoad.contains(key) {
-            attemptedDiskLoad.insert(key)
-            let file = AppPaths.favicons.appendingPathComponent(Self.fileName(key))
-            if let img = NSImage(contentsOf: file) {
-                images[key] = img
-                return img
-            }
-        }
-        // A tab's own icon not on disk (cleared, or saved by an incognito page): the site's (#211).
-        let site = FaviconKey.siteKey(of: key)
-        return site == key ? nil : image(forKey: site)
+        return FaviconKey.chain(of: key).lazy.compactMap { self.storedImage($0) }.first
     }
 
-    func image(for urlString: String) -> NSImage? { image(forKey: FaviconKey.key(for: urlString)) }
+    /// Whether the row reading `key` has its own icon, not only its host's, which any page on the host
+    /// overwrites (#909): a row without asks SiteIconLoader for its section's.
+    func hasOwnImage(forKey key: String?) -> Bool {
+        guard let key else { return false }
+        return FaviconKey.ownKeys(of: key).contains { storedImage($0) != nil }
+    }
+
+    /// What is stored under exactly `key`, in memory or on disk.
+    func storedImage(_ key: String) -> NSImage? {
+        if let img = images[key] { return img }
+        guard !attemptedDiskLoad.contains(key) else { return nil }
+        attemptedDiskLoad.insert(key)
+        guard let img = NSImage(contentsOf: AppPaths.favicons.appendingPathComponent(Self.fileName(key))) else { return nil }
+        images[key] = img
+        return img
+    }
+
+    func image(for urlString: String) -> NSImage? { image(forKey: FaviconKey.sectionKey(for: urlString)) }
 
     private var dominant: [String: String] = [:]
     private var selectionPalettes: [String: [String]] = [:]

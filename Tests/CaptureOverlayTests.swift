@@ -24,6 +24,8 @@ enum CaptureOverlayTests {
         checkLittleWindow()
         checkOptionPicksDeeper()
         checkFieldKeepsEditingKeys()
+        checkArcsColours()
+        checkEditRow()
         print("Capture overlay: \(checks) checks, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
     }
@@ -102,6 +104,96 @@ enum CaptureOverlayTests {
                "the capture says where on the page it was, for an easel's live capture")
         expect(panel.parent == nil && !panel.isVisible && fixture.peekWindow.isVisible,
                "copy ends capture and leaves Peek open")
+    }
+
+    /// Capture looks as Arc's does on any page, dark ones included (#850 asked for more contrast there): the ring is
+    /// Arc's dark navy #161C2F (ARC_Capture.bundle), and the page around the selection turns grey under a 25 % black
+    /// veil (243 → 181, measured on Arc 1.171), so the selection is the one part in colour and at full brightness.
+    // promise: #850
+    @MainActor
+    private static func checkArcsColours() {
+        let ring = CaptureStyle.ring.usingColorSpace(.sRGB)!
+        expect([ring.redComponent, ring.greenComponent, ring.blueComponent].map { Int(($0 * 255).rounded()) } == [22, 28, 47],
+               "the ring is Arc's #161C2F")
+        expect(CaptureStyle.dim == 0.75, "the page around the selection is dimmed as Arc dims it (243 → 181)")
+        checkMenuFollowsTheAppearance()
+    }
+
+    /// #822: the menu beside a capture is white with black text in Light mode and Arc's navy with white text in Dark,
+    /// as ARC_Capture.bundle's light and dark colours are. It was navy in Light mode too.
+    // promise: #822
+    @MainActor
+    private static func checkMenuFollowsTheAppearance() {
+        func bytes(_ c: NSColor) -> [Int] {
+            let s = c.usingColorSpace(.sRGB)!
+            return [s.redComponent, s.greenComponent, s.blueComponent].map { Int(($0 * 255).rounded()) }
+        }
+        defer { SystemAppearance.shared.isDark = true }
+        SystemAppearance.shared.isDark = false
+        let light = CaptureMenu(easels: [], choose: { _ in }).debugColors
+        expect(bytes(light.fill) == [255, 255, 255], "Light mode: the capture menu is white (\(bytes(light.fill)))")
+        expect(bytes(light.ink) == [0, 0, 0], "Light mode: its text is black (\(bytes(light.ink)))")
+        SystemAppearance.shared.isDark = true
+        let dark = CaptureMenu(easels: [], choose: { _ in }).debugColors
+        expect(bytes(dark.fill) == [18, 15, 46], "Dark mode: the capture menu is Arc's (18,15,46) (\(bytes(dark.fill)))")
+        expect(bytes(dark.ink) == [255, 255, 255], "Dark mode: its text is white (\(bytes(dark.ink)))")
+    }
+
+    /// Arc's Edit row (#851): the capture opens in the image editor over the page, Escape and ⌘ keys stay in it
+    /// rather than ending the capture, and once it closes the menu's rows take the edited capture. The editor here
+    /// is a stand-in that paints the capture blue; the real one's drawing is checked in the easel canvas harness.
+    // promise: #851
+    @MainActor
+    private static func checkEditRow() {
+        let fixture = Fixture()
+        weak var made: StandInEditor?
+        CaptureEditors.make = { frame, image in
+            let editor = StandInEditor(frame: frame, image: image)
+            made = editor
+            return editor
+        }
+        defer {
+            fixture.close()
+            CaptureEditors.make = { _, _ in nil }
+        }
+        var captured: Data?
+        fixture.main.onCaptureFinished = { action, png in
+            if action == .copy { captured = png }
+        }
+        pressCapture(fixture)
+        fixture.answerScreenshots()
+        let panel = fixture.peekPanel()
+        let view = panel.contentView!
+        let start = NSPoint(x: 30, y: 30), end = NSPoint(x: 190, y: 150)
+        for (type, point) in [(NSEvent.EventType.leftMouseDown, start), (.leftMouseDragged, end), (.leftMouseUp, end)] {
+            let event = NSEvent.mouseEvent(with: type, location: view.convert(point, to: nil), modifierFlags: [],
+                                          timestamp: 1, windowNumber: panel.windowNumber, context: nil,
+                                          eventNumber: 0, clickCount: 1, pressure: 0)!
+            switch type {
+            case .leftMouseDown: view.mouseDown(with: event)
+            case .leftMouseDragged: view.mouseDragged(with: event)
+            default: view.mouseUp(with: event)
+            }
+        }
+        guard let overlay = fixture.main.captureOverlay else { fatalError("no capture overlay") }
+        expect(overlay.debugMenu(typed: "", run: "Edit").contains("Edit"), "the menu has Arc's Edit row")
+        spin { overlay.editor != nil }
+        expect(overlay.editor != nil && made?.superview === view, "Edit opens the editor over the capture")
+        view.keyDown(with: key("\u{1b}", code: 53, in: panel))
+        view.cancelOperation(nil)
+        expect(overlay.isOpen && overlay.editor != nil, "Escape leaves the editor open, as in Arc")
+        _ = view.performKeyEquivalent(with: key("z", code: 6, modifiers: .command, in: panel))
+        expect(overlay.isOpen && overlay.editor != nil, "a ⌘ key in the editor doesn't end the capture")
+        overlay.editor?.finish()
+        expect(overlay.editor == nil && made?.superview == nil, "closing the editor brings the capture and its menu back")
+        expect(view.performKeyEquivalent(with: key("c", code: 8, modifiers: .command, in: panel)), "Command-C copies the capture")
+        guard let captured, let image = NSBitmapImageRep(data: captured)?.cgImage,
+              let color = NSBitmapImageRep(cgImage: image).colorAt(x: image.width / 2, y: image.height / 2)?.usingColorSpace(.deviceRGB)
+        else { return expect(false, "Copy after Edit produced a PNG") }
+        expect(color.blueComponent > 0.95 && color.redComponent < 0.05, "Copy takes the edited capture, not the page as taken")
+        let expected = ContentCapture.pixelRect(for: NSRect(x: 30, y: 30, width: 160, height: 120),
+                                               pageSize: view.bounds.size, imageSize: NSSize(width: 640, height: 480))
+        expect(image.width == Int(expected.width) && image.height == Int(expected.height), "the edited capture keeps its size")
     }
 
     /// The "Send To…" field holding the keyboard keeps ⌘A ⌘V ⌘X ⌘Z for its text: they ended the capture,
@@ -239,18 +331,144 @@ enum CaptureOverlayTests {
         expect(panel.parent == nil && !panel.isVisible, "normal capture still toggles off")
     }
 
+    /// #835: Capture (⇧⌘2) works in an ordinary Little Window (not only Peek), attaching to the
+    /// Little Window's own page, toggling off on a second press, staying idle on an empty ⌥⌘N card,
+    /// and never leaking capture to the main browser window behind it.
+    // promise: #835
     @MainActor
     private static func checkLittleWindow() {
-        let fixture = Fixture()
-        defer { fixture.close() }
-        fixture.peek.isPeek = false
-        pressCapture(fixture)
-        fixture.answerScreenshots()
-        expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
-               "ordinary Little Windows keep their existing capture behaviour")
-        expect(fixture.mainWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
-               "an ordinary Little Window does not send capture to the main page")
-        expect(!fixture.peek.handleCapture(action: "reload"), "other commands remain with their existing handlers")
+        for childHosted in [false, true] {
+            let fixture = Fixture(childHosted: childHosted)
+            defer { fixture.close() }
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            pressCapture(fixture)
+            fixture.answerScreenshots()
+            let panel = fixture.peekWindow.childWindows?.first(where: { $0 is CapturePanel })
+            expect(panel != nil && panel?.parent === fixture.peekWindow && panel?.isVisible == true,
+                   "Capture (Command-Shift-2) opens over an ordinary Little Window")
+            expect(panel?.frame == fixture.pageRect, "capture covers the Little Window's actual page viewport")
+            expect(fixture.mainWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "an ordinary Little Window does not send capture to the main page")
+            if let contents = panel?.contentView?.layer?.sublayers?.first?.contents,
+               CFGetTypeID(contents as CFTypeRef) == CGImage.typeID {
+                expectRed(contents as! CGImage)
+            } else {
+                expect(false, "the Little Window capture's page image is present")
+            }
+            pressCapture(fixture)
+            expect(panel?.parent == nil && panel?.isVisible != true,
+                   "the second capture command closes the Little Window's capture")
+            expect(fixture.peekWindow.isVisible, "ending capture keeps the Little Window open")
+        }
+
+        // An empty Little Card (⌥⌘N) or a Little Window with no page yet stays quiet and never captures main.
+        for empty in ["card", "noPage"] {
+            let fixture = Fixture()
+            defer { fixture.close() }
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            if empty == "card" { fixture.peek.isCard = true } else { fixture.peek.hasPage = false }
+            pressCapture(fixture)
+            fixture.answerScreenshots()
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "an empty Little Window (\(empty)) does not open capture")
+            expect(fixture.mainWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "an empty Little Window (\(empty)) does not fall back to capturing the main page")
+        }
+
+        // Starting capture while the main window already has an overlay open switches capture to the Little Window.
+        do {
+            let fixture = Fixture()
+            defer { fixture.close() }
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            fixture.main.capturePage()
+            fixture.answerScreenshots()
+            expect(fixture.mainWindow.childWindows?.contains(where: { $0 is CapturePanel }) == true,
+                   "main window capture is open first")
+            pressCapture(fixture)
+            fixture.answerScreenshots()
+            expect(fixture.mainWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "capturing in a Little Window closes the main window's capture")
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) == true,
+                   "capturing in a Little Window opens capture over the Little Window even if main had one open")
+            fixture.peek.closeCapture()
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "closing the Little Window's capture removes its panel")
+            expect(!fixture.peek.handleCapture(action: "reload"), "other commands remain with their existing handlers")
+        }
+
+        // Capture Image… from the context menu works on an ordinary Little Window too.
+        do {
+            let fixture = Fixture()
+            defer { fixture.close() }
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            fixture.peek.captureImage(at: NSPoint(x: 30, y: 30))
+            fixture.peekBrowser.reply(to: "\(PageScript.world):Runtime.evaluate",
+                                      with: #"{"result":{"value":{"x":20,"y":20,"width":160,"height":120}}}"#)
+            fixture.answerScreenshots()
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) == true,
+                   "Capture Image opens over an ordinary Little Window")
+            fixture.peek.closeCapture()
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "closing after Capture Image removes the Little Window's capture panel")
+        }
+
+        // Switching browser hosts while a Little Window capture request is still pending cancels
+        // the original host's request so a late screenshot cannot reopen capture after closeCapture().
+        for viaImage in [false, true] {
+            let fixture = Fixture()
+            defer { fixture.close() }
+            let secondWindow = NSWindow(contentRect: NSRect(x: -12000, y: -10000, width: 1100, height: 800),
+                                        styleMask: [.borderless], backing: .buffered, defer: false)
+            secondWindow.isReleasedWhenClosed = false
+            defer { secondWindow.close() }
+            let secondHost = MainWindowController(window: secondWindow)
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            pressCapture(fixture)
+            fixture.peek.captureHost = secondHost
+            if viaImage {
+                fixture.peek.captureImage(at: NSPoint(x: 30, y: 30))
+            } else {
+                pressCapture(fixture)
+            }
+            fixture.peek.closeCapture()
+            fixture.answerScreenshots()
+            fixture.answerScreenshots()
+            expect(fixture.peekWindow.childWindows?.contains(where: { $0 is CapturePanel }) != true,
+                   "switching capture host while pending (\(viaImage ? "image" : "page")) cancels the first host's request")
+        }
+
+        // Sending a Little Window capture to an easel reveals a hidden host window, and capture
+        // toasts (Messages unavailable, capture failed) surface on the Little Window itself.
+        do {
+            let fixture = Fixture()
+            defer { fixture.close() }
+            fixture.mainWindow.removeChildWindow(fixture.peekWindow)
+            fixture.mainWindow.orderOut(nil)
+            expect(!fixture.mainWindow.isVisible, "host window starts hidden")
+            fixture.peek.isPeek = true
+            fixture.main.revealForLittleWindowEasel(from: fixture.peek)
+            expect(!fixture.mainWindow.isVisible, "Peek easel capture does not unexpectedly reveal a hidden host")
+            fixture.peek.isPeek = false
+            fixture.peek.peekParent = nil
+            fixture.main.revealForLittleWindowEasel(from: fixture.peek)
+            expect(fixture.mainWindow.isVisible, "ordinary Little Window easel capture reveals a hidden host window")
+
+            fixture.main.showCaptureToast("Messages Isn't Available", in: fixture.peek)
+            expect(fixture.peek.toasts == ["Messages Isn't Available"] && fixture.main.toasts.isEmpty,
+                   "Messages unavailable toast surfaces on the Little Window when capture started there")
+            fixture.main.showCaptureToast("Messages Isn't Available", in: nil)
+            expect(fixture.main.toasts == ["Messages Isn't Available"],
+                   "Messages unavailable toast surfaces on the main window for main-window capture")
+            pressCapture(fixture)
+            fixture.peekBrowser.fail("Page.captureScreenshot", with: "boom")
+            expect(fixture.peek.toasts.last == "Capture Failed",
+                   "a failed Little Window screenshot surfaces its toast on the Little Window")
+        }
     }
 
     /// #451: the pointer on a title line lights Arc's choice, the card around it; holding ⌥ lights
@@ -372,6 +590,7 @@ private final class Fixture {
         peek = LittleWindowController(window: peekWindow)
         peek.browser = peekBrowser
         peek.peekParent = main
+        peek.captureHost = main
         mainWindow.contentView!.addSubview(mainBrowser.containerView)
         if childHosted {
             let frame = peekWindow.convertToScreen(peekBrowser.containerView.frame)
@@ -423,5 +642,30 @@ private final class Fixture {
         mainWindow.removeChildWindow(peekWindow)
         peekWindow.close()
         mainWindow.close()
+    }
+}
+
+/// Capture's editor in this harness: closing paints the capture blue, so the test can tell an edited capture.
+@MainActor
+private final class StandInEditor: NSView, CaptureEditing {
+    var onDone: (CGImage) -> Void = { _ in }
+    private let image: CGImage
+
+    init(frame: NSRect, image: CGImage) {
+        self.image = image
+        super.init(frame: frame)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func focus() {}
+
+    func finish() {
+        let ctx = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        removeFromSuperview()
+        onDone(ctx.makeImage()!)
     }
 }

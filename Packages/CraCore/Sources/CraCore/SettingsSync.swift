@@ -5,6 +5,8 @@ import Foundation
 /// Each Mac writes the three files, then the manifest last, so a reader that sees a manifest
 /// whose hashes match the files has a whole bundle. Nothing leaves the Mac but through the
 /// folder the user chose, and the Chromium profile (logins, cookies, history) never does.
+/// Easels go under `easels`, not `files`, which an older Cra reads alone and so still finds whole
+/// rather than waiting and writing over; a manifest without the key comes from an older Cra.
 public struct SyncManifest: Codable, Equatable {
     public static let currentVersion = 1
 
@@ -28,9 +30,16 @@ public struct SyncManifest: Codable, Equatable {
     /// Tabs the writing Mac's archive pass took lately, by id string → when (SyncAutoArchive): the other Mac keeps one it
     /// had looked at meanwhile. Missing in a bundle from an older Cra.
     public var autoArchived: [String: Date]?
+    /// Bundle path → hash of its bytes, for every easel file and picture in the bundle (`SettingsSync.easelPath`).
+    /// Missing in a bundle from an older Cra: its easels are unknown, and none is deleted for it.
+    public var easels: [String: String]?
+    /// The `parentIDs` whose easels the writing Mac had (SyncHistory.easelIDs): only those are a base for its
+    /// easels. A bundle an older Cra applied or wrote vouches for none. Missing: no easel base, nothing deleted.
+    public var easelParentIDs: [UUID]?
 
     public init(version: Int = SyncManifest.currentVersion, device: String, deviceID: String, writtenAt: Date, files: [String: String],
-                id: UUID? = nil, parentIDs: [UUID]? = nil, autoArchived: [UUID: Date]? = nil) {
+                id: UUID? = nil, parentIDs: [UUID]? = nil, autoArchived: [UUID: Date]? = nil, easels: [String: String]? = nil,
+                easelParentIDs: [UUID]? = nil) {
         self.version = version
         self.device = device
         self.deviceID = deviceID
@@ -39,6 +48,8 @@ public struct SyncManifest: Codable, Equatable {
         self.id = id
         self.parentIDs = parentIDs
         self.autoArchived = autoArchived.map { Dictionary(uniqueKeysWithValues: $0.map { ($0.key.uuidString, $0.value) }) }
+        self.easels = easels
+        self.easelParentIDs = easelParentIDs
     }
 
     /// `autoArchived` by id.
@@ -65,6 +76,38 @@ public enum SettingsSync {
     /// only a placeholder is not applied; Cra asks iCloud to download it and looks again.
     public static func placeholderName(for name: String) -> String { ".\(name).icloud" }
 
+    /// The folder of easels, in the bundle as in the data folder: `<id>.json`, and its pictures in `<id>/`.
+    public static let easelsName = "Easels"
+
+    /// What a write does with an easel file on this Mac: `readable`, this Mac read and decoded it now; `lastCopy`, a copy
+    /// it listed or sent before is at hand; `remembered`, a bundle in its history held that easel (SyncHistory.remembers).
+    public static func easelChoice(readable: Bool, lastCopy: Bool, remembered: Bool) -> SyncEaselChoice {
+        if readable { return .send }
+        if lastCopy { return .carry }
+        return remembered ? .hold : .leaveOut
+    }
+
+    /// What a write does when this Mac's `Easels` folder can't be listed: `missing`, no easel was made yet and the folder
+    /// lists as none. Else no bundle goes up: one without easels would delete every easel on the other Mac.
+    public static func unlistedEaselsChoice(missing: Bool) -> SyncEaselChoice { missing ? .leaveOut : .hold }
+
+    /// The easel a path in `SyncManifest.easels` names, and its picture when it names one:
+    /// `Easels/<id>.json` or `Easels/<id>/<plain name>`. Nil for any other path, which is never read or written.
+    public static func easelPath(_ path: String) -> (id: UUID, picture: String?)? {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard parts.first == easelsName else { return nil }
+        switch parts.count {
+        case 2:
+            guard let id = UUID(uuidString: String(parts[1].dropLast(5))), parts[1] == id.uuidString + ".json" else { return nil }
+            return (id, nil)
+        case 3:
+            guard let id = UUID(uuidString: parts[1]), parts[1] == id.uuidString, Easel.isPlainFileName(parts[2]) else { return nil }
+            return (id, parts[2])
+        default:
+            return nil
+        }
+    }
+
     /// Whether `a` sorts before `b` as their `uuidString`s do, from their 16 bytes (#615).
     public static func precedes(_ a: UUID, _ b: UUID) -> Bool {
         withUnsafeBytes(of: a.uuid) { x in
@@ -88,6 +131,7 @@ public enum SettingsSync {
     /// file by file, and the manifest may land before a file it names has finished downloading.
     public static func isComplete(_ manifest: SyncManifest, hashes: [String: String]) -> Bool {
         !manifest.files.isEmpty && manifest.files.allSatisfy { hashes[$0.key] == $0.value }
+            && (manifest.easels ?? [:]).allSatisfy { easelPath($0.key) != nil && hashes[$0.key] == $0.value }
     }
 
     /// The version in a manifest this Cra can't otherwise read: a newer Cra may have changed the rest.
@@ -113,7 +157,7 @@ public enum SettingsSync {
         }
         // A newer Cra's bundle is never written over, whole or not: that Cra puts it right.
         if m.version > SyncManifest.currentVersion { return .newer }
-        if m.files.keys.contains(where: { files[$0] == nil || files[$0] == .missing }) { return .arriving }
+        if lacksFile(m, files) { return .arriving }
         let hashes = files.compactMapValues { if case .present(let h) = $0 { h } else { nil } }
         guard isComplete(m, hashes: hashes) else { return .mixed }
         // The very files the manifest names, which this Cra can't decode: a format from a newer Cra.
@@ -127,7 +171,13 @@ public enum SettingsSync {
     public static func isLacking(manifest: SyncManifestState, files: [String: SyncFileState]) -> Bool {
         guard case .read(let m) = manifest, m.version <= SyncManifest.currentVersion,
               !files.values.contains(.downloading) else { return false }
-        return m.files.keys.contains { files[$0] == nil || files[$0] == .missing }
+        return lacksFile(m, files)
+    }
+
+    /// Whether a file the manifest names isn't there. A path in `easels` that names no easel counts as not there.
+    private static func lacksFile(_ m: SyncManifest, _ files: [String: SyncFileState]) -> Bool {
+        let gone = { (name: String) in files[name] == nil || files[name] == .missing }
+        return m.files.keys.contains(where: gone) || (m.easels ?? [:]).keys.contains { easelPath($0) == nil || gone($0) }
     }
 }
 
@@ -326,4 +376,16 @@ extension SidebarDocument {
         }
         return doc
     }
+}
+
+/// SettingsSync.easelChoice. An easel file this Mac can't read is never sent as deleted: the other Mac would delete its copy.
+public enum SyncEaselChoice: Equatable, Sendable {
+    /// The file as read now.
+    case send
+    /// The copy listed or sent before, until a look reads the file.
+    case carry
+    /// No copy to send, and the other Mac may have it: this Mac writes no bundle until the file reads again.
+    case hold
+    /// No bundle held it, so no Mac merges against it and leaving it out deletes nothing.
+    case leaveOut
 }

@@ -15,7 +15,7 @@ struct MaxPane: View {
     var body: some View {
         @Bindable var store = store
         let available = service.status == .available
-        let features = [store.settings.tidyTabs, store.settings.tidyTabTitles, store.settings.tidyDownloads, store.settings.fiveSecondPreviews, store.settings.askOnPage, store.settings.instantLinks]
+        let features = [store.settings.tidyTabs, store.settings.tidyTabTitles, store.settings.tidyDownloads, store.settings.fiveSecondPreviews, store.settings.askOnPage, store.settings.instantLinks, store.settings.chatGPTInCommandBar]
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
                 MaxBanner()
@@ -40,6 +40,7 @@ struct MaxPane: View {
                                 store.settings.fiveSecondPreviews = on
                                 store.settings.askOnPage = on
                                 store.settings.instantLinks = on
+                                store.settings.chatGPTInCommandBar = on
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(MaxMasterSwitch.isEmphasised(features) ? Color(.sRGB, red: 0.2, green: 0.22, blue: 0.98) : .gray)
@@ -84,9 +85,17 @@ struct MaxPane: View {
                                   isOn: $store.settings.fiveSecondPreviews, enabled: available) {
                     FiveSecondPreviewsPicture()
                 }
+                SettingsCardDivider()
+                // Arc's last Max row (gptSiteSearchEnabled, #828). It needs no Apple Intelligence: the message goes
+                // to chatgpt.com as a page.
+                SettingsSwitchRow(ChatGPTCommandBar.settingsTitle,
+                                  detail: ChatGPTCommandBar.settingsDetail(shortcut: KeyBindingRegistry.shared.action(ChatGPTCommandBar.actionID)?.primary?.display),
+                                  isOn: $store.settings.chatGPTInCommandBar, enabled: true) {
+                    ChatGPTPicture()
+                }
                     }
                     .padding(.top, 9)
-            MaxFooter(status: service.status, instantLinks: store.settings.instantLinks) { service.openSystemSettings() }
+            MaxFooter(status: service.status, instantLinks: store.settings.instantLinks, chatGPT: store.settings.chatGPTInCommandBar) { service.openSystemSettings() }
                 .padding(.top, 14)
                 }
                 .padding(.horizontal, SettingsMetrics.paneInset)
@@ -110,6 +119,7 @@ struct MaxPane: View {
 private struct MaxFooter: View {
     let status: TidyTabsService.Status
     let instantLinks: Bool
+    let chatGPT: Bool
     let openSettings: () -> Void
 
     var body: some View {
@@ -125,6 +135,13 @@ private struct MaxFooter: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Arc says Max sends data to its AI partners; here only what you ask ChatGPT leaves, to its site.
+            if chatGPT {
+                Text("ChatGPT in the Command Bar sends what you ask to chatgpt.com, as opening the page would.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if status.canOpenSettings {
                 Button(action: openSettings) {
                     Text("Turn on Apple Intelligence in System Settings").font(.system(size: 12)).underline()
@@ -133,6 +150,27 @@ private struct MaxFooter: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// ChatGPT in the Command Bar's picture: the bar scoped to ChatGPT, its pill in Arc's #75A99C and "Send a Message…".
+private struct ChatGPTPicture: View {
+    private let teal = Color(red: 0x75 / 255, green: 0xA9 / 255, blue: 0x9C / 255)
+    var body: some View {
+        ZStack {
+            teal.opacity(0.85)
+            HStack(spacing: 3) {
+                Image(systemName: "magnifyingglass").font(.system(size: 4.5, weight: .semibold)).foregroundStyle(Color(white: 0.75))
+                Text("ChatGPT").font(.system(size: 4.5, weight: .bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 3).padding(.vertical, 1.5)
+                    .background(Capsule().fill(teal))
+                Text("Send a Message…").font(.system(size: 4.5, weight: .semibold)).foregroundStyle(Color(white: 0.6)).lineLimit(1).fixedSize()
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 5).padding(.vertical, 5)
+            .frame(width: 72)
+            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Color(red: 0.18, green: 0.17, blue: 0.15)))
+        }
     }
 }
 

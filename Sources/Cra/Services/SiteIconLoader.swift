@@ -5,6 +5,7 @@ import ImageIO
 /// the user's tabs, archive and history, and Library ▸ Boosts. Its home page's declared icons, then
 /// /favicon.ico (CraCore SiteIcon), fetched from the page's own origin without cookies, in the order
 /// SiteIconQueue gives, kept in the favicon cache under the site's key unless an icon got there first.
+/// A row reading a section's key ("docs.google.com/spreadsheets") gets that section's page's icon (#909).
 @MainActor
 final class SiteIconLoader {
     static let shared = SiteIconLoader()
@@ -36,8 +37,10 @@ final class SiteIconLoader {
     /// while it reads the cache. `done` runs when that fetch ends, stored or not.
     func want(_ row: SiteIconQueue.Row, into cache: FaviconCache, done: (() -> Void)? = nil) {
         self.cache = cache
+        // Already stored for what it would fetch: a tab whose own icon file is gone, on a host whose icon is here.
+        if let key = SiteIconQueue.key(for: row), cache.storedImage(key) != nil { return }
         guard queue.want(row) else { return }
-        if let done, let host = FaviconKey.key(for: row.url) { waiting[host, default: []].append(done) }
+        if let done, let key = SiteIconQueue.key(for: row) { waiting[key, default: []].append(done) }
         guard !pumpQueued else { return }
         pumpQueued = true
         DispatchQueue.main.async { MainActor.assumeIsolated { self.pump() } }
@@ -50,7 +53,7 @@ final class SiteIconLoader {
                 let png = await Self.icon(at: fetch.origin, session: session, deadline: deadline)
                 queue.finished(fetch.host)
                 // The engine's icon, or another source's, that arrived meanwhile stays.
-                if let png, let image = NSImage(data: png), let cache, cache.image(forKey: fetch.host) == nil {
+                if let png, let image = NSImage(data: png), let cache, cache.storedImage(fetch.host) == nil {
                     cache.store(image, forKey: fetch.host)
                     CraLog.note("site icon for \(fetch.host) stored")
                 }
