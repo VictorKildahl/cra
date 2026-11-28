@@ -1,0 +1,14 @@
+# promise: #900
+# A bare file path typed in the command bar opens the local page instead of searching.
+budget rss=600 stalls50=10
+seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false, "searchEngine": "duckduckgo"}
+cra://open?url=${PAGE}?n=start
+wait 2
+
+cra://commandbar?query=${FIXTURES}/Pages/page.html
+wait 1
+cra://debug?key=%0D,36,0
+wait 2
+expect-log loaded file:
+cra://debug?browserWindows=filePath
+expect-log Cra browser windows filePath: .*open=file://.*/Pages/page\.html

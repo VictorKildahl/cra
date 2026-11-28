@@ -1978,6 +1978,11 @@
 #896   Tests/Scenarios/downloads-tray-row-hover.scenario  489860ec98f8
 #897   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theWayToSyncNamesTheMacsSwitchWhereItIs  1daa34af0a9c
 #897   iOS/CraUITests/BrowserTests.swift::testWithoutSyncTheSpacesViewExplains  bec958d5e3ae
+#900   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::filePathsStaySearchesOnTheIPhone  276578e52b48
+#900   Packages/CraCore/Tests/CraCoreTests/SidebarAddressEditTests.swift::aFilePathLoadsInTheSidebarAddressField  989f6ad3bdd7
+#900   Packages/CraCore/Tests/CraCoreTests/TypedURLTests.swift::filePathsAreAddresses  552c070881d6
+#900   Packages/CraCore/Tests/CraCoreTests/TypedURLTests.swift::homePathsExpandAndOtherTextKeepsItsRule  27af44a87d5d
+#900   Tests/Scenarios/command-bar-file-path.scenario  d1303e8fa86c
 #905   Packages/CraCore/Tests/CraCoreTests/PasswordManagerPageTests.swift::opensOnTheSitesLogins  f9184a8bd615
 #905   Packages/CraCore/Tests/CraCoreTests/PasswordManagerPageTests.swift::otherwiseTheWholeList  46c09f5d8a0a
 #905   Tests/KeyBindingsTests.swift::openPasswordsKey  91ee4607ffe9

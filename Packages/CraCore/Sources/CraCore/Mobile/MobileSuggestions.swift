@@ -82,7 +82,7 @@ public enum MobileSuggestions {
         let matches = siteMatches(typed: query, in: sites)
         let shown = Array((matches.byHost + matches.byTitle).prefix(min(maxSiteRows, max(0, limit - 1))))
         let siteRows = shown.map { Row(kind: .site(url: $0.url), text: title(of: $0), place: $0.place) }
-        let typedRow = Row(kind: TypedURL.looksLikeURL(query) ? .address : .search, text: query)
+        let typedRow = Row(kind: TypedURL.looksLikeURL(query, filePaths: false) ? .address : .search, text: query)
         let leadsWithSite = !matches.byHost.isEmpty && !siteRows.isEmpty
         var rows = leadsWithSite ? [siteRows[0], typedRow] + siteRows.dropFirst() : [typedRow] + siteRows
         var seen: Set<String> = [query.lowercased()]
@@ -204,7 +204,7 @@ public enum MobileSuggestions {
     public static func destination(forTyped typed: String, engine: MobileSearch, kind: Row.Kind? = nil,
                                    browsesForMe: Bool = false) -> String {
         let query = typed.trimmingCharacters(in: .whitespaces)
-        let isAddress = kind.map { $0 == .address } ?? TypedURL.looksLikeURL(query)
+        let isAddress = kind.map { $0 == .address } ?? TypedURL.looksLikeURL(query, filePaths: false)
         if isAddress { return TypedURL.fromInput(query) }
         return browsesForMe ? MobileBrowseForMe.tabAddress(query: query) : engine.searchURL(query)
     }

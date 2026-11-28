@@ -3047,3 +3047,11 @@ struct MobileSideInsetsTests {
             == MobileTabCarousel.restingIndex(position: 1.2, velocity: -900, count: 4, in: size))
     }
 }
+
+struct MobileTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/900"))
+    func filePathsStaySearchesOnTheIPhone() {
+        #expect(MobileSuggestions.destination(forTyped: "/Users/me/a.html", engine: .google).hasPrefix("https://www.google.com/search?q="))
+        #expect(MobileSuggestions.rows(typed: "/Users/me/a.html", completions: []).first?.kind == .search)
+    }
+}
