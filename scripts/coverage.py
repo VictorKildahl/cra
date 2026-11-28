@@ -3,6 +3,12 @@
 
   scripts/coverage.py                 against origin/main
   scripts/coverage.py --base <ref>
+  scripts/coverage.py --part <part> --emit <file.json>     one part, its lines kept for --report
+  scripts/coverage.py --report <file.json>… --base <ref>   the parts' lines, merged and gated
+
+A part is `core` (CraCore's `swift test`) or `harnesses:<i>/<n>` (the i-th of n shares of the
+harnesses; the ones in SERIAL go in the last). CI runs the parts on separate runners at once and
+reports in a job of its own; without --part or --report everything runs here, as before.
 
 Runs every harness (scripts/test-*.sh, Tests/test-*.sh) compiled with coverage, plus CraCore's
 `swift test --enable-code-coverage` when Packages/CraCore exists, and reports:
@@ -26,6 +32,7 @@ The summary goes to stdout and, in CI, to the job summary (GITHUB_STEP_SUMMARY).
 test failures go to stderr.
 """
 import glob
+import json
 import os
 import re
 import shutil
@@ -109,8 +116,23 @@ def links_cracore(harness):
         return "harness-cracore.sh" in f.read()
 
 
-def all_coverage(work, failures):
-    """({file: {line: count}} over every harness binary, the same for CraCore's own tests)."""
+def by_first(names):
+    return sorted(names, key=lambda n: FIRST.index(n) if n in FIRST else len(FIRST))  # stable: the rest stay in order
+
+
+def harness_share(harnesses, share):
+    """The harnesses a part runs: all of them, or for (i, n) every n-th of the pool's, longest
+    first, so the long ones spread across the parts; SERIAL goes in the last part."""
+    if share is None:
+        return harnesses
+    i, n = share
+    pool = by_first(h for h in harnesses if h not in SERIAL)[i - 1::n]
+    return pool + ([h for h in harnesses if h in SERIAL] if i == n else [])
+
+
+def all_coverage(work, failures, part=None):
+    """({file: {line: count}} over every harness binary, the same for CraCore's own tests).
+    `part` None runs everything; "core" only CraCore; ("harnesses", i, n) a share of the harnesses."""
     keep = os.path.join(work, "bin")
     os.makedirs(keep)
     env = dict(os.environ, CRA_TEST_SWIFTC_FLAGS="-profile-generate -profile-coverage-mapping",
@@ -118,13 +140,18 @@ def all_coverage(work, failures):
     scripts = sorted(glob.glob(os.path.join(ROOT, "scripts/test-*.sh")) + glob.glob(os.path.join(ROOT, "Tests/test-*.sh")))
     harnesses = [os.path.relpath(s, ROOT) for s in scripts]
     harnesses = [h for h in harnesses if h not in NOT_HARNESSES]
-    # CraCore's library once, before the harnesses that link it, so they don't all build it at once.
-    tasks = [("CraCore", lambda: core_coverage(failures), None),
-             (LIBRARY, lambda: suite(LIBRARY, ["bash", "-c", "source scripts/harness-cracore.sh"], failures, env=env), None)]
-    tasks += [(h, lambda h=h: suite(h, ["bash", h], failures, env=env), LIBRARY if links_cracore(h) else None)
-              for h in harnesses if h not in SERIAL]
-    tasks.sort(key=lambda t: FIRST.index(t[0]) if t[0] in FIRST else len(FIRST))  # stable: the rest stay in order
-    core = run_all(tasks, JOBS)["CraCore"]
+    harnesses = [] if part == "core" else harness_share(harnesses, part[1:] if part else None)
+    tasks = []
+    if part in (None, "core"):
+        tasks.append(("CraCore", lambda: core_coverage(failures), None))
+    if harnesses:
+        # CraCore's library once, before the harnesses that link it, so they don't all build it at once.
+        tasks.append((LIBRARY, lambda: suite(LIBRARY, ["bash", "-c", "source scripts/harness-cracore.sh"], failures, env=env), None))
+        tasks += [(h, lambda h=h: suite(h, ["bash", h], failures, env=env), LIBRARY if links_cracore(h) else None)
+                  for h in harnesses if h not in SERIAL]
+    order = by_first(t[0] for t in tasks)
+    tasks.sort(key=lambda t: order.index(t[0]))
+    core = run_all(tasks, JOBS).get("CraCore", {})
     for h in harnesses:
         if h in SERIAL:
             suite(h, ["bash", h], failures, env=env)
@@ -142,7 +169,11 @@ def core_coverage(failures):
     pkg = os.path.join(ROOT, "Packages/CraCore")
     if not os.path.isdir(pkg):
         return {}
-    suite("CraCore", ["swift", "test", "--package-path", pkg, "--enable-code-coverage"], failures)
+    # Built, then run, as two suites, so the log says which of them CraCore's time goes to.
+    suite("CraCore build", ["swift", "build", "--build-tests", "--package-path", pkg, "--enable-code-coverage"], failures)
+    if "CraCore build" in failures:
+        return {}
+    suite("CraCore", ["swift", "test", "--skip-build", "--package-path", pkg, "--enable-code-coverage"], failures)
     if "CraCore" in failures:
         return {}
     # Per line, as the harnesses are: the JSON's segments only mark where regions start, so the
@@ -172,44 +203,97 @@ def changed_lines(base):
     for line in diff.splitlines():
         if line.startswith("+++ "):
             path = line[4:]
-            current = None if path == "/dev/null" else out.setdefault(os.path.join(ROOT, path[2:]), set())
+            current = None if path == "/dev/null" else out.setdefault(path[2:], set())
         elif line.startswith("@@") and current is not None:
             m = re.match(r"@@ -\S+ \+(\d+)(?:,(\d+))? @@", line)
             start, count = int(m.group(1)), int(m.group(2) or "1")
             current.update(range(start, start + count))
     # Uncommitted work counts too (a local run before committing).
     for path in run(["git", "diff", "--name-only", "HEAD", "--", "Sources", "Packages"]).split():
-        out.setdefault(os.path.join(ROOT, path), set())
+        out.setdefault(path, set())
     return out
+
+
+def relative(cov):
+    """Paths relative to the checkout, so parts run on other runners merge; files outside it go."""
+    return {os.path.relpath(f, ROOT): lines for f, lines in cov.items() if f.startswith(ROOT + os.sep)}
+
+
+def merge(into, cov):
+    for f, lines in cov.items():
+        merged = into.setdefault(f, {})
+        for n, count in lines.items():
+            merged[n] = max(merged.get(n, 0), count)
+    return into
 
 
 def pct(hit, total):
     return 100.0 * hit / total if total else 100.0
 
 
+def parse_part(text):
+    """"core" or ("harnesses", i, n) from `core` or `harnesses:<i>/<n>`."""
+    if text == "core":
+        return text
+    m = re.fullmatch(r"harnesses:(\d+)/(\d+)", text)
+    if not m or not 1 <= int(m.group(1)) <= int(m.group(2)):
+        sys.exit(f"coverage: --part is core or harnesses:<i>/<n>, not {text}")
+    return ("harnesses", int(m.group(1)), int(m.group(2)))
+
+
+def load(path):
+    """A part's file from --emit, line numbers back to ints."""
+    with open(path) as f:
+        data = json.load(f)
+    lines = lambda cov: {f: {int(n): c for n, c in ls.items()} for f, ls in cov.items()}  # noqa: E731
+    return lines(data["coverage"]), lines(data["core"]), data["failures"]
+
+
+def option(name):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else None
+
+
 def main():
-    base = sys.argv[sys.argv.index("--base") + 1] if "--base" in sys.argv else "origin/main"
+    base = option("--base") or "origin/main"
+    if "--report" in sys.argv:
+        cov, core, failures = {}, {}, []
+        for path in sys.argv[sys.argv.index("--report") + 1:]:
+            if path.startswith("--"):
+                break
+            part_cov, part_core, part_failures = load(path)
+            merge(cov, part_cov), merge(core, part_core), failures.extend(part_failures)
+        if failures:
+            print("Failed: " + ", ".join(failures), file=sys.stderr)
+            return 1
+        return summarize(merge(cov, core), core, base)
+
+    part = parse_part(option("--part")) if "--part" in sys.argv else None
     work = tempfile.mkdtemp(prefix="cra-coverage.")
     failures = []
+    print(f"coverage: {os.cpu_count()} cores, {JOBS} suites at a time", file=sys.stderr, flush=True)
     try:
-        cov, core = all_coverage(work, failures)
+        cov, core = all_coverage(work, failures, part)
     finally:
         shutil.rmtree(work, ignore_errors=True)
+    cov, core = relative(cov), relative(core)
+    if "--emit" in sys.argv:
+        with open(option("--emit"), "w") as f:
+            json.dump({"coverage": cov, "core": core, "failures": failures}, f)
     if failures:
         print("Failed: " + ", ".join(failures), file=sys.stderr)
         return 1
-    for f, lines in core.items():
-        merged = cov.setdefault(f, {})
-        for n, count in lines.items():
-            merged[n] = max(merged.get(n, 0), count)
+    return 0 if "--emit" in sys.argv else summarize(merge(cov, core), core, base)
 
+
+def summarize(cov, core, base):
+    """The table, the gates and the job summary, from paths relative to the checkout."""
     table = ["| File | Lines | Covered |", "|---|---:|---:|"]
     for f in sorted(cov):
-        if not f.startswith(ROOT) or "/Tests/" in f or "/.build/" in f:
+        if "/Tests/" in "/" + f or "/.build/" in "/" + f:
             continue
         lines = cov[f]
         hit = sum(1 for c in lines.values() if c > 0)
-        table.append(f"| {os.path.relpath(f, ROOT)} | {len(lines)} | {pct(hit, len(lines)):.0f} % |")
+        table.append(f"| {f} | {len(lines)} | {pct(hit, len(lines)):.0f} % |")
 
     report, failed = [], []
     core_lines = [c for f, lines in core.items() if "/Sources/" in f for c in lines.values()]
@@ -223,15 +307,15 @@ def main():
     measured, hit, uncovered, unmeasured = 0, 0, [], []
     for f, lines in sorted(changed.items()):
         if f not in cov:
-            if f.endswith(".swift") and "/Tests/" not in f:
-                unmeasured.append(os.path.relpath(f, ROOT))
+            if f.endswith(".swift") and "/Tests/" not in "/" + f:
+                unmeasured.append(f)
             continue
         executable = [n for n in lines if n in cov[f]]
         measured += len(executable)
         missed = sorted(n for n in executable if cov[f][n] == 0)
         hit += len(executable) - len(missed)
         if missed:
-            uncovered.append(f"{os.path.relpath(f, ROOT)}: {', '.join(map(str, missed[:30]))}{' …' if len(missed) > 30 else ''}")
+            uncovered.append(f"{f}: {', '.join(map(str, missed[:30]))}{' …' if len(missed) > 30 else ''}")
     changed_pct = pct(hit, measured)
     report.insert(0, f"Changed lines under test: {hit} of {measured} ran ({changed_pct:.1f} %, minimum {CHANGED_MIN:.0f} %)\n")
     if uncovered:

@@ -124,6 +124,8 @@ the save panel.
     scripts/scenario.sh sleep-tabs   # one of them (Tests/Scenarios/<name>.scenario)
     scripts/coverage.py              # line coverage, and the changed-lines gate against origin/main
     scripts/coverage.py --base <ref> # the same against another base (CI passes the PR's)
+    scripts/coverage.py --part harnesses:1/2 --emit a.json  # one part, as CI runs it
+    scripts/coverage.py --report a.json b.json --base <ref> # the parts merged and gated
     scripts/fuzz.sh                  # mutated importer fixtures under AddressSanitizer
     scripts/mutate.py [word]         # mutation testing of the pure code, about an hour; a word limits it
 
@@ -131,7 +133,9 @@ the save panel.
 
 CI runs the same tests on every pull request and push to main (no CEF download), once, through
 `scripts/coverage.py` plus `scripts/lint.py`, and the smoke test on the app it builds. A change
-to Markdown or `docs/` alone runs nothing.
+to Markdown or `docs/` alone runs nothing. The tests run in three parts on separate runners at
+once (`--part core`, `--part harnesses:1/2` and `harnesses:2/2`, each with `--emit`), and the
+Tests check merges what they measured and applies the gates (`--report`).
 
 A harness that needs CraCore sources `scripts/harness-cracore.sh` and puts `"${CRACORE[@]}"` on
 its `swiftc` line instead of CraCore's files. CraCore is then built once as a library, with the
