@@ -25,6 +25,13 @@ final class TabOrderTests: BrowserTestCase {
         sleep(1)
     }
 
+    private func swipeAlongTheBarToTheNewerTab() {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.95))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.95)),
+                    withVelocity: .fast, thenHoldForDuration: 0)
+        sleep(1)
+    }
+
     private func flickUpFromTheTabButton() {
         let start = app.buttons["bar-tabs"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.55)),
@@ -105,6 +112,40 @@ final class TabOrderTests: BrowserTestCase {
         waitForPage("First")
         app.buttons["bar-tabs"].tap()
         XCTAssertEqual(rowTitles(), ["Second", "Third", "First"])
+    }
+
+    /// A flick along the bar quick enough to have gone its way before the swipe began, the swipe
+    /// seeing nothing moved, still goes to the tab beside: it takes its whole way from where it
+    /// touched down, at once as it lifts. Before, it went nowhere (1 in 6 of the bar's UI tests).
+    func testAQuickFlickAlongTheBarStillGoesToTheTabBeside() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.95))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.95)),
+                    withVelocity: XCUIGestureVelocity(rawValue: 20000), thenHoldForDuration: 0)
+        waitForPage("First")
+    }
+
+    /// Along the bar the tabs go in the row's order, as the tab switcher shows them, both ways:
+    /// back from the newest, then forward again to the tab next in the row, not to the one last
+    /// looked at.
+    func testSwipingAlongTheBarGoesInTheRowsOrder() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO"])
+        waitForPage("First")
+        openTab("Second")
+        openTab("Third")
+        openTab("Fourth")
+        swipeAlongTheBarToTheOlderTab()
+        waitForPage("Third")
+        swipeAlongTheBarToTheOlderTab()
+        waitForPage("Second")
+        swipeAlongTheBarToTheNewerTab()
+        waitForPage("Third")
+        swipeAlongTheBarToTheNewerTab()
+        waitForPage("Fourth")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertEqual(rowTitles(), ["First", "Second", "Third", "Fourth"])
     }
 
     // promise: #647

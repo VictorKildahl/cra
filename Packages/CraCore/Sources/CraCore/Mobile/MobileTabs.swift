@@ -243,12 +243,36 @@ extension MobileTabsDocument {
     public var previousTab: MobileTab? { tabsBehindCurrent.first }
 
     /// The row's tabs behind the one on screen, most recently picked first, ties to the newer
-    /// tab in the row. The tab button's preview shows the first two, never the page itself.
+    /// tab in the row: the first is where a flick up goes. The tab button previews the row
+    /// instead (`buttonPreview`).
     public var tabsBehindCurrent: [MobileTab] {
         rowTabs.enumerated()
             .filter { $0.element.id != selected }
             .sorted { ($0.element.lastPicked, $0.offset) > ($1.element.lastPicked, $1.offset) }
             .map(\.element)
+    }
+
+    /// What the tab button previews: the two tabs to the left of the page in the tab switcher,
+    /// nearest first, the one in front the tab a swipe right along the bar brings (asked for on
+    /// Nov 28; the flick up still goes to `previousTab`). The page itself never shows; with no
+    /// page from the row on screen, the row's newest two.
+    public var buttonPreview: [MobileTab] {
+        let row = rowTabs
+        guard let index = rowIndexOfSelected(in: row) else { return Array(row.reversed().prefix(2)) }
+        return Array(row[..<index].reversed().prefix(2))
+    }
+
+    /// The tab `step` along the row from the page on screen, the switcher's order (-1 the one to
+    /// its left, 1 to its right), where a swipe along the bar goes: none past either end, or with
+    /// no page from the row on screen.
+    public func rowTab(beside step: Int) -> MobileTab? {
+        let row = rowTabs
+        guard let index = rowIndexOfSelected(in: row), row.indices.contains(index + step) else { return nil }
+        return row[index + step]
+    }
+
+    private func rowIndexOfSelected(in row: [MobileTab]) -> Int? {
+        selected.flatMap { id in row.firstIndex { $0.id == id } }
     }
 
     /// The card the tab row opens focused on: the one behind the page, to its left, when the page

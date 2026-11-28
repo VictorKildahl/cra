@@ -48,7 +48,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         let velocity = pan.velocity(in: view)
         switch pan.name {
         case Name.bar:
-            // Sideways for the neighbouring tab, upwards for the tab row (from the bar's left
+            // Sideways for the tab beside, upwards for the tab row (from the bar's left
             // end, the previous tab: `MobileSwipe.barDrag`).
             return !isSearching && switcher == nil && shownPage != nil && (abs(velocity.x) > abs(velocity.y) || velocity.y < 0)
         case Name.page:
@@ -108,70 +108,6 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         return rooms
     }
 
-    // MARK: Along the bar: the neighbouring tab
-
-    /// Puts the neighbouring tab's live page beside the page, in its container, for a bar swipe to
-    /// bring it in as itself rather than as its picture: a page in memory shows at once (its
-    /// picture covers WebKit's first frames back in the window); one that isn't starts loading
-    /// under its picture, which leaves as it lands. False for a page Browse for Me's loading
-    /// covers or would cover (`browseLoadingCovers`, `browseWouldStart`): that one comes in as its
-    /// picture.
-    func attachSwipeNeighbourPage(_ tab: MobileTab, step: Int) -> Bool {
-        let existing = store.existingPage(tab.id)
-        let growth = MobileTabCarousel.growth(pageInMemory: existing != nil, hasAddress: existing?.webView.url != nil,
-                                              covered: browseLoadingCovers(tab.id) || browseWouldStart(for: tab))
-        guard growth != .picture else { return false }
-        let page = self.page(for: tab)
-        page.delegate = self
-        if swipeContainerClipped == nil { swipeContainerClipped = pageContainer.clipsToBounds }
-        pageContainer.clipsToBounds = false
-        // Laid out as it will be once shown, insets and all: a page made for the swipe has none
-        // yet, and one shown before has those of the bar as it was then.
-        layoutPageView(page, beside: swipeShift(step))
-        if page.webView.superview == nil { pageContainer.insertSubview(page.webView, at: 0) }
-        swipePageTraceView.accessibilityValue = "bottom \(Int(visibleBottom(of: page).rounded()))"
-        startContent(of: page, for: tab)
-        let cover = swipePicture(of: tab)
-        cover.isUserInteractionEnabled = false
-        view.insertSubview(cover, aboveSubview: pageContainer)
-        swipeNeighbourPage = (page, cover, growth)
-        if growth == .live { cover.fadeOut(over: MobileTabCarousel.liveCover) { cover.removeFromSuperview() } }
-        return true
-    }
-
-    /// A tab's picture as a bar swipe shows it, filling the page's place on its background.
-    private func swipePicture(of tab: MobileTab) -> UIImageView {
-        let picture = UIImageView(image: store.snapshot(tab.id))
-        picture.backgroundColor = pageBackground(for: tab.id)
-        picture.contentMode = .scaleAspectFill
-        picture.clipsToBounds = true
-        return picture
-    }
-
-    /// How far beside the page the tab `step` along the row rides in a bar swipe
-    /// (`MobileSwipe.neighbourOffset`).
-    func swipeShift(_ step: Int) -> CGFloat { MobileSwipe.neighbourOffset(step: step, width: view.bounds.width) }
-
-    /// The bar swipe's live neighbour leaves: its page out of the window unless it is the one shown,
-    /// and the page's container clips again as it did before the swipe.
-    func dropSwipeNeighbourPage() {
-        if let clipped = swipeContainerClipped { pageContainer.clipsToBounds = clipped }
-        swipeContainerClipped = nil
-        guard let neighbour = swipeNeighbourPage else { return }
-        swipeNeighbourPage = nil
-        neighbour.cover.removeFromSuperview()
-        if neighbour.page !== shownPage, neighbour.page.webView.superview === pageContainer {
-            neighbour.page.webView.removeFromSuperview()
-        }
-    }
-
-    private func neighbour(_ step: Int) -> MobileTab? {
-        let tabs = store.rowTabs
-        guard let current = store.selected, let index = tabs.firstIndex(where: { $0.id == current.id }),
-              tabs.indices.contains(index + step) else { return nil }
-        return tabs[index + step]
-    }
-
     /// A drag up from the bar: the page shrinks towards its card under the finger, and letting
     /// go settles into the tab row or back into the page.
     private func barDraggedUp(_ pan: UIPanGestureRecognizer) {
@@ -208,7 +144,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
     /// button and the new tab into the page's place. The next flick comes back.
     private func barFlickedUp(_ pan: UIPanGestureRecognizer, to target: MobileTab) {
         let up = -pan.translation(in: view).y
-        let origin = bar.tabsButton.frontCard(in: view)
+        let origin = bar.tabsButton.card(.front, in: view)
         let full = view.bounds
         let area = tabArea
         let barTop = area.maxY
@@ -307,16 +243,15 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             // Anything left of an interrupted settle goes before this card does.
             flick.startGesture()
             dropFlickHandoff()
-            swipeNeighbourCard?.removeFromSuperview()
-            swipeNeighbourCard = nil
-            dropSwipeNeighbourPage()
             // The tab on screen keeps its picture up to date, taken before the card covers it, and
             // the card shows that same picture. Right after a switch the page has not drawn: its
             // picture would be black, so the tab's stored one stands in.
             let drawn = CACurrentMediaTime() - pageShownAt > MobileMotion.pageDrawDelay
             if drawn { capturePageSnapshot() }
-            // The front card hands its tab to the flick: the slot is left empty underneath it.
-            bar.tabsButton.setFrontEmpty(true)
+            // The front card hands its tab to the flick: the slot is left empty underneath it. The
+            // front shows the tab to the page's left, which the flick goes to only when it was
+            // also looked at last; otherwise the button keeps it.
+            if store.buttonPreview.first?.id == target.id { bar.tabsButton.setOut(.front) }
             let card = UIView()
             // Purely a picture: it sits over the bar after the drop, and must not eat the next
             // swipe on the tab button while it settles.
@@ -440,23 +375,26 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
                 landing?.layer.removeAnimation(forKey: UIView.flickLandingKey)
                 self.flick.incoming = false
                 self.pageContainer.clipsToBounds = false
+                var left: UUID?
                 if switches, self.store.tabs.contains(where: { $0.id == target.id }) {
                     // The incoming card's last frame is the whole screen, edge to edge (its transform
                     // first: a frame set through a transform is not the frame it gets).
                     picture?.transform = .identity
                     picture?.frame = full
                     picture?.layer.cornerRadius = 0
+                    left = self.shownPage?.tabID
                     self.store.bringToFront(target.id)
                     self.show(target)
                     self.refreshTabStack()
                 }
                 // The front card is the page left behind now, or the same one again.
-                self.bar.tabsButton.setFrontEmpty(false)
+                self.bar.tabsButton.setOut(nil)
                 self.pageContainer.transform = .identity
                 self.pageContainer.isHidden = false
-                if switches, let card = self.flick.oldCard {
+                if switches, let card = self.flick.oldCard, left != nil, left == self.store.buttonPreview.first?.id {
                     // The card becomes the button's picture itself, so nothing is swapped under
-                    // it: no snapshot to render, nothing to go blank or black.
+                    // it: no snapshot to render, nothing to go blank or black. Only when the page
+                    // left behind is the tab to the new page's left, the one the button shows.
                     self.bar.tabsButton.keepFrontCard(card)
                     self.flick.oldCard = nil
                 } else {
@@ -630,6 +568,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
             let at = pan.location(in: bar), moved = pan.translation(in: bar)
             let startedAt = barSwipeStart ?? CGPoint(x: at.x - moved.x, y: at.y - moved.y)
             barSwipeStart = nil
+            barSwipeStartedAt = startedAt
             let zone = MobileBottomBar.previousTabZone(in: bar.bounds.size, safeBottom: bar.bounds.height - MobileBottomBar.height)
             let pullZone = MobileBottomBar.searchPullZone(in: bar.bounds.size, safeBottom: bar.bounds.height - MobileBottomBar.height)
             let previous = store.previousTab
@@ -642,121 +581,7 @@ extension BrowserViewController: UIGestureRecognizerDelegate {
         if barSwipePullsSearch { return barPulledUp(pan) }
         if let target = barSwipeTarget { return barFlickedUp(pan, to: target) }
         if barSwipeOpensRow { return barDraggedUp(pan) }
-        let width = view.bounds.width
-        var x = pan.translation(in: view).x
-        // Dragging right brings the older tab in from the left.
-        let step = x > 0 ? -1 : 1
-        let tab = neighbour(step)
-        if tab == nil { x /= 3 }
-        switch pan.state {
-        case .began:
-            captureSnapshot()
-            showSwapBackdrop(for: shownPage)
-            swipeNeighbourCard?.removeFromSuperview()
-            swipeNeighbourCard = nil
-            dropSwipeNeighbourPage()
-        case .changed:
-            if swipeNeighbourStep != step || swipeNeighbourCard == nil {
-                swipeNeighbourCard?.removeFromSuperview()
-                swipeNeighbourCard = nil
-                dropSwipeNeighbourPage()
-                swipeNeighbourStep = step
-                if let tab {
-                    let live = attachSwipeNeighbourPage(tab, step: step)
-                    let top = view.safeAreaInsets.top
-                    let card = UIView(frame: view.bounds)
-                    card.backgroundColor = pageBackground(for: tab.id)
-                    card.clipsToBounds = true
-                    // The live page beside the page stands in for the picture, which goes over
-                    // it (`swipeNeighbourPage`). Otherwise the picture sits below the band and
-                    // runs on under the bar, as the page it becomes will.
-                    if !live {
-                        let content = swipePicture(of: tab)
-                        content.frame = restingPageViewFrame
-                        card.addSubview(content)
-                    }
-                    // The incoming tab already has its band at full height: only the tab row
-                    // animates the band's size.
-                    if let colour = bandColour(for: tab) {
-                        let band = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: top))
-                        band.backgroundColor = colour
-                        band.autoresizingMask = [.flexibleWidth]
-                        card.addSubview(band)
-                    }
-                    // Under the page's container when the live page rides in it, so its band and
-                    // background are behind that page.
-                    if live {
-                        view.insertSubview(card, belowSubview: pageContainer)
-                    } else {
-                        view.insertSubview(card, aboveSubview: pageContainer)
-                    }
-                    swipeNeighbourCard = card
-                }
-            }
-            pageContainer.transform = CGAffineTransform(translationX: x, y: 0)
-            swipeNeighbourCard?.frame = view.bounds.offsetBy(dx: x + swipeShift(step), dy: 0)
-            swipeNeighbourPage?.cover.frame = restingPageViewFrame.offsetBy(dx: x + swipeShift(step), dy: 0)
-        case .ended, .cancelled:
-            let chosen = pan.state == .ended
-                ? MobileSwipe.tabStep(translation: pan.translation(in: view).x, velocity: pan.velocity(in: view).x, width: width,
-                                      hasOlder: neighbour(-1) != nil, hasNewer: neighbour(1) != nil) : 0
-            let picture = swipeNeighbourCard
-            let target = chosen == 0 ? nil : neighbour(chosen)
-            let livePage = swipeNeighbourPage
-            let cover = livePage?.cover
-            // A page loading under its picture: the picture leaves as the page slides in
-            // (`MobileTabCarousel.pictureFade`).
-            if let cover, target != nil, livePage?.growth == .liveUnderPicture {
-                cover.fadeOut(over: MobileTabCarousel.loadingFade) { cover.removeFromSuperview() }
-            }
-            // The status bar's text and the bar change to the arriving tab's as it slides in, as
-            // they do for a card picked in the tab row, not once it has landed.
-            if let target {
-                flick.statusFill = bandColour(for: target).flatMap { Palette.hex($0, traits: traitCollection) }
-                flick.statusPage = target.id
-                swipeStatusTraceView.accessibilityValue = flick.statusFill ?? "none"
-                updateStatusBand()
-                UIView.animate(withDuration: MobileBottomBar.materialFade) { self.setNeedsStatusBarAppearanceUpdate() }
-            }
-            UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 0.92, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
-                if target != nil {
-                    self.pageContainer.transform = CGAffineTransform(translationX: -self.swipeShift(chosen), y: 0)
-                    picture?.frame = self.view.bounds
-                    cover?.frame = self.restingPageViewFrame
-                } else {
-                    self.pageContainer.transform = .identity
-                    picture?.frame = self.view.bounds.offsetBy(dx: self.swipeShift(self.swipeNeighbourStep), dy: 0)
-                    cover?.frame = self.restingPageViewFrame.offsetBy(dx: self.swipeShift(self.swipeNeighbourStep), dy: 0)
-                }
-            } completion: { _ in
-                if let target {
-                    self.store.walk(to: target.id)
-                    // The live page is already in the container beside: showing it only moves it.
-                    if let livePage, livePage.page.tabID == target.id {
-                        self.startedPage = livePage.page
-                        self.swipeNeighbourPage = nil
-                        self.tabOpenTraceView.accessibilityValue = livePage.growth == .live ? "swiped live" : "swiped live under picture"
-                    } else {
-                        self.tabOpenTraceView.accessibilityValue = "swiped picture"
-                    }
-                    self.show(target)
-                    self.layoutChrome()
-                    self.refreshTabStack()
-                    UISelectionFeedbackGenerator().selectionChanged()
-                }
-                self.pageContainer.transform = .identity
-                picture?.removeFromSuperview()
-                if self.swipeNeighbourCard === picture { self.swipeNeighbourCard = nil }
-                // Not picked, the page beside goes out of the window again, and the container clips
-                // once more. A swipe begun while this one settled keeps its own neighbour and the
-                // container unclipped for it.
-                if self.swipeNeighbourPage == nil || self.swipeNeighbourPage?.page === livePage?.page {
-                    self.dropSwipeNeighbourPage()
-                }
-                self.hideSwapBackdrop()
-            }
-        default: break
-        }
+        barSwipedAlong(pan)
     }
 
     /// A drag up from the pill (#623), Arc Search's way to search: the sheet comes out of the

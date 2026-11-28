@@ -519,7 +519,7 @@ final class TabStackButton: UIControl {
     private let back = UIImageView()
     private let front = UIImageView()
     private var frontImage: UIImage?
-    private var showsFront = true
+    private var out: Slot?
     /// A page card that flew into the button, standing in for the front card until a snapshot
     /// takes its place.
     private var keptFront: UIView?
@@ -549,7 +549,8 @@ final class TabStackButton: UIControl {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    /// The tabs the button previews: the previous tab in front, the one behind it under.
+    /// The tabs the button previews: the tab to the page's left in front, the one before it
+    /// behind (`MobileTabsDocument.buttonPreview`).
     func setSnapshots(front: UIImage?, back: UIImage?) {
         frontImage = front
         self.back.image = back
@@ -557,9 +558,8 @@ final class TabStackButton: UIControl {
         if front != nil {
             keptFront?.removeFromSuperview()
             keptFront = nil
-            self.front.isHidden = false
         }
-        self.front.image = showsFront ? frontImage : nil
+        showCards()
     }
 
     /// Keeps the page card that flew into the button as the front picture, until a snapshot
@@ -572,27 +572,37 @@ final class TabStackButton: UIControl {
         card.layer.cornerRadius = 5
         holder.addSubview(card)
         keptFront = card
-        front.isHidden = true
+        showCards()
     }
 
-    /// While a flick up has the front card's tab in hand, its frame is hidden too: the tab is
-    /// out of the button. It comes back when that tab returns to it.
-    func setFrontEmpty(_ empty: Bool) {
-        showsFront = !empty
-        if empty {
+    /// The button's two cards.
+    enum Slot { case front, back }
+
+    /// The card whose tab a flick or a swipe has in hand, out of the button: its frame goes
+    /// too, until the tab comes back to it (nil). New pictures meanwhile leave it out.
+    func setOut(_ slot: Slot?) {
+        out = slot
+        if slot == .front {
             keptFront?.removeFromSuperview()
             keptFront = nil
-            front.image = nil
-        } else {
-            front.image = frontImage
         }
-        front.isHidden = empty
+        showCards()
     }
 
-    /// The card in front, unturned and in `view`'s coordinates: the previous tab, where a flick
-    /// up starts and where the page left behind lands.
-    func frontCard(in view: UIView) -> CGRect {
-        guard let holder = front.superview else { return convert(bounds, to: view) }
+    /// What each card shows: its picture, or the card that landed in front; nothing for a card
+    /// whose tab is out, and with the front out, a card behind with no tab of its own goes too,
+    /// so no empty frame is left.
+    private func showCards() {
+        let frontOut = out == .front
+        front.image = frontOut ? nil : frontImage
+        front.isHidden = frontOut || keptFront != nil
+        back.superview?.isHidden = out == .back || (frontOut && back.image == nil)
+    }
+
+    /// A card, unturned and in `view`'s coordinates: the front one is where a flick up starts
+    /// and where the page left behind lands.
+    func card(_ slot: Slot, in view: UIView) -> CGRect {
+        guard let holder = (slot == .front ? front : back).superview else { return convert(bounds, to: view) }
         let center = convert(holder.center, to: view)
         return CGRect(x: center.x - holder.bounds.width / 2, y: center.y - holder.bounds.height / 2,
                       width: holder.bounds.width, height: holder.bounds.height)

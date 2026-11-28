@@ -65,16 +65,10 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// and material, and the last frame of a drag before the finger lets go.
     let newTabDrawerTraceView = UIView()
     let newTabDrawerDragTraceView = UIView()
-    /// For UI tests (`-CraTraceTabOpen YES`): what the last tab opened from the tab row or a bar
-    /// swipe came in with: its live page ("live", "swiped live"), the page under its fading
-    /// picture ("live under picture", "swiped live under picture") or its picture alone
-    /// ("picture", "swiped picture").
+    /// For UI tests (`-CraTraceTabOpen YES`): what the last tab opened from the tab row came in
+    /// with: its live page ("live"), the page under its fading picture ("live under picture") or
+    /// its picture alone ("picture"); "swiped along the bar" for one a bar swipe brought.
     let tabOpenTraceView = UIView()
-    /// The fill the status bar and the bar took when a bar swipe let go: the arriving tab's.
-    let swipeStatusTraceView = UIView()
-    /// Where a bar swipe's live neighbour showed its bottom as it came in ("bottom 712"): the
-    /// bar's top, as the page shows once it lands.
-    let swipePageTraceView = UIView()
     /// The bar as a picked card started to grow: light or dark, whether that swap crossfaded, and
     /// whether its slab is fading in ("light at once, slab fading in").
     let growTraceView = UIView()
@@ -128,8 +122,6 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     // Swipes (BrowserGestures.swift).
     /// The previous tab's card in the hand during a flick up from the tab button.
     var flickCard: UIImageView?
-    /// The incoming tab's full page card during a bar swipe: its band on top, its content below.
-    var swipeNeighbourCard: UIView?
     var flick = FlickState()
     /// When the page on screen was last swapped in: its web view takes a moment to draw, and a
     /// picture taken before then is black.
@@ -197,13 +189,12 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     private var pageFollowsChrome: Bool { !pageClosing && !pageOpening && !flick.incoming }
 
     /// Puts a page's view where the bar and the chrome say, with its insets: the shown page, or a
-    /// bar swipe's live neighbour `beside` it, whose sticky bottom then sits on the bar's top as it
-    /// slides in rather than jump there once it lands.
-    func layoutPageView(_ page: WebPage, beside offset: CGFloat = 0) {
+    /// tab's page about to ride in a swipe's card. One already riding there is the card's to place.
+    func layoutPageView(_ page: WebPage) {
+        if ridesInSwipeCard(page) { return }
         // On iOS 26 the frame holds still as the bar moves; setting it again anyway makes
         // WebKit work out what it shows again, on every frame of the bar's travel.
         let frame = pageViewFrame(top: webViewTop(), barProgress: barCollapse.progress, underBar: runsUnderBar(page))
-            .offsetBy(dx: offset, dy: 0)
         if page.webView.frame != frame { page.webView.frame = frame }
         updatePageInsets(page)
     }
@@ -264,14 +255,6 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         return CGRect(x: 0, y: top, width: view.bounds.width, height: max(0, barTopEdge(progress: 0) - top))
     }
 
-    var swipeNeighbourStep = 0
-    /// The neighbouring tab's live page beside the page in a bar swipe, in the page's container so
-    /// a switch only moves it there; `cover` is its picture over it until it has drawn or loaded.
-    var swipeNeighbourPage: (page: WebPage, cover: UIImageView, growth: MobileTabCarousel.Growth)?
-    /// The page's container's clipping before a bar swipe let the neighbour show beside it.
-    var swipeContainerClipped: Bool?
-    /// A page a bar swipe started loading before it was shown (`show` keeps its restore).
-    var startedPage: WebPage?
     var tabArchivedBySwipe: UUID?
     /// The page of the tab a swipe put in the archive, as it was when the swipe started: what the opposite swipe
     /// brings back in.
@@ -287,6 +270,8 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     /// Where the bar swipe's finger came down, in the bar's coordinates (#537): the pan begins
     /// only after a few points of travel, so its location at `.began` is not the start.
     var barSwipeStart: CGPoint?
+    /// Where the bar swipe in hand touched down, in the bar.
+    var barSwipeStartedAt: CGPoint = .zero
     var barSwipeOpensRow = false
     var barSwipePullsSearch = false
     /// How far up the search sheet is being pulled out of the pill, while it is (#623).
@@ -397,8 +382,6 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
                      label: "New Tab Drawer Drag")
         installTrace(pageSwipeTraceView, flag: "CraTracePageSwipe", id: "page-swipe-trace")
         installTrace(tabOpenTraceView, flag: "CraTraceTabOpen", id: "tab-open-trace", label: "Tab Open", value: "none")
-        installTrace(swipeStatusTraceView, flag: "CraTraceTabOpen", id: "swipe-status-trace", label: "Swipe Status", value: "none")
-        installTrace(swipePageTraceView, flag: "CraTraceTabOpen", id: "swipe-page-trace", label: "Swipe Page", value: "none")
         installTrace(growTraceView, flag: "CraTraceTabOpen", id: "grow-trace", label: "Grow", value: "none")
         PressHaptics.installCounter(in: view)
 
@@ -1553,10 +1536,9 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
         // The page's container starts at the status band's bottom; it never sits under the band,
         // and the page's view runs on under the bar where WebKit can lay it out clear of it.
         layoutPageView(page)
-        pageContainer.insertSubview(page.webView, belowSubview: pageDim)
-        // A page a bar swipe already started keeps the place it is restoring to.
-        if page !== startedPage { page.restoresAtTop = false }
-        startedPage = nil
+        // A page riding in a swipe's card stays there until the card has become the page.
+        if !ridesInSwipeCard(page) { pageContainer.insertSubview(page.webView, belowSubview: pageDim) }
+        page.restoresAtTop = false
         startContent(of: page, for: tab)
         if let browseLoading {
             browseLoading.isHidden = browseLoading.tabID != page.tabID
@@ -1567,11 +1549,11 @@ final class BrowserViewController: UIViewController, SearchSheetDelegate, WebPag
     }
 
     func refreshTabStack() {
-        // The button previews the tabs behind this page, never the page itself: the previous
-        // tab on top, and the tab behind it underneath.
-        let behind = store.tabsBehindCurrent
-        let front = behind.first
-        let back = behind.dropFirst().first
+        // The button previews the two tabs to this page's left in the switcher, never the page
+        // itself: the nearest on top, and the one before it underneath.
+        let preview = store.buttonPreview
+        let front = preview.first
+        let back = preview.dropFirst().first
         bar.tabsButton.setSnapshots(front: front.flatMap { store.snapshot($0.id) }, back: back.flatMap { store.snapshot($0.id) })
     }
 

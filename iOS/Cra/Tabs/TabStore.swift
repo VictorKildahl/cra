@@ -87,8 +87,11 @@ final class TabStore {
     /// Where a flick up on the tab button goes: the tab looked at before this one.
     var previousTab: MobileTab? { document.previousTab }
 
-    /// The two tabs the button's preview shows: the previous one, then the one behind it.
-    var tabsBehindCurrent: [MobileTab] { document.tabsBehindCurrent }
+    /// The two tabs the button's preview shows: those to the page's left in the switcher.
+    var buttonPreview: [MobileTab] { document.buttonPreview }
+
+    /// The tab `step` along the row from the page, where a swipe along the bar goes.
+    func rowTab(beside step: Int) -> MobileTab? { document.rowTab(beside: step) }
 
     /// The card the tab row opens focused on: the one to the left of the page on screen.
     var switcherFocus: MobileTab? { document.switcherFocus }

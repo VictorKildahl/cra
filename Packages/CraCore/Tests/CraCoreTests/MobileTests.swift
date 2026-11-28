@@ -716,6 +716,43 @@ struct MobileTabsTests {
         #expect(document.tabsBehindCurrent.map(\.title) == ["b", "c", "a"])
     }
 
+    /// The tab button previews the two tabs to the page's left in the switcher, nearest first,
+    /// however they were last looked at: walked to along the bar, picked, or flicked to.
+    @Test func theButtonPreviewsTheTwoTabsLeftOfThePage() {
+        var document = MobileTabsDocument()
+        let tabs = ["a", "b", "c", "d"].map { Self.tab($0, hoursAgo: 1) }
+        tabs.forEach { document.open($0) }
+        #expect(document.buttonPreview.map(\.title) == ["c", "b"])
+        document.walk(to: tabs[2].id, now: Self.start)
+        #expect(document.buttonPreview.map(\.title) == ["b", "a"], "not d, looked at last")
+        document.walk(to: tabs[1].id, now: Self.start.addingTimeInterval(1))
+        #expect(document.buttonPreview.map(\.title) == ["a"])
+        document.walk(to: tabs[0].id, now: Self.start.addingTimeInterval(2))
+        #expect(document.buttonPreview.isEmpty, "nothing to the first tab's left")
+        document.bringToFront(tabs[1].id, now: Self.start.addingTimeInterval(3))
+        #expect(document.rowTabs.map(\.title) == ["a", "c", "d", "b"])
+        #expect(document.buttonPreview.map(\.title) == ["d", "c"])
+        document.selected = nil
+        #expect(document.buttonPreview.map(\.title) == ["b", "d"], "no page: the row's newest")
+    }
+
+    /// A swipe along the bar goes to the tab beside the page in the row, the switcher's order:
+    /// none past either end, and none for a page that isn't in the row.
+    @Test func theTabBesideIsTheRowsNeighbour() {
+        var document = MobileTabsDocument()
+        let tabs = ["a", "b", "c"].map { Self.tab($0, hoursAgo: 1) }
+        tabs.forEach { document.open($0) }
+        document.walk(to: tabs[1].id, now: Self.start)
+        #expect(document.rowTab(beside: -1)?.title == "a")
+        #expect(document.rowTab(beside: 1)?.title == "c")
+        #expect(document.rowTab(beside: -2) == nil)
+        document.walk(to: tabs[0].id, now: Self.start)
+        #expect(document.rowTab(beside: -1) == nil)
+        document.add(Self.tab("secret", hoursAgo: 0, incognito: true))
+        document.selected = document.tabs.last?.id
+        #expect(document.rowTab(beside: -1) == nil, "a private page isn't in the row")
+    }
+
     /// The tab row opens focused on the card behind the page, to its left, when the page is the
     /// row's newest card; any other card, the first, or the only one focuses itself, and with no
     /// page the newest card does.
@@ -736,9 +773,9 @@ struct MobileTabsTests {
         #expect(document.switcherFocus?.id == tabs[0].id, "one tab focuses itself")
     }
 
-    /// The tab button previews the two tabs behind the page, never the page itself: the previous
-    /// tab on top and the tab behind it underneath.
-    @Test func theButtonPreviewsTheTwoTabsBehindThePage() {
+    /// The tabs behind the page, most recently picked first and never the page itself, lead with
+    /// the one a flick up goes to.
+    @Test func theTabsBehindThePageGoByPick() {
         let tabs = (1...4).map { Self.tab("\($0)", hoursAgo: Double($0)) }
         let document = MobileTabsDocument(tabs: tabs, selected: tabs[1].id)
         #expect(document.tabsBehindCurrent.map(\.title) == ["1", "3", "4"])
@@ -1315,19 +1352,6 @@ struct MobileSwipeTests {
         #expect(MobileSwipe.direction(translation: 60, velocity: 900, width: 393) == 1)
         #expect(MobileSwipe.direction(translation: 60, velocity: -900, width: 393) == 0)
         #expect(MobileSwipe.direction(translation: 10, velocity: 2000, width: 393) == 0)
-    }
-
-    @Test func theBarSwipeMovesAlongTheTabRow() {
-        #expect(MobileSwipe.tabStep(translation: 200, velocity: 0, width: 393, hasOlder: true, hasNewer: true) == -1)
-        #expect(MobileSwipe.tabStep(translation: -200, velocity: 0, width: 393, hasOlder: true, hasNewer: true) == 1)
-        #expect(MobileSwipe.tabStep(translation: 200, velocity: 0, width: 393, hasOlder: false, hasNewer: true) == 0)
-    }
-
-    /// The neighbouring tab rides a screen and a gap beside the page, on the side it comes in from.
-    @Test func theNeighbouringTabSitsAScreenAndAGapAway() {
-        #expect(MobileSwipe.neighbourOffset(step: 1, width: 393) == 393 + MobileSwipe.tabGap)
-        #expect(MobileSwipe.neighbourOffset(step: -1, width: 393) == -(393 + MobileSwipe.tabGap))
-        #expect(MobileSwipe.neighbourOffset(step: 0, width: 393) == 0)
     }
 
     /// Arc Search: back on a tab's first page archives the tab; the opposite swipe reopens it.

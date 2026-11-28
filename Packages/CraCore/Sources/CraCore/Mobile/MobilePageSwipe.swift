@@ -4,7 +4,8 @@ import Foundation
 /// How a swipe across the page looks while it goes and once it is let go (`MobileSwipe.navigation` decides where it
 /// goes). Measured frame by frame on Arc Search screen recordings from an iPhone (430 × 932 pt, Nov 2026): Back slides
 /// the page off the one it goes back to, and Back on a tab's first page shrinks the page into a card while the tab
-/// before it comes out of the tab button beside it.
+/// before it comes out of the tab button beside it. A swipe along the bar to the tab beside goes the same way, as the
+/// tab closing does towards the older tab and as the closed tab coming back does towards the newer.
 public enum MobilePageSwipe {
     /// What shows beside the page during the swipe.
     public enum Reveal: Equatable, Sendable {
@@ -16,6 +17,10 @@ public enum MobilePageSwipe {
         case closingTab
         /// Forward right after that: the tab that closed, coming back in from the right.
         case reopeningTab
+        /// Along the bar to the right: the tab before this one in the row, out of the tab button.
+        case olderTab
+        /// Along the bar to the left: the tab after this one in the row, coming in beside the page from the right.
+        case newerTab
     }
 
     public static func reveal(for navigation: MobileSwipe.Navigation) -> Reveal? {
@@ -32,14 +37,49 @@ public enum MobilePageSwipe {
     /// (Back): the page further on is always the one on top. Arc Search's Forward was not recorded; it mirrors Back
     /// as UIKit's navigation does.
     public static func arrivesOnTop(_ reveal: Reveal) -> Bool {
-        reveal == .forward || reveal == .reopeningTab
+        reveal == .forward || reveal == .reopeningTab || reveal == .newerTab
     }
 
-    /// Whether the swipe takes the page into a card beside the tab it leads to: a tab closing, or the closed tab
-    /// coming back.
+    /// Whether the swipe takes the page into a card beside the tab it leads to: a tab closing or the closed tab coming
+    /// back, or the tab beside along the bar.
     public static func showsCards(_ reveal: Reveal) -> Bool {
-        reveal == .closingTab || reveal == .reopeningTab
+        reveal != .back && reveal != .forward
     }
+
+    /// Whether the tab the swipe leads to comes out of the tab button (the tab shown once this one closes, or the
+    /// older tab along the bar), or in beside the page from the right.
+    public static func comesOutOfTabButton(_ reveal: Reveal) -> Bool {
+        reveal == .closingTab || reveal == .olderTab
+    }
+
+    /// Whether the swipe is along the bar, to the tab beside: it walks the row, closing and reopening nothing.
+    public static func alongBar(_ reveal: Reveal) -> Bool {
+        reveal == .olderTab || reveal == .newerTab
+    }
+
+    /// Whether the magnet ticks as it lets go: not along the bar, where the swipe is the bar's own and quiet (asked
+    /// for on Nov 28).
+    public static func ticks(_ reveal: Reveal) -> Bool { !alongBar(reveal) }
+
+    /// Where a swipe that leads to `wanted` the way the finger now is goes, having started `way` in this gesture: once
+    /// it has started a swipe to another tab (closing, reopening, or along the bar) it keeps to that, so turning back
+    /// can't close a tab just brought back, or bring back the one just closing (asked for on Nov 28). Turned back past
+    /// where it started, its page drags its feet (`dragsFeet`) and its cards go back in.
+    public static func leads(_ wanted: Reveal?, after way: Reveal?) -> Reveal? {
+        guard let way, showsCards(way) else { return wanted }
+        return way
+    }
+
+    /// How long the picture of a tab a swipe brings takes to fade off its live page: as a card picked in the tab row
+    /// does (`MobileTabCarousel.pictureFade`), `pictureFadeSlower` times as long (asked for on Nov 28).
+    public static func pictureFade(_ growth: MobileTabCarousel.Growth) -> TimeInterval {
+        MobileTabCarousel.pictureFade(growth, handOver: MobileTabCarousel.liveCover) * pictureFadeSlower
+    }
+
+    public static let pictureFadeSlower: TimeInterval = 1.5
+
+    /// How far a page goes with the finger where the swipe leads nowhere: it drags its feet.
+    public static let dragsFeet: CGFloat = 0.25
 
     // MARK: The magnet
 
@@ -51,16 +91,12 @@ public enum MobilePageSwipe {
     /// the finger is 185 pt in as it lets go; it catches up in 0.26 s to 30 pt behind the finger. Going Back it holds
     /// at 0.28 of the finger's travel and caught up in about 0.16 s (the finger not seen yet). Let go while held, the
     /// swipe goes nowhere; once let go, it goes. Taken back under `holdAgainShare` of the finger's way to letting go,
-    /// the magnet holds the page again (Arc Search's was not seen), a quick finger's page too once the finger has
-    /// turned back `turnBack` points from the furthest it came.
+    /// the magnet holds the page again (Arc Search's was not seen).
     ///
     /// Those closing swipes were slow, about 80 pt a second from mid-page. Arc Search's quick ones on a tab's first page
-    /// (Nov 27, finger not shown) were not held: from their first moving frame the cards came out and the page followed
-    /// on the catch-up spring, 3, 7.5, 12.5 and 17.5 pt in its first four frames, too fast for a page held at an eighth.
-    /// Let go there, the page's card 60 to 95 pt along, they went back, as the finger short of where the slow swipes let
-    /// go says (`quickSpeed`).
+    /// (Nov 27, finger not shown) were not held: from their first moving frame the cards came out. Cra holds them as it
+    /// holds a slow one, the page held back before the cards come out however fast the finger (asked for on Nov 28).
     public static let holdAgainShare: CGFloat = 0.6
-    public static let turnBack: CGFloat = 20
 
     /// The magnet's hold on the page through one swipe, stepped once a frame.
     public struct Magnet: Equatable, Sendable {
@@ -72,31 +108,22 @@ public enum MobilePageSwipe {
         public let letGoAt: CGFloat
         public let catchUp: MobileMotion.Spring
         public let gap: CGFloat
-        /// A finger past the dead zone faster than this (points a second) takes the hold off: the page follows it from
-        /// there as if let go, though letting go still only goes past `letGoFinger`. Nil: held whatever the speed.
-        public let quickSpeed: CGFloat?
         /// Whether it has let the page go: letting go goes where the swipe leads from here.
         public private(set) var letGo = false
-        /// Whether a quick finger took the hold off.
-        public private(set) var quick = false
-        /// Whether the page is still held back.
-        public var holds: Bool { !letGo && !quick }
+        /// Whether the page is still held back: not yet let go, or held again.
+        public var holds: Bool { !letGo }
         /// How far the page is behind the finger, and how fast that is changing while it springs to its new
         /// distance after letting go or taking hold again.
         public private(set) var lag: CGFloat = 0
         private var lagSpeed: CGFloat = 0
         private var springing = false
-        /// The furthest the finger has come since the magnet last took hold.
-        private var furthest: CGFloat = 0
 
-        public init(deadZone: CGFloat = 0, share: CGFloat, letGoAt: CGFloat, catchUp: MobileMotion.Spring, gap: CGFloat = 0,
-                    quickSpeed: CGFloat? = nil) {
+        public init(deadZone: CGFloat = 0, share: CGFloat, letGoAt: CGFloat, catchUp: MobileMotion.Spring, gap: CGFloat = 0) {
             self.deadZone = deadZone
             self.share = share
             self.letGoAt = letGoAt
             self.catchUp = catchUp
             self.gap = gap
-            self.quickSpeed = quickSpeed
         }
 
         /// How far the finger has come when the held page reaches `letGoAt`.
@@ -106,15 +133,10 @@ public enum MobilePageSwipe {
         public func held(_ finger: CGFloat) -> CGFloat { max(0, finger - deadZone) * share }
 
         /// `dt` seconds on, with the finger `distance` along the way the swipe leads (less than nothing is back past
-        /// where it started) and moving at `speed` points a second that way: how far the page has come, and whether
-        /// the magnet let go on this step.
-        public mutating func step(distance: CGFloat, dt: Double, speed: CGFloat = 0) -> (page: CGFloat, letGoNow: Bool) {
+        /// where it started): how far the page has come, and whether the magnet let go on this step.
+        public mutating func step(distance: CGFloat, dt: Double) -> (page: CGFloat, letGoNow: Bool) {
             let finger = max(0, distance)
             var letGoNow = false
-            if holds, let quickSpeed, finger > deadZone, speed >= quickSpeed {
-                quick = true
-                springing = true
-            }
             if !letGo, finger >= letGoFinger - 0.001 {
                 letGo = true
                 letGoNow = true
@@ -122,12 +144,6 @@ public enum MobilePageSwipe {
             } else if letGo, finger < letGoFinger * holdAgainShare {
                 letGo = false
                 springing = true
-            }
-            furthest = max(furthest, finger)
-            if quick, !letGo, finger < letGoFinger * holdAgainShare, finger < furthest - turnBack {
-                quick = false
-                springing = true
-                furthest = finger
             }
             let target = holds ? finger - held(finger) : gap
             if springing {
@@ -147,26 +163,28 @@ public enum MobilePageSwipe {
         }
     }
 
-    /// How fast a finger closing a tab goes for the page not to be held: Arc Search held its slow swipes, about 80 pt a
-    /// second, and not its quick ones, which had the page 17.5 pt along four frames in, the finger over 1000 pt a second.
-    /// Somewhere between; Arc Search's own figure was not seen.
-    public static let quickSpeed: CGFloat = 300
+    /// How far a tab's page comes, held, before the magnet lets it go: Arc Search's let go at 21 pt, the finger 185 pt
+    /// in; Cra's lets go sooner, with the finger about 100 pt in, now that every swipe is held first (asked for on
+    /// Nov 28).
+    public static let tabLetGoAt: CGFloat = 10.4
 
-    /// The magnet for each swipe: Back and Forward as Arc Search's Back, held whatever the finger's speed, a tab
-    /// closing or coming back as its tab closing.
+    /// Along the bar the magnet lets go sooner, with the finger about 60 pt in: switching tabs closes nothing (asked
+    /// for on Nov 28).
+    public static let barLetGoAt: CGFloat = 5.46
+
+    /// The magnet for each swipe, held whatever the finger's speed: Back and Forward as Arc Search's Back, a swipe to
+    /// another tab as its tab closing, held longer, and let go sooner along the bar.
     public static func magnet(for reveal: Reveal) -> Magnet {
-        switch reveal {
-        case .back, .forward:
+        guard showsCards(reveal) else {
             return Magnet(share: 0.28, letGoAt: 21, catchUp: MobileMotion.Spring(response: 0.16, dampingRatio: 1))
-        case .closingTab, .reopeningTab:
-            return Magnet(deadZone: 16, share: 0.124, letGoAt: 21, catchUp: MobileMotion.Spring(response: 0.26, dampingRatio: 1),
-                          gap: 30, quickSpeed: quickSpeed)
         }
+        return Magnet(deadZone: 16, share: 0.124, letGoAt: alongBar(reveal) ? barLetGoAt : tabLetGoAt,
+                      catchUp: MobileMotion.Spring(response: 0.26, dampingRatio: 1), gap: 30)
     }
 
     /// Whether letting go goes where the swipe leads, with the finger moving at `velocity` points a second towards
-    /// it: once the magnet has let the page go, unless the finger is flicking it back; short of that, a quick finger's
-    /// page following it or not, only a flick onwards.
+    /// it: once the magnet has let the page go, unless the finger is flicking it back; short of that, only a flick
+    /// onwards.
     public static func commits(letGo: Bool, velocity: CGFloat, distance: CGFloat) -> Bool {
         if letGo { return velocity > -MobileSwipe.flickVelocity }
         return distance > MobileSwipe.flickDistance && velocity > MobileSwipe.flickVelocity
@@ -245,9 +263,9 @@ public enum MobilePageSwipe {
 
         /// The page's: in and out on `cardSpring`.
         public static var page: Cards { Cards() }
-        /// The tab's: out of the tab button with a little overshoot, back in on `cardSpring`; the closed tab coming
-        /// back beside the page goes as the page does.
-        public static func tab(for reveal: Reveal) -> Cards { reveal == .closingTab ? Cards(out: tabCardOut) : page }
+        /// The tab's: out of the tab button with a little overshoot, back in on `cardSpring`; a tab coming in beside
+        /// the page goes as the page does.
+        public static func tab(for reveal: Reveal) -> Cards { comesOutOfTabButton(reveal) ? Cards(out: tabCardOut) : page }
 
         /// `dt` seconds on, heading out into cards when `out`, back to the page otherwise.
         public mutating func step(out: Bool, dt: Double) -> CGFloat {
@@ -345,13 +363,17 @@ public enum MobilePageSwipe {
                     angle: tilt * (1 - q), cornerRadius: mix(buttonCorner, cardCornerRadius, q), strip: 1 - q)
     }
 
-    /// The closed tab coming back, beside the page `leaving` on its way into its card, `progress` of the way: the
-    /// page's own size, `cardGap` to its right, its strip squashing away as the page's does; no lean, no arc, no
-    /// overshoot (asked for on Nov 28; Arc Search's came in as Forward does).
-    public static func reopeningCard(beside leaving: LeavingPage, progress: CGFloat) -> Card {
-        let size = CGSize(width: leaving.size.width * leaving.scale, height: leaving.size.height * leaving.scale)
-        return Card(center: CGPoint(x: leaving.center.x + size.width + cardGap, y: leaving.center.y), size: size,
-                    angle: 0, cornerRadius: leaving.cornerRadius, strip: 1 - min(1, max(0, progress)))
+    /// The closed tab coming back, or the newer tab along the bar, beside the page `leaving` on its way into its card, on a screen whose safe area
+    /// starts `band` down: the page's own width, `cardGap` to its right, from the safe area's top down to the page's
+    /// bottom, its strip under the status bar squashed away all the while, so it only grows back over the status bar
+    /// as the tab becomes the page; no lean, arc or overshoot (asked for on Nov 28; Arc Search's came in as Forward
+    /// does).
+    public static func cardBeside(_ leaving: LeavingPage, band: CGFloat) -> Card {
+        let width = leaving.size.width * leaving.scale
+        let bottom = leaving.center.y + leaving.size.height * leaving.scale / 2
+        let height = max(0, bottom - band)
+        return Card(center: CGPoint(x: leaving.center.x + width + cardGap, y: band + height / 2),
+                    size: CGSize(width: width, height: height), angle: 0, cornerRadius: leaving.cornerRadius, strip: 0)
     }
 
     /// Whether the tab's card comes out over the bar: lifted off the button while the bar is there; with the bar
@@ -373,11 +395,11 @@ public enum MobilePageSwipe {
     public static let cardLeave = MobileMotion.Spring(response: 0.28, dampingRatio: 1)
     public static let cardArrive = MobileMotion.Spring(response: 0.24, dampingRatio: 1)
 
-    /// Where the page's card goes once let go, centred at this x: off the right edge as a tab closes, off the left as
-    /// the closed tab comes back.
-    public static func leavingCardGoneX(width: CGFloat, reveal: Reveal = .closingTab) -> CGFloat {
+    /// Where the page's card goes once let go, centred at this x: off the right edge as the tab it leads to comes out
+    /// of the tab button, off the left as one comes in from the right.
+    public static func leavingCardGoneX(width: CGFloat, reveal: Reveal) -> CGFloat {
         let half = width * cardScale(width: width) / 2
-        return reveal == .reopeningTab ? -half : width + half
+        return arrivesOnTop(reveal) ? -half : width + half
     }
 
     /// Let go short of closing, the cards go back the way they came, on the spring they came out on: the tab's card down
