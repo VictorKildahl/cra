@@ -2260,6 +2260,19 @@ bool HandleDebugMethod(content::WebContents* contents,
 
 #pragma mark - CraBrowser
 
+// Chrome CHECKs an uninstall of an extension the profile doesn't have ("callers should not send us nonexistent
+// extensions"), so a Remove that reached a profile without it crashed Cra (crash-extension-remove-other-profile).
+// Like Chrome's own callers, look it up first: a profile without it has nothing to remove.
+static BOOL UninstallExtensionIn(content::BrowserContext* context, NSString* extensionID) {
+  const std::string id = base::SysNSStringToUTF8(extensionID);
+  if (!extensions::ExtensionRegistry::Get(context)->GetInstalledExtension(id)) {
+    return NO;
+  }
+  std::u16string error;
+  return extensions::ExtensionRegistrar::Get(context)->UninstallExtension(
+      id, extensions::UNINSTALL_REASON_USER_INITIATED, &error);
+}
+
 @implementation CraBrowser {
   NSView* _container;
   // The page's empty document draws in Arc's canvas colour until it first draws something of its own (#712).
@@ -3872,9 +3885,7 @@ static NSString* CraSiteAccessName(extensions::PermissionsManager::UserSiteAcces
   if (!_contents) {
     return NO;
   }
-  std::u16string error;
-  return extensions::ExtensionRegistrar::Get(_contents->GetBrowserContext())
-      ->UninstallExtension(base::SysNSStringToUTF8(extensionID), extensions::UNINSTALL_REASON_USER_INITIATED, &error);
+  return UninstallExtensionIn(_contents->GetBrowserContext(), extensionID);
 }
 - (void)probeBackgroundColor {
   if (_contents) {
@@ -4812,9 +4823,7 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
   if (!profile) {
     return NO;
   }
-  std::u16string error;
-  return extensions::ExtensionRegistrar::Get(profile)->UninstallExtension(
-      base::SysNSStringToUTF8(extensionID), extensions::UNINSTALL_REASON_USER_INITIATED, &error);
+  return UninstallExtensionIn(profile, extensionID);
 }
 + (void)setSharedExtensionStorage:(NSDictionary<NSString*, NSDictionary<NSString*, id>*>*)homes {
   std::map<std::string, cra::SharedStorage> map;

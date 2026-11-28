@@ -1911,13 +1911,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             // pinExtension=<id>: pinned to the toolbar on the Default profile, as the Extensions menu's pin does.
             if let id = dict["pinExtension"] { ExtensionStore.shared.setPinned(id, true, inProfile: "Default"); return }
-            // extensionRemove=<id>: Remove from Cra as its menu row does once the dialog says Remove (#695).
+            // extensionRemove=<id>[&profile=<folder>]: Remove from Cra as its menu row does once the dialog says Remove
+            // (#695), the menu being that profile's (default: the window's space's).
             if let id = dict["extensionRemove"] {
-                if let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) { ExtensionsMenu.remove(e) }
+                let profile = dict["profile"] ?? store.profileDirectoryName(space: main.focusedSpace.id)
+                if let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) { ExtensionsMenu.remove(e, profile: profile) }
                 // Chromium's own record of the profile's extensions, and Cra's list.
-                let chromium = CraCEFRuntime.extensionSettings(forProfile: nil)?.contains(id) == true
+                let chromium = CraCEFRuntime.extensionSettings(forProfile: ExtensionStore.profilePath(profile))?.contains(id) == true
                 let cra = ExtensionStore.shared.entries.contains { $0.extensionID == id }
                 CraLog.note("extension remove \(id.prefix(8)): in chromium=\(chromium ? 1 : 0) in cra=\(cra ? 1 : 0)")
+                return
+            }
+            // engineUninstall=<id>&profile=<folder>: the engine asked straight away to uninstall it from that profile, whether
+            // or not the profile has it (crash-extension-remove-other-profile).
+            if let id = dict["engineUninstall"] {
+                let profile = dict["profile"] ?? "Default"
+                let removed = CraCEFRuntime.responds(to: #selector(CraCEFRuntime.uninstallExtension(_:profilePath:)))
+                    && CraCEFRuntime.uninstallExtension(id, profilePath: ExtensionStore.profilePath(profile))
+                CraLog.note("engine uninstall \(id.prefix(8)) from \(profile): removed=\(removed ? 1 : 0)")
                 return
             }
             // currentSpace=<label>: the window's space and the profile its pages use, so a scenario set up with spaces on

@@ -101,7 +101,7 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
                 menu.addItem(Self.siteAccessItem(access, extension: id, page: page, open: open))
                 menu.addItem(.separator())
             case .remove:
-                menu.addItem(BlockMenuItem(title: row.title) { Self.confirmRemove(e) })
+                menu.addItem(BlockMenuItem(title: row.title) { Self.confirmRemove(e, profile: profile) })
             case .options:
                 if let path = e.optionsPath { menu.addItem(BlockMenuItem(title: row.title) { open(ExtensionActionMenu.optionsPage(id: id, path: path)) }) }
             case .unpin:
@@ -165,29 +165,37 @@ final class ExtensionsMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
         return item
     }
 
-    /// Remove from Cra: asked first, as Chrome's "Remove from Chrome…" does (#695).
-    static func confirmRemove(_ e: ExtensionStore.Entry) {
+    /// Remove from Cra: asked first, as Chrome's "Remove from Chrome…" does (#695). `profile`: the profile folder the
+    /// menu is for.
+    static func confirmRemove(_ e: ExtensionStore.Entry, profile: String) {
         let dialog = AppDialog(title: "Remove “\(e.name)”?",
                                message: ExtensionRemoval.message(isShared: ExtensionStore.shared.shares.isShared(e.extensionID),
                                                                  isCraCopy: !e.managedByChrome, profileCount: e.profiles?.count),
                                actions: [DialogAction("Remove", role: .destructive), .cancel])
-        let remove = { (r: NSApplication.ModalResponse) in if r == .alertFirstButtonReturn { Self.remove(e) } }
+        let remove = { (r: NSApplication.ModalResponse) in if r == .alertFirstButtonReturn { Self.remove(e, profile: profile) } }
         if let window = AppDialog.parentWindow { dialog.present(over: window, completion: remove) } else { remove(dialog.runModal()) }
     }
 
-    /// Chromium uninstalls it from the page's profile; a copy Cra loads itself from its folder goes too, or it
-    /// would load again at the next launch.
-    @MainActor static func remove(_ e: ExtensionStore.Entry) {
+    /// Chromium uninstalls it from the profile the menu is for (`profile`, a profile folder), not the window's current
+    /// page, which can be another profile's: one without it crashed Cra (crash-extension-remove-other-profile). A copy
+    /// Cra loads itself from its folder goes too, or it would load again at the next launch.
+    @MainActor static func remove(_ e: ExtensionStore.Entry, profile: String) {
         // Shared (discussion #595): from every profile, as Settings removes it. Chrome keeps it otherwise.
         if ExtensionStore.shared.shares.isShared(e.extensionID) {
             ExtensionStore.shared.removeShared(e)
             CraLog.note("extension removed \(e.extensionID.prefix(8)): shared, from every profile")
             return
         }
-        let page = page()
-        let uninstalled = page?.responds(to: #selector(CraBrowser.uninstallExtension(_:))) == true && page?.uninstallExtension(e.extensionID) == true
+        var uninstalled = false
+        if let folder = ExtensionRemoval.engineProfile(menuProfile: profile, installedIn: e.profiles) {
+            if CraCEFRuntime.responds(to: #selector(CraCEFRuntime.uninstallExtension(_:profilePath:))) {
+                uninstalled = CraCEFRuntime.uninstallExtension(e.extensionID, profilePath: ExtensionStore.profilePath(folder))
+            } else if let page = page(), page.responds(to: #selector(CraBrowser.uninstallExtension(_:))) {
+                uninstalled = page.uninstallExtension(e.extensionID)   // CEF: one profile
+            }
+        }
         if !e.managedByChrome { ExtensionStore.shared.remove(e) }
-        CraLog.note("extension removed \(e.extensionID.prefix(8)): engine=\(uninstalled ? 1 : 0) folder=\(e.managedByChrome ? 0 : 1)")
+        CraLog.note("extension removed \(e.extensionID.prefix(8)): engine=\(uninstalled ? 1 : 0) folder=\(e.managedByChrome ? 0 : 1) profile=\(profile)")
     }
 
     static func iconMenu(for e: ExtensionStore.Entry) -> NSMenu {

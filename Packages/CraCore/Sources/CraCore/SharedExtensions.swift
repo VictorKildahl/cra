@@ -319,4 +319,13 @@ public enum ExtensionRemoval {
     public static func pageProfiles(installedIn: Set<String>?, allProfiles: [String]) -> [String] {
         allProfiles.filter { installedIn?.contains($0) ?? true }
     }
+
+    /// The profile Chrome uninstalls from when a pinned extension's menu says Remove: the profile the menu is for
+    /// (the toolbar or sidebar its button is in), not the window's current page, which can be on another profile
+    /// (another window's toolbar, a space on another profile). Nil when that profile doesn't have it: Chrome CHECKs
+    /// an uninstall of an extension the profile doesn't know (crash-extension-remove-other-profile). `installedIn`
+    /// nil is every profile.
+    public static func engineProfile(menuProfile: String, installedIn: Set<String>?) -> String? {
+        installedIn.map { $0.contains(menuProfile) } ?? true ? menuProfile : nil
+    }
 }

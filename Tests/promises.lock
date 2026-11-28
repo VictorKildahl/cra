@@ -1998,6 +1998,8 @@ crash-deleted-profile-launch Tests/Scenarios/deleted-profile-launch.scenario  d7
 crash-duplicate-extension-ids Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::aPinSavedTwiceShowsOnce  1b99e50cdb2f
 crash-duplicate-extension-ids Packages/CraCore/Tests/CraCoreTests/PinnedExtensionsTests.swift::twoInstallsOfOneExtensionShowOnce  dd39be24ac7f
 crash-duplicate-extension-ids Tests/Scenarios/extensions-menu-one-each.scenario  46498caea716
+crash-extension-remove-other-profile Packages/CraCore/Tests/CraCoreTests/SharedExtensionsTests.swift::removeUninstallsFromTheMenusProfile  69bdd3a4e3e7
+crash-extension-remove-other-profile Tests/Scenarios/extension-remove-other-profile.scenario  ea8e3444b73b
 crash-extensions-renderer-reused-on-exit Tests/Scenarios/extensions-renderer-reused-on-exit.scenario  d08af40f6a0a
 crash-fedcm-dialog Tests/Scenarios/fedcm-sign-in-dialog.scenario  d1ccf325b5a7
 crash-first-responder-after-resigning Tests/Scenarios/appkit-first-responder-exception.scenario  b8e1773493da

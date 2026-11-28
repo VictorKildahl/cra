@@ -136,6 +136,19 @@ struct SharedExtensionsTests {
         #expect(ExtensionRemoval.pageProfiles(installedIn: [], allProfiles: all).isEmpty)
     }
 
+    @Test(.bug(id: "crash-extension-remove-other-profile"))
+    func removeUninstallsFromTheMenusProfile() {
+        // A pinned extension's Remove acts on the profile its menu is for. It acted on the window's current page,
+        // and when that page's profile didn't have the extension Chrome's uninstall CHECKed and Cra crashed.
+        #expect(ExtensionRemoval.engineProfile(menuProfile: "Profile H", installedIn: ["Profile H"]) == "Profile H",
+                "Hobbies' toolbar, also while the window in front shows a page on Default")
+        #expect(ExtensionRemoval.engineProfile(menuProfile: "Default", installedIn: ["Profile H"]) == nil,
+                "a profile without it: nothing to ask Chrome")
+        #expect(ExtensionRemoval.engineProfile(menuProfile: "Default", installedIn: []) == nil)
+        #expect(ExtensionRemoval.engineProfile(menuProfile: "Profile W", installedIn: nil) == "Profile W",
+                "a folder of Cra's that loads everywhere")
+    }
+
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/595"))
     func settingsSaysWhichProfilesHaveIt() {
         let names = ["Default": "Personal", "Profile W": "Work", "Profile H": "Hobbies"]
