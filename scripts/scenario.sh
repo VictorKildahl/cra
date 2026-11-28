@@ -55,6 +55,7 @@
 #                               them, or macOS's own files opened before Chromium starts, leave them: where Chrome's
 #                               --remote-debugging-pipe has to go (#752)
 #   home                        a throwaway home folder, so downloads stay out of ~/Downloads
+#   data-symlink                Cra's data folder given as a symbolic link to it (a folder moved to another disk, #906)
 #   crash-report <file>         copied into the throwaway home's Library/Logs/DiagnosticReports
 #                               before launch, as macOS leaves one (needs home)
 #   cover                       another app's window over the browser window, right above it in the window order
@@ -262,6 +263,13 @@ if grep -q '^home$' "$FILE"; then
   mkdir -p "$DATA/home/Downloads"
   app_env+=(CFFIXED_USER_HOME="$DATA/home")
 fi
+# data-symlink: Cra is given a symbolic link to its data folder, as when the folder was moved to another disk and a
+# link left in its place (#906).
+APP_DATA="$DATA"
+if grep -q '^data-symlink$' "$FILE"; then
+  APP_DATA="$OUT/data-link"
+  rm -f "$APP_DATA" && ln -s "$DATA" "$APP_DATA"
+fi
 # Past onboarding, and nothing taken from this Mac's Arc (its toolbar default) unless asked.
 if ! grep -q '^fresh' "$FILE" && [ ! -f "$DATA/settings.json" ]; then
   echo '{"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true, "showToolbar": false}' > "$DATA/settings.json"
@@ -449,7 +457,7 @@ for i in "${!app_env[@]}"; do app_env[$i]="$(expand "${app_env[$i]}")"; done
 
 # hold-fds: this shell holds 3 and 4 open while it starts Cra, so Cra inherits them (#752).
 grep -q '^hold-fds' "$FILE" && exec 3</dev/null 4</dev/null
-CRA_DATA_DIR="$DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 CRA_WEBKIT_HOSTS=localhost \
+CRA_DATA_DIR="$APP_DATA" CRA_COMMAND_FILE="$CMD" CRA_HITCH_LOG="$HITCH" CRA_TEST_BACKGROUND=1 CRA_WEBKIT_HOSTS=localhost \
   CRA_ARC_DIR="$FIXTURES/Arc" CRA_FLAGS="${CRA_FLAGS:-}" \
   "${app_env[@]}" "$EXE" ${app_args[@]+"${app_args[@]}"} >"$OUT/stdout.log" 2>&1 &
 PID=$!
@@ -653,7 +661,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
       fi
       rm -rf "$APP" && mv "$next" "$APP"
       echo "  Cra.app replaced by $version${2:+ on another Chrome}" ;;
-    fresh|requires|port|seed|env|arg|extension|profile|home|crash-report|hold-fds|ends-a-page) ;;
+    fresh|requires|port|seed|env|arg|extension|profile|home|data-symlink|crash-report|hold-fds|ends-a-page) ;;
     *) problem "unknown scenario line: $line" ;;
   esac
 done < "$FILE"

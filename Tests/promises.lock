@@ -1977,6 +1977,9 @@
 #896   Tests/Scenarios/downloads-tray-row-hover.scenario  489860ec98f8
 #897   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theWayToSyncNamesTheMacsSwitchWhereItIs  1daa34af0a9c
 #897   iOS/CraUITests/BrowserTests.swift::testWithoutSyncTheSpacesViewExplains  bec958d5e3ae
+#906   Packages/CraCore/Tests/CraCoreTests/DataFolderPathTests.swift::aLinkedDataFolderIsNamedByWhereItIs  a943cf6cb202
+#906   Packages/CraCore/Tests/CraCoreTests/DataFolderPathTests.swift::resolvedAsChromiumResolvesIt  736cc145cd2c
+#906   Tests/Scenarios/profile-data-folder-symlinked.scenario  a9c48e59fabd
 #909   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::aPinnedSheetsTabDoesNotTakeTheIconOfDocsOpenedLater  babf1d8e86db
 #909   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::appsOnOneAddressKeepTheirOwnIcons  7a3b4a0c90ba
 #918   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::bitwardenInstalledGetsItsManifestWithoutAnImport  cbe1dd4ce306
