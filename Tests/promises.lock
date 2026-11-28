@@ -1958,6 +1958,7 @@
 #876   Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::activeOneColourOnMacOSDarkUsesTheDarkMaterial  1abf19a78c29
 #876   Packages/CraCore/Tests/CraCoreTests/SidebarBackdropTests.swift::inactiveDarkThemesGoDarkOnMacOSDark  cff33a1ab14b
 #876   Tests/DialogTests.swift::checkKeyBadges  a3cbb5592b57
+#876   Tests/DialogTests.swift::checkReturnGlyphAtEveryScale  89e222ad6235
 #876   Tests/Scenarios/sidebar-title-row.scenario  78019136ff4e
 #876   Tests/Scenarios/theme-inactive-ground.scenario  caa8dd77583e
 #878   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::picturesKeepTheTopLeftWhenTheScreenShapeChanges  a802009cbca7
