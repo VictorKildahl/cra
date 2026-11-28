@@ -382,26 +382,16 @@ struct MobileNewTabDrawerTests {
 }
 
 struct MobileSuggestionsTests {
-    /// A Mac sidebar tab last active at `date`, for the synced Spaces tests.
-    static func mac(_ url: String, _ title: String, _ date: Double?) -> SidebarItem {
-        var item = SidebarItem.tab(url, title: title, parent: nil)
-        if case .tab(var tab) = item.data {
-            tab.timeLastActiveAt = date.map(Date.init(timeIntervalSince1970:))
-            item.data = .tab(tab)
-        }
-        return item
-    }
-
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/650")) func syncedSpaceSitesKeepTheirPlaceAndPhoneWins() {
         var a = SidebarDocument.fresh()
         var b = SidebarDocument.fresh()
         a.spaces[0].title = "A"
         b.spaces[0].title = "B"
-        let pinned = Self.mac("https://x.example/p", "Manga pinned", 3)
-        let nested = Self.mac("https://nested.example", "Manga folder", 2)
-        let today = Self.mac("https://today.example", "Manga today", 4)
-        let undated = Self.mac("https://undated.example", "Manga undated", nil)
-        let favorite = Self.mac("https://favorite.example", "Manga favorite", 9)
+        let pinned = MobileRecentTabsTests.mac("https://x.example/p", "Manga pinned", 3)
+        let nested = MobileRecentTabsTests.mac("https://nested.example", "Manga folder", 2)
+        let today = MobileRecentTabsTests.mac("https://today.example", "Manga today", 4)
+        let undated = MobileRecentTabsTests.mac("https://undated.example", "Manga undated", nil)
+        let favorite = MobileRecentTabsTests.mac("https://favorite.example", "Manga favorite", 9)
         var folder = SidebarItem.folder("Folder", parent: a.spaces[0].pinnedContainerID)
         folder.children = [nested.id]
         a.items += [pinned, nested, folder, favorite]
@@ -414,7 +404,7 @@ struct MobileSuggestionsTests {
         a.items += b.items
         var blank = SidebarDocument.fresh()
         blank.spaces[0].standaloneWindowID = UUID()
-        let hidden = Self.mac("https://hidden.example", "Manga hidden", 10)
+        let hidden = MobileRecentTabsTests.mac("https://hidden.example", "Manga hidden", 10)
         blank.items.append(hidden)
         blank.items[blank.items.firstIndex { $0.id == blank.spaces[0].pinnedContainerID }!].children = [hidden.id]
         a.spaces += blank.spaces
@@ -432,7 +422,7 @@ struct MobileSuggestionsTests {
         let duplicate = MobileSuggestions.rows(typed: "x.example", completions: [], sites: [phone] + sites)
         #expect(duplicate.filter { if case .site = $0.kind { return true }; return false }.count == 1)
         #expect(duplicate[0].place == nil)
-        let extras = (1...2).map { Self.mac("https://extra\($0).example", "Manga extra", 1) }
+        let extras = (1...2).map { MobileRecentTabsTests.mac("https://extra\($0).example", "Manga extra", 1) }
         a.items += extras
         a.items[a.items.firstIndex { $0.id == a.spaces[0].pinnedContainerID }!].children += extras.map(\.id)
         let many = MobileSuggestions.macSites(in: a)
@@ -2763,6 +2753,94 @@ struct MobileAITests {
         #expect(off?.opensSettings == true)
         #expect(off?.message.contains("Settings \u{25B8} Apple Intelligence & Siri") == true)
         #expect(MobileAI.prompt(for: .preparing)?.opensSettings == false)
+    }
+}
+
+/// Arc Search's recent tabs under the empty field (#591): the phone's and the Mac's, newest first.
+struct MobileRecentTabsTests {
+    static func mac(_ url: String, _ title: String, _ date: Double?) -> SidebarItem {
+        var item = SidebarItem.tab(url, title: title, parent: nil)
+        if case .tab(var tab) = item.data {
+            tab.timeLastActiveAt = date.map(Date.init(timeIntervalSince1970:))
+            item.data = .tab(tab)
+        }
+        return item
+    }
+
+    /// A one-Space sidebar with `today` in its Today list.
+    static func sidebar(today: [SidebarItem]) -> SidebarDocument {
+        var document = SidebarDocument.fresh()
+        let container = document.spaces[0].todayContainerID
+        document.items += today
+        if let index = document.items.firstIndex(where: { $0.id == container }) { document.items[index].children = today.map(\.id) }
+        return document
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/591")) func mergesAndFiltersRecentTabs() {
+        let selected = MobileTab(url: "https://selected.example", title: "Selected", lastActive: Date(timeIntervalSince1970: 5))
+        let phone = MobileTab(url: "https://phone.example", title: "Phone", lastActive: Date(timeIntervalSince1970: 4))
+        let privateTab = MobileTab(url: "https://private.example", lastActive: Date(timeIntervalSince1970: 9), isIncognito: true)
+        let mac = Self.mac
+        var renamed = mac("https://rename.example", "Saved", 8)
+        renamed.title = "Renamed"
+        let document = Self.sidebar(today: [renamed, mac("https://saved.example", "Saved", 7), mac("https://host.example/path", "", 6),
+                                            mac("https://host.example/path", "Old", 1), mac(selected.url, "Selected duplicate", 20),
+                                            mac(phone.url, "Phone duplicate", 19), mac("https://undated.example", "Undated", nil),
+                                            mac("", "Empty", 21)])
+        let rows = MobileRecentTabs.rows(phone: [selected, phone, privateTab], selected: selected.id, mac: document, limit: 10)
+        #expect(rows.map(\.title) == ["Renamed", "Saved", "host.example", "Phone"])
+        #expect(rows.last?.source == .phone(phone.id))
+        #expect(rows.first?.source == .mac)
+        #expect(MobileRecentTabs.rows(phone: [selected, phone], selected: selected.id, mac: document, limit: 2).count == 2)
+        #expect(MobileRecentTabs.rows(phone: [selected, phone], selected: selected.id, mac: nil).map(\.title) == ["Phone"])
+    }
+
+    /// The same page in another form (scheme, "www.", trailing slash, fragment) is one row, the
+    /// phone's when the phone has it. An incognito tab is no tab here, so it hides nothing.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/591")) func aPageListedTwiceShowsOnce() {
+        let phone = MobileTab(url: "https://www.news.example/story/", title: "Story", lastActive: Date(timeIntervalSince1970: 1))
+        let privateTab = MobileTab(url: "https://secret.example/", lastActive: Date(timeIntervalSince1970: 2), isIncognito: true)
+        let document = Self.sidebar(today: [Self.mac("http://news.example/story#comments", "Story on the Mac", 9),
+                                            Self.mac("https://docs.example/a", "Doc", 8), Self.mac("https://www.docs.example/a/", "Doc again", 7),
+                                            Self.mac("https://secret.example", "Secret on the Mac", 6),
+                                            Self.mac("https://docs.example/a?page=2", "Doc page 2", 5)])
+        let rows = MobileRecentTabs.rows(phone: [phone, privateTab], selected: nil, mac: document, limit: 10)
+        #expect(rows.map(\.title) == ["Doc", "Secret on the Mac", "Doc page 2", "Story"])
+        #expect(rows.last?.source == .phone(phone.id))
+    }
+
+    /// Arc Sync brought the Mac's Spaces over (pinned tabs, folders, Today) but never its
+    /// favorites (ATH3): a Mac favorite isn't a recent tab, and neither is a blank window's tab.
+    /// Tabs inside folders and splits are.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/591")) func macTabsComeFromItsSyncedSpaces() {
+        var document = Self.sidebar(today: [Self.mac("https://today.example", "Today", 1)])
+        var space = document.spaces[0]
+        var folder = SidebarItem.folder("Work", parent: space.pinnedContainerID)
+        let inFolder = Self.mac("https://folder.example", "In a folder", 4)
+        var split = SidebarItem.split(parent: space.pinnedContainerID)
+        let inSplit = Self.mac("https://split.example", "In a split", 3)
+        folder.children = [inFolder.id]
+        split.children = [inSplit.id]
+        let favorite = Self.mac("https://favorite.example", "Favorite", 9)
+        document.items += [folder, inFolder, split, inSplit, favorite]
+        for (container, children) in [(space.pinnedContainerID, [folder.id, split.id]), (space.favoritesContainerID, [favorite.id])] {
+            if let index = document.items.firstIndex(where: { $0.id == container }) { document.items[index].children = children }
+        }
+        #expect(MobileRecentTabs.rows(phone: [], selected: nil, mac: document, limit: 10).map(\.title) == ["In a folder", "In a split", "Today"])
+
+        space.standaloneWindowID = UUID()
+        document.spaces[0] = space
+        #expect(MobileRecentTabs.rows(phone: [], selected: nil, mac: document).isEmpty)
+    }
+
+    /// The sidebar comes from another device: a folder listed inside itself still ends, and its
+    /// tab is listed once.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/591")) func aFolderInsideItselfStillEnds() {
+        var folder = SidebarItem.folder("Loop", parent: nil)
+        let inFolder = Self.mac("https://loop.example", "In the loop", 1)
+        folder.children = [folder.id, inFolder.id]
+        let document = Self.sidebar(today: [folder, inFolder])
+        #expect(MobileRecentTabs.rows(phone: [], selected: nil, mac: document, limit: 10).map(\.title) == ["In the loop"])
     }
 }
 

@@ -3045,12 +3045,10 @@ final class AppleIntelligenceTests: BrowserTestCase {
     }
 }
 
-final class EmptyFieldTabsTests: BrowserTestCase {
+final class RecentTabsTests: BrowserTestCase {
     // promise: #591
-    /// The new tab drawer lists only the pinned tabs ("Favorite in App") under the empty field:
-    /// neither the phone's other open tabs nor the Mac's synced tabs show there.
-    func testOnlyPinnedTabsShowUnderTheEmptyField() throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-pinned-\(UUID().uuidString)", isDirectory: true)
+    func testRecentTabsShowUnderTheEmptyField() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("cra-recent-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let sidebar = SpacesTests.macSidebar.replacingOccurrences(of: "2026-11-17T10:00:00Z", with: "2099-11-17T10:00:00Z")
@@ -3060,17 +3058,21 @@ final class EmptyFieldTabsTests: BrowserTestCase {
         app.buttons["bar-search"].tap()
         app.textFields["search-field"].typeText(Self.page("Second") + "\n")
         waitForPage("Second")
-        app.buttons["bar-menu"].tap()
-        XCTAssertTrue(app.buttons["menu-tile-pin"].waitForExistence(timeout: 5))
-        app.buttons["menu-tile-pin"].tap()
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
         app.buttons["bar-search"].tap()
-        let list = app.scrollViews["suggestion-list"]
-        XCTAssertTrue(app.descendants(matching: .any)["suggestion-0"].staticTexts["Second"].waitForExistence(timeout: 10),
-                      "the pinned tab is listed")
-        keep("pinned-only")
-        XCTAssertFalse(list.staticTexts["First"].exists, "another open tab is not listed")
-        XCTAssertFalse(list.staticTexts["Inbox"].exists, "a synced Mac tab is not listed")
-        XCTAssertFalse(app.descendants(matching: .any)["suggestion-1"].exists, "nothing follows the pinned tab")
+        let firstRow = app.descendants(matching: .any)["suggestion-0"]
+        let secondRow = app.descendants(matching: .any)["suggestion-1"]
+        XCTAssertTrue(firstRow.staticTexts["Inbox"].waitForExistence(timeout: 10))
+        XCTAssertTrue(secondRow.staticTexts["First"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.scrollViews["suggestion-list"].staticTexts["Second"].exists)
+        keep("recent-tabs")
+        secondRow.tap()
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        XCTAssertTrue(firstRow.staticTexts["Inbox"].waitForExistence(timeout: 10))
+        firstRow.tap()
+        waitForPage("Inbox")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-2"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["tab-card-3"].exists)
     }
 }

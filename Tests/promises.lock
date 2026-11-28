@@ -1292,7 +1292,11 @@
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::isChromiumsHistoryNotTheArchive  d386eba57452
 #590   Packages/CraCore/Tests/CraCoreTests/HistoryPageTests.swift::keepsTheIDKeyBindingsSaved  aacec353222c
 #590   Tests/Scenarios/view-history.scenario  d890566954b5
-#591   iOS/CraUITests/BrowserTests.swift::testOnlyPinnedTabsShowUnderTheEmptyField  f49cb42502d2
+#591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aFolderInsideItselfStillEnds  fb81215fc153
+#591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::aPageListedTwiceShowsOnce  f4ca1fa04528
+#591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::macTabsComeFromItsSyncedSpaces  2102b05a769d
+#591   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::mergesAndFiltersRecentTabs  427408879f3f
+#591   iOS/CraUITests/BrowserTests.swift::testRecentTabsShowUnderTheEmptyField  6bf1170efbe9
 #593   Tests/Scenarios/extension-crx-drop.scenario  69cfe2dc2f7a
 #594   Packages/CraCore/Tests/CraCoreTests/TidyTabsTests.swift::aModelThatNamesEveryTabLeavesThemLoose  c97e1f073cec
 #595   Packages/CraCore/Tests/CraCoreTests/ModelFixtureTests.swift::optInSharedExtensionsLoadAsRecorded  846e3d1e8c64
@@ -1488,7 +1492,7 @@
 #649   Packages/CraCore/Tests/CraCoreTests/LibraryShortcutTests.swift::openLibraryTogglesTheLibrary  59f489e68beb
 #649   Packages/CraCore/Tests/CraCoreTests/LibraryShortcutTests.swift::viewDownloadsClosesItsOwnPageAndGoesToItFromAnother  0e661b8011e4
 #649   Tests/Scenarios/library-shortcut-toggle.scenario  f8cdda4a6004
-#650   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::syncedSpaceSitesKeepTheirPlaceAndPhoneWins  47aa7d1101b1
+#650   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::syncedSpaceSitesKeepTheirPlaceAndPhoneWins  a64d7221a346
 #650   iOS/CraUITests/BrowserTests.swift::testPhoneSiteWinsOverSyncedSpace  f3705dffdfb4
 #650   iOS/CraUITests/BrowserTests.swift::testSyncedSpaceSitesShowTheirPlaceAndOpen  587d781bccdd
 #653   Tests/Scenarios/extension-popup-button-closes.scenario  c5424cc0359c
