@@ -33,4 +33,27 @@ struct CommandBarRankingTests {
         #expect(CommandBarRanking.recentSwitches([now.addingTimeInterval(-8 * 86400)], now: now) == 0)
         #expect(CommandBarRanking.recentSwitches(nil, now: now) == 0)
     }
+
+    /// Arc lists the space whose name starts with the typed text first and selects it: "finan" with a space called
+    /// FINANCE. Cra's rows are ranked first, and an archived "… Financial …" page outscored "Switch to FINANCE", so
+    /// the space never led. Rows are given in rank order, nil for a row that switches to no space.
+    @Test func aSpaceTheTextStartsLeads() {
+        let rows: [String?] = [nil, nil, "FINANCE", nil]
+        #expect(CommandBarRanking.leadingSpace("finan", in: rows, spaceTitle: { $0 }) == 2)
+        #expect(CommandBarRanking.leadingSpace("finance", in: rows, spaceTitle: { $0 }) == 2)
+        // The first in rank order leads when two names start with the text.
+        #expect(CommandBarRanking.leadingSpace("fin", in: [nil, "Fine Art", "Finance"], spaceTitle: { $0 }) == 1)
+    }
+
+    /// The whole name only: a word inside it would take Return from a search that shares the word. Nor an address,
+    /// a single letter, or text longer than the name.
+    @Test func otherwiseNoSpaceLeads() {
+        #expect(CommandBarRanking.leadingSpace("proj", in: ["Side Projects"], spaceTitle: { $0 }) == nil)
+        #expect(CommandBarRanking.leadingSpace("localhost", in: ["Localhost"], spaceTitle: { $0 }) == nil)
+        #expect(CommandBarRanking.leadingSpace("cra.app", in: ["cra.app notes"], spaceTitle: { $0 }) == nil)
+        #expect(CommandBarRanking.leadingSpace("f", in: ["Finance"], spaceTitle: { $0 }) == nil)
+        #expect(CommandBarRanking.leadingSpace("finances", in: ["Finance"], spaceTitle: { $0 }) == nil)
+        #expect(CommandBarRanking.leadingSpace("weather", in: [nil, "Finance"], spaceTitle: { $0 }) == nil)
+        #expect(CommandBarRanking.leadingSpace("finan", in: [String?](), spaceTitle: { $0 }) == nil)
+    }
 }
