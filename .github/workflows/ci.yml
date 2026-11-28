@@ -89,10 +89,9 @@ jobs:
 
       - name: Build for the iOS simulator
         run: |
-          set -o pipefail
           xcodebuild -project iOS/Cra.xcodeproj -scheme Cra -configuration Debug \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ios \
-            CODE_SIGNING_ALLOWED=NO build | tail -20
+            CODE_SIGNING_ALLOWED=NO build
 
   build:
     name: Build Cra.app

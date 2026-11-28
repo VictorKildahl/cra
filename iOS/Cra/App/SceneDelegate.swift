@@ -52,7 +52,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
-        // Older builds stored the choice only in UIKit. The old Violet name now carries Colorful's artwork.
+        // UIKit may still report an icon name from an older build.
         if let icon = MobileAppIcon.replacement(forRetiredAlternateName: UIApplication.shared.alternateIconName) {
             AppIconPicker.apply(icon)
         }
