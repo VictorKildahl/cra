@@ -4,6 +4,11 @@ import Testing
 
 /// The sidebar URL field edited in place (#344): what a click does and where Return goes.
 struct SidebarAddressEditTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/900"))
+    func aFilePathLoadsInTheSidebarAddressField() {
+        #expect(SidebarAddressEdit.commit(typed: "/tmp/a b.html", currentURL: "https://example.com/", pinned: false, searchURL: { "https://search.test/?q=\($0)" }) == .load("file:///tmp/a%20b.html"))
+    }
+
     let search: (String) -> String = { "https://search.test/?q=" + $0.replacingOccurrences(of: " ", with: "+") }
 
     /// Off is Arc's field (the command bar); on, a click edits in place. With no tab there is no

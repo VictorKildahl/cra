@@ -2,6 +2,37 @@ import CraCore
 import Testing
 
 struct TypedURLTests {
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/900"))
+    func homePathsExpandAndOtherTextKeepsItsRule() {
+        #expect(TypedURL.fromInput("~/Desktop/a b.html", home: "/Users/me") == "file:///Users/me/Desktop/a%20b.html")
+        #expect(TypedURL.fromInput("~", home: "/Users/me") == "file:///Users/me")
+        for input in ["~foo", "~ 50", "cra browser"] {
+            #expect(!TypedURL.looksLikeURL(input))
+        }
+        for input in ["/Users/me/a.html", "/"] {
+            #expect(!TypedURL.looksLikeURL(input, filePaths: false))
+        }
+    }
+
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/900"))
+    func filePathsAreAddresses() {
+        for input in ["/Users/me/notes/README.html", "/Users/me/My Notes/a b.html", "~/Desktop/a.html", "~", "/", "/r/swift"] {
+            #expect(TypedURL.looksLikeURL(input))
+        }
+        for (input, expected) in [
+            ("/Users/me/notes/README.html", "file:///Users/me/notes/README.html"),
+            ("  /Users/me/My Notes/a b.html  ", "file:///Users/me/My%20Notes/a%20b.html"),
+            ("/", "file:///"),
+            ("/r/swift", "file:///r/swift"),
+            ("/tmp/a#1?x=%20.html", "file:///tmp/a%231%3Fx=%2520.html"),
+            ("/Users/me/dir/", "file:///Users/me/dir/"),
+        ] {
+            #expect(TypedURL.fromInput(input, home: "/Users/me") == expected)
+        }
+        #expect(TypedURL.pinnedDestination("/tmp/a.html") == "file:///tmp/a.html")
+        #expect(TypedURL.navigation(typed: "/Users/me/a b.html", rowURL: nil, rowIsForTyped: false) == "file:///Users/me/a%20b.html")
+    }
+
     @Test(arguments: [
         ("example.org/new?q=1", "https://example.org/new?q=1" as String?),
         ("  https://Example.com/a#b  ", "https://Example.com/a#b"),
