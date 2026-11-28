@@ -37,6 +37,7 @@ struct DialogButton: View {
     var badge: CGSize?
     let action: () -> Void
     @State private var hovered = false
+    @Environment(\.displayScale) private var displayScale
 
     init(title: String, key: String, enabled: Bool, primary: Bool, action: @escaping () -> Void) {
         self.init(title: title, key: key, enabled: enabled, style: primary ? .primary : .secondary, action: action)
@@ -67,10 +68,10 @@ struct DialogButton: View {
                     // text arrow sat 1.25 pt high, on its font's line rather than in the badge.
                     let size = badge ?? (key == "↩" ? CGSize(width: 28, height: 20) : CGSize(width: 35, height: 20))
                     Group {
-                        // At 10 pt the symbol's frame is 14 × 12 pt, so centred in 28 × 20 it starts on a whole point,
-                        // (7, 4). At 11 pt (15 × 13) it started at (6.5, 3.5): a Retina screen draws that, a 1x one
-                        // rounds it, and the ↩ sat a point left of the middle there.
-                        if key == "↩" { Image(systemName: "return").font(.system(size: 10, weight: .bold)) } else { Text(key) }
+                        // The 11 pt symbol is 15 pt wide. Centred in the 28 pt key it starts at 6.5 pt, which a 1x screen
+                        // rounds down, and its 1x glyph sits a further half point left: a point left of the middle there.
+                        // A point of lead on 1x puts it back; Retina draws the half point as it is.
+                        if key == "↩" { Image(systemName: "return").padding(.leading, displayScale < 2 ? 1 : 0) } else { Text(key) }
                     }
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(destructive ? .white : accent ? Color(hex: "#EDEDFF") : enabled ? Color(hex: "#B7B7DD") : Color(hex: "#5F6193"))

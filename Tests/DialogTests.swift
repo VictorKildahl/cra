@@ -20,6 +20,7 @@ enum DialogTests {
         if let directory = ProcessInfo.processInfo.environment["CRA_DIALOG_SNAPSHOTS"] { try snapshots(in: directory) }
         checkEaselDeletion()
         checkKeyBadges()
+        checkReturnGlyphAtEveryScale()
         let parent = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 900, height: 700),
                               styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         parent.isReleasedWhenClosed = false
@@ -187,8 +188,7 @@ enum DialogTests {
     // promise: #876
     /// The key badges on Arc's Quit sheet (the reporter's 2x capture of Arc, 27 Nov 2026): ESC 35 × 20 pt,
     /// ↩ 28 × 20 pt with the return glyph (12 × 10.5 pt of ink) in its middle. Cra's ↩ was a text arrow
-    /// 1.25 pt above the middle of a 27 × 19 pt badge. Cra's glyph is a point smaller than Arc's (11 × 9.5 pt of
-    /// ink, the symbol at 10 pt) so that its frame starts on a whole point and a 1x screen draws it in the middle too.
+    /// 1.25 pt above the middle of a 27 × 19 pt badge.
     @MainActor
     private static func checkKeyBadges() {
         let window = AppDialog(title: "Quit Cra?", actions: [DialogAction("Quit"), .cancel, DialogAction("Quit, and don’t ask again", role: .secondary)],
@@ -235,11 +235,64 @@ enum DialogTests {
         } }
         guard let glyph = glyphBox else { fatalError("The ↩ glyph is missing") }
         let ink = size(glyph)
-        expect(ink.width >= 10.5 && ink.width <= 12.5 && ink.height >= 9 && ink.height <= 11, "the ↩ glyph is the return glyph a point under Arc's, about 11 × 9.5 pt, not \(ink)")
+        expect(ink.width >= 11.5 && ink.width <= 13.5 && ink.height >= 10 && ink.height <= 12, "the ↩ glyph is Arc's return glyph, about 12 × 10.5 pt, not \(ink)")
         let dy = (CGFloat(glyph.1 + glyph.3) - CGFloat(quit.1 + quit.3)) / 2 / scale
         let dx = (CGFloat(glyph.0 + glyph.2) - CGFloat(quit.0 + quit.2)) / 2 / scale
         expect(abs(dy) <= 0.5 && abs(dx) <= 0.5, "the ↩ sits in the middle of its badge, not \(dx) pt across and \(dy) pt down")
         window.close()
+    }
+
+    // promise: #876
+    /// The ↩ sits in the middle of its key on a 1x screen as well as on Retina. Arc's 11 pt symbol is 15 pt wide, so
+    /// centred in the Quit sheet's 28 pt key it starts at 6.5 pt: a 1x screen rounds that down, and its 1x glyph
+    /// lands a further half point left, so CI's 1x runner saw the ↩ a point left of the middle. Both keys Cra draws
+    /// it in, 28 pt (dialogs) and 27 pt (Edit Pinned URL), at both scales.
+    @MainActor
+    private static func checkReturnGlyphAtEveryScale() {
+        for badge in [CGSize?.none, CGSize(width: 27, height: 20)] {
+            for displayScale: CGFloat in [1, 2] {
+                let host = NSHostingView(rootView: DialogButton(title: "Quit", key: "↩", enabled: true, style: .accent, badge: badge) {}
+                    .environment(\.displayScale, displayScale).environment(\.colorScheme, .dark))
+                // In an sRGB window, as checkKeyBadges reads it, drawn into a 2x bitmap on any display.
+                let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: -10000, y: -10000), size: host.fittingSize),
+                                      styleMask: .borderless, backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.colorSpace = .sRGB
+                window.contentView = host
+                host.layoutSubtreeIfNeeded()
+                let scale: CGFloat = 2
+                guard let image = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(host.bounds.width * scale), pixelsHigh: Int(host.bounds.height * scale),
+                                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                                   bytesPerRow: 0, bitsPerPixel: 0) else { fatalError("Button bitmap missing") }
+                image.size = host.bounds.size
+                host.cacheDisplay(in: host.bounds, to: image)
+                defer { window.close() }
+                var glyph: (Int, Int, Int, Int)?
+                func grow(_ box: (Int, Int, Int, Int)?, _ x: Int, _ y: Int) -> (Int, Int, Int, Int) {
+                    box.map { (min($0.0, x), min($0.1, y), max($0.2, x), max($0.3, y)) } ?? (x, y, x, y)
+                }
+                // The key's fill (#464DFB): the rows holding at least 8 pt of it, then the columns filled through most of
+                // those rows, not the button's anti-aliased outline that blends to the same colour.
+                var hits = Set<Int>()
+                for y in 0..<image.pixelsHigh { for x in 0..<image.pixelsWide {
+                    guard let c = image.colorAt(x: x, y: y) else { continue }
+                    if abs(c.redComponent * 255 - 0x46) < 6 && abs(c.greenComponent * 255 - 0x4D) < 6 && abs(c.blueComponent * 255 - 0xFB) < 6 { hits.insert(y * image.pixelsWide + x) }
+                } }
+                let rows = (0..<image.pixelsHigh).filter { y in (0..<image.pixelsWide).filter { hits.contains(y * image.pixelsWide + $0) }.count >= Int(8 * scale) }
+                let columns = (0..<image.pixelsWide).filter { x in rows.filter { hits.contains($0 * image.pixelsWide + x) }.count * 2 >= rows.count }
+                let key = rows.isEmpty || columns.isEmpty ? nil : (columns.min()!, rows.min()!, columns.max()!, rows.max()!)
+                guard let fill = key else { fatalError("The ↩ key is missing at \(displayScale)x") }
+                for y in fill.1...fill.3 { for x in fill.0...fill.2 {
+                    guard let c = image.colorAt(x: x, y: y), c.redComponent > 0.8, c.greenComponent > 0.8 else { continue }
+                    glyph = grow(glyph, x, y)
+                } }
+                guard let ink = glyph else { fatalError("The ↩ glyph is missing at \(displayScale)x") }
+                let dx = (CGFloat(ink.0 + ink.2) - CGFloat(fill.0 + fill.2)) / 2 / scale
+                let dy = (CGFloat(ink.1 + ink.3) - CGFloat(fill.1 + fill.3)) / 2 / scale
+                expect(abs(dx) <= 0.5 && abs(dy) <= 0.5,
+                       "the ↩ sits in the middle of its \(badge?.width ?? 28) pt key at \(displayScale)x, not \(dx) pt across and \(dy) pt down")
+            }
+        }
     }
 
     // promise: #356
