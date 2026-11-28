@@ -37,7 +37,19 @@ public enum KnownNativeHosts {
             "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/", "chrome-extension://dppgmdbiimibapkepcbdbmkaabgiofem/",
         ])
 
-    public static let all: [Host] = [onePassword]
+    /// Bitwarden's desktop app, from the manifest it writes for Chrome (native-messaging.main.ts, 28 Nov 2026): its
+    /// `desktop_proxy` next to the app's executable, the same in the direct download and the Mac App Store copy, and
+    /// the Chrome Web Store, Chrome beta, Edge and Opera extensions. Without it the extension can't reach the app, so
+    /// "Unlock with biometrics" stays off (#918, #920).
+    public static let bitwarden = Host(
+        name: "com.8bit.bitwarden", description: "Bitwarden desktop <-> browser bridge",
+        paths: ["/Applications/Bitwarden.app/Contents/MacOS/desktop_proxy"],
+        allowedOrigins: [
+            "chrome-extension://nngceckbapebfimnlniiiahkandclblb/", "chrome-extension://hccnnhgbibccigepcmlgppchkpfdophk/",
+            "chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh/", "chrome-extension://ccnckbpmaceehanjmeomladnmlffdjgn/",
+        ])
+
+    public static let all: [Host] = [onePassword, bitwarden]
 
     /// The manifests Cra writes: each known host whose helper `exists`, unless `linked` (the file names already in
     /// Cra's NativeMessagingHosts folder: linked from a browser, or the person's own) has it. File name → contents.

@@ -65,8 +65,10 @@ final class TabStore {
         return tab
     }
 
-    func select(_ id: UUID) {
-        document.select(id, now: now())
+    /// The neighbouring tab a swipe along the bar brings in: shown, the row and the tab button's
+    /// stack left as they were (`MobileTabsDocument.walk`).
+    func walk(to id: UUID) {
+        document.walk(to: id, now: now())
         changed()
     }
 
@@ -101,8 +103,9 @@ final class TabStore {
     func close(_ id: UUID) {
         let wasSelected = document.selected == id
         let opener = liveOpener(of: id)
-        document.close(id)
-        if wasSelected, let opener { document.select(opener.tabID, now: now()) }
+        document.close(id, returningTo: opener?.tabID)
+        // Back on its opener, whose archive clock restarts as when it is picked.
+        if wasSelected, let opener, document.selected == opener.tabID { document.select(opener.tabID, now: now()) }
         pages[id] = nil
         snapshots[id] = nil
         try? FileManager.default.removeItem(at: snapshotFile(id))

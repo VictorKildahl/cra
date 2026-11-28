@@ -4569,6 +4569,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "hardReload": main.currentBrowser?.reloadIgnoringCache()
         case "clearCache": main.currentBrowser?.clearSiteDataAndReload(.cache)
         case "clearCookies": main.currentBrowser?.clearSiteDataAndReload(.cookies)
+        case "openPasswords":
+            // The space's profile's passwords, searched for the site in front; from an incognito window, Default's whole
+            // list in a normal one (#905).
+            let page = PasswordManagerPage.address(forPage: main.selectedTab?.tab?.url, incognito: main.isIncognito)
+            let profile = main.isIncognito ? "Default" : store.profileDirectoryName(space: main.focusedSpace.id)
+            let window = useNormalWindow()
+            openExtensionPage(page, window: window.windowID, profile: profile, singleton: true)
+            window.showWindow(nil)
         case "clearSiteData": main.currentBrowser?.clearSiteDataAndReload(.siteData)
         // View ▸ Stop Loading while an agent's pill is up in the window: its Take Over (AgentPill).
         case "stop": if !main.takeOverFromAgent() { main.currentBrowser?.stopLoading() }

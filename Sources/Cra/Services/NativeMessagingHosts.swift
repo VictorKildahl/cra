@@ -12,8 +12,8 @@ import Foundation
 /// imported from (imported-browsers.json), never from a browser's folder Cra wasn't
 /// asked to read: macOS can keep Chrome's and Brave's folders from other apps, and
 /// reading them at launch showed "Data Access Blocked" on Cra's first launch (#757).
-/// For apps that install only into browsers they know (1Password), Cra writes the
-/// manifest itself when the app is installed and no browser's was linked (#847).
+/// For apps that install only into browsers they know (1Password, Bitwarden), Cra writes
+/// the manifest itself when the app is installed and no browser's was linked (#847, #920).
 enum NativeMessagingHosts {
     static func link(into profileRoot: URL) {
         let fm = FileManager.default
@@ -37,7 +37,7 @@ enum NativeMessagingHosts {
             }
         }
 
-        // Apps that install their manifest only into browsers they know (1Password): with the app installed and no
+        // Apps that install their manifest only into browsers they know (1Password, Bitwarden): with the app installed and no
         // browser's manifest linked above, Cra writes it into its own folder and links that (KnownNativeHosts, #847).
         let linked = Set((try? fm.contentsOfDirectory(atPath: dest.path)) ?? [])
         let known = AppPaths.file("KnownNativeHosts")

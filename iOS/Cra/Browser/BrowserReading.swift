@@ -197,10 +197,8 @@ extension BrowserViewController {
     func browse(for query: String, in page: WebPage) {
         let id = page.tabID
         let incognito = store.tabs.first { $0.id == id }?.isIncognito ?? false
-        // The saved page names its query on its first line: a tab switched to the engine and
-        // back to Browse for Me for another query makes a new page.
         let marker = Self.browseCacheMarker(query)
-        if !incognito, let saved = try? String(contentsOf: Self.browseCache(id), encoding: .utf8), saved.hasPrefix(marker) {
+        if let saved = savedAnswer(for: id, query: query) {
             page.webView.loadHTMLString(saved, baseURL: nil)
             return
         }
@@ -247,6 +245,30 @@ extension BrowserViewController {
                 }
             }
         }
+    }
+
+    /// `id`'s saved Browse for Me page for `query`. The page names its query on its first line:
+    /// a tab switched to the engine and back to Browse for Me for another query makes a new page.
+    /// Incognito tabs keep none.
+    private func savedAnswer(for id: UUID, query: String) -> String? {
+        guard store.tabs.first(where: { $0.id == id })?.isIncognito == false,
+              let saved = try? String(contentsOf: Self.browseCache(id), encoding: .utf8),
+              saved.hasPrefix(Self.browseCacheMarker(query)) else { return nil }
+        return saved
+    }
+
+    /// Whether Browse for Me's loading covers `id`'s page: until its answer is in, the tab opens
+    /// from the tab row or a bar swipe as its picture, not as its page (`MobileTabCarousel.growth`).
+    func browseLoadingCovers(_ id: UUID) -> Bool { browseLoading?.tabID == id }
+
+    /// Whether showing `tab` would start Browse for Me making its answer, loading screen and all:
+    /// a Browse for Me tab with no page started and no answer saved. A bar swipe brings it in as
+    /// its picture, for the answer to start only once the tab is shown: the loading screen covers
+    /// the page's container, so started for a neighbour it would cover the page on screen.
+    func browseWouldStart(for tab: MobileTab) -> Bool {
+        guard let query = MobileBrowseForMe.query(fromTabAddress: tab.url) else { return false }
+        if let page = store.existingPage(tab.id), page.webView.url != nil || page.isBrowsing { return false }
+        return savedAnswer(for: tab.id, query: query) == nil
     }
 
     // MARK: Pinch to Summarize

@@ -35,6 +35,20 @@ public struct MobileNewTabDrawer: Equatable, Sendable {
     /// it settles.
     public static let bounce = MobileMotion.Spring(response: 0.3, dampingRatio: 0.82)
 
+    /// The finger's speed carried into `bounce` as the drawer is let go, so a flick goes on at
+    /// its own pace instead of stopping where the finger left it and starting again from rest.
+    /// UIKit's spring takes it as a share of the move left, per second. None when the finger was
+    /// going the other way or the drawer is already there; at most `maxReleaseVelocity`, so a
+    /// flick near the end doesn't throw it far past.
+    /// `fingerVelocity` and the tops are in points, down positive, as UIKit gives them.
+    public static func releaseVelocity(fingerVelocity: CGFloat, releasedAt: CGFloat, target: CGFloat) -> CGFloat {
+        let left = target - releasedAt
+        guard abs(left) >= 1 else { return 0 }
+        return min(max(0, fingerVelocity / left), maxReleaseVelocity)
+    }
+
+    public static let maxReleaseVelocity: CGFloat = 20
+
     /// A dark grey haze over the drawer's material in dark mode (`Palette.drawerHaze`), so it reads
     /// frosted rather than as a plain dark panel; less over the tab switcher. None in light mode,
     /// whose material is already milky, nor in incognito, whose black covers it.
@@ -54,6 +68,13 @@ public struct MobileNewTabDrawer: Equatable, Sendable {
     /// material down with it, gone by the time it is back in the bar (`openness` 0).
     public static func materialOpacity(floats: Bool, letGo: Bool, openness: CGFloat) -> CGFloat {
         floats && letGo ? min(1, max(0, openness)) : 1
+    }
+
+    /// Whether the bar keeps the drawer's material on the way down rather than its own: over the
+    /// home or the tab row, where the bar has no slab, the drawer's colour leaves with the drawer
+    /// (`materialOpacity`) instead of turning into the page's bar first.
+    public static func keepsDrawerMaterial(floats: Bool, active: Bool) -> Bool {
+        floats && active
     }
 
     /// The drawer's top corners: square at the bar and the sheet's own radius only once the drawer

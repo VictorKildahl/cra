@@ -273,6 +273,78 @@ final class TabSwitcherTests: BrowserTestCase {
         XCTAssertTrue(app.buttons["bar-tabs"].waitForExistence(timeout: 5))
     }
 
+    /// A picked card grows into the screen with its real page in it rather than its picture, and
+    /// the page is back on screen, working, once the row has gone.
+    func testAPickedCardGrowsWithItsLivePage() {
+        launch(["-CraOpenURL", Self.page("First", color: "%23ffe9d6"), "-CraSearch", "NO", "-CraTraceTabOpen", "YES"])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        app.textFields["search-field"].typeText(Self.page("Second", color: "%23d6ecff") + "\n")
+        waitForPage("Second")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-1"].waitForExistence(timeout: 5))
+        sleep(1)
+        app.buttons["tab-card-0"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+        waitForPage("First")
+        XCTAssertEqual(app.descendants(matching: .any)["tab-open-trace"].value as? String, "live")
+        XCTAssertFalse(app.otherElements["tab-switcher"].exists)
+        // The page's view is in its own container again: the next row opens from it as usual.
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-1"].waitForExistence(timeout: 5))
+        sleep(1)
+        // A picked tab moves to the row's end (#647): Second is the older card now.
+        app.buttons["tab-card-0"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+        waitForPage("Second")
+        XCTAssertEqual(app.descendants(matching: .any)["tab-open-trace"].value as? String, "live")
+    }
+
+    /// A light tab picked from the row over a dark one takes the light bar as it starts to grow,
+    /// not once it has landed, in a dark app too, where the row's own bar is dark.
+    func testAPickedLightTabTakesTheLightBarAtOnce() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTraceTabOpen", "YES", "-CraAppearance", "dark"])
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        app.textFields["search-field"].typeText(Self.page("Second", color: "%23101018") + "\n")
+        waitForPage("Second")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-1"].waitForExistence(timeout: 5))
+        sleep(1)
+        app.buttons["tab-card-0"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+        waitForPage("First")
+        // The row has no slab to crossfade: the bar's slab comes back already light. It fades in
+        // with the grow rather than appearing whole, over the row's backdrop right to the screen's
+        // bottom edge: no solid strip of the page's colour under the home indicator, which showed
+        // light through a slab still coming in.
+        XCTAssertEqual(app.descendants(matching: .any)["grow-trace"].value as? String, "light at once, slab fading in")
+    }
+
+    /// After a relaunch only the tab on screen has a page: another one picked from the row grows
+    /// with its new page under its picture, which fades out as it grows, and the page loads.
+    func testAPickedTabWithNoPageYetGrowsUnderItsPicture() {
+        let data = FileManager.default.temporaryDirectory.appendingPathComponent("Cra-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: data) }
+        app.launchArguments = ["-CraDataDir", data.path, "-CraOpenURL", Self.page("First", color: "%23ffe9d6"), "-CraSearch", "NO"]
+        app.launch()
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        app.textFields["search-field"].typeText(Self.page("Second", color: "%23d6ecff") + "\n")
+        waitForPage("Second")
+        XCUIDevice.shared.press(.home)
+        sleep(2)
+        app.terminate()
+
+        app.launchArguments = ["-CraDataDir", data.path, "-CraSearch", "NO", "-CraTraceTabOpen", "YES"]
+        app.launch()
+        waitForPage("Second")
+        app.buttons["bar-tabs"].tap()
+        XCTAssertTrue(app.buttons["tab-card-1"].waitForExistence(timeout: 5))
+        sleep(1)
+        app.buttons["tab-card-0"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+        waitForPage("First")
+        XCTAssertEqual(app.descendants(matching: .any)["tab-open-trace"].value as? String, "live under picture")
+        XCTAssertFalse(app.otherElements["tab-switcher"].exists)
+    }
+
     /// Throwing a card upwards closes its tab; the last one gone leaves the search sheet.
     func testThrowingACardUpClosesItsTab() {
         openTwoTabs()
@@ -902,6 +974,26 @@ final class GestureTests: BrowserTestCase {
         XCTAssertFalse(app.webViews.staticTexts["First"].exists)
     }
 
+    /// A swipe along the bar brings the neighbouring tab in as its live page, beside the page,
+    /// rather than as its picture; the page works once it is in place.
+    func testSwipingTheBarBringsTheNeighboursLivePage() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraTraceTabOpen", "YES"])
+        waitForPage("First")
+        openSecondTab()
+        drag(fromX: 0.3, toX: 0.9, y: 0.95)
+        waitForPage("First")
+        XCTAssertEqual(app.descendants(matching: .any)["tab-open-trace"].value as? String, "swiped live")
+        // The status bar and the bar took the arriving tab's colour as it let go.
+        let fill = app.descendants(matching: .any)["swipe-status-trace"].value as? String
+        XCTAssertNotNil(fill)
+        XCTAssertNotEqual(fill, "none")
+        XCTAssertFalse(app.webViews.staticTexts["Second"].exists)
+        drag(fromX: 0.8, toX: 0.2, y: 0.95)
+        waitForPage("Second")
+        XCTAssertEqual(app.descendants(matching: .any)["tab-open-trace"].value as? String, "swiped live")
+        XCTAssertFalse(app.webViews.staticTexts["First"].exists)
+    }
+
     /// A swipe right across a tab's first page archives the tab and shows the one before it; the
     /// swipe back left reopens it.
     func testSwipingBackOnAFirstPageArchivesTheTabAndTheOppositeSwipeReopensIt() {
@@ -951,6 +1043,24 @@ final class GestureTests: BrowserTestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
         waitForPage("Second")
         XCTAssertFalse(app.buttons["tab-card-0"].exists)
+    }
+
+    /// After a swipe along the bar to a tab short of the row's newest end, the row opens on that
+    /// tab's own card rather than the one to its left.
+    func testTheTabRowOpensOnASwipedToTabsOwnCard() {
+        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraReadCardTitles", "YES"])
+        waitForPage("First")
+        openTab("Second")
+        openTab("Third")
+        drag(fromX: 0.3, toX: 0.9, y: 0.95)
+        waitForPage("Second")
+        app.buttons["bar-tabs"].tap()
+        let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tab-card-'"))
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 5))
+        sleep(1)
+        // Only the card in focus shows its title (`testOnlyTheFocusedCardIsTitled...`).
+        let focused = cards.allElementsBoundByIndex.first { ($0.value as? String)?.hasPrefix("title to ") == true }
+        XCTAssertEqual(focused?.label, "Second")
     }
 
     // promise: #537
@@ -1386,6 +1496,45 @@ final class BrowseForMeTests: BrowserTestCase {
         app.buttons["bar-tabs"].tap()
         XCTAssertTrue(app.buttons["tab-card-0"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["tab-card-0"].label, "About pizza ovens")
+    }
+}
+
+final class BrowseSwipeTests: BrowserTestCase {
+    /// A swipe along the bar towards a Browse for Me tab whose answer was never saved, let go
+    /// short, leaves the page on screen clear: the answer's loading screen belongs to its own tab
+    /// and does not stay over this one.
+    func testACancelledSwipeTowardsAnUnsavedAnswerLeavesThePageClear() {
+        let data = FileManager.default.temporaryDirectory.appendingPathComponent("Cra-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: data) }
+        app.launchArguments = ["-CraDataDir", data.path, "-CraFakeModel", "YES", "-CraOpenURL", Self.page("First"), "-CraSearch", "NO"]
+        app.launch()
+        waitForPage("First")
+        app.buttons["bar-search"].tap()
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("pizza ovens")
+        let chip = app.buttons["browse-for-me"].firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 5))
+        chip.tap()
+        XCTAssertTrue(app.staticTexts["browse-query"].waitForExistence(timeout: 5))
+        // Back to First while the answer is still being made, and away before it is saved.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.95))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.95)),
+                   withVelocity: .fast, thenHoldForDuration: 0)
+        waitForPage("First")
+        XCUIDevice.shared.press(.home)
+        app.terminate()
+
+        app.launchArguments = ["-CraDataDir", data.path, "-CraFakeModel", "YES", "-CraSearch", "NO"]
+        app.launch()
+        waitForPage("First")
+        // Towards the answer's tab, let go short of switching.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.95))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.95)),
+                   withVelocity: .slow, thenHoldForDuration: 0.2)
+        sleep(1)
+        XCTAssertTrue(app.webViews.staticTexts["First"].exists, "still on First")
+        XCTAssertFalse(app.staticTexts["browse-query"].exists, "the answer's loading screen stays with its own tab")
     }
 }
 
