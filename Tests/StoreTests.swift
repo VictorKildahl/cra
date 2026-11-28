@@ -5185,6 +5185,7 @@ enum StoreTests {
         syncStartsNoPictureTaskAgainForAPictureItCannotRead()
         flushWritesASaveThatWaitsOutItsDelay()
         easelFolderWatcherReportsASave()
+        syncTakesAnEaselRewrittenBetweenItsLookAndItsApplyAtTheNextLook()
         syncWritesNoEaselBeforeItsPicturesAreInTheFolder()
         syncAppliesNothingBeforeThePicturesItLacksAreCopied()
         syncStartsNoSecondPictureTaskWhileOneRuns()
@@ -5217,6 +5218,34 @@ enum StoreTests {
     }
 
     // MARK: Picture work off the main thread (#4)
+
+    /// The other Mac writes its easels before its manifest, so a look can find a whole bundle and the apply a moment later
+    /// an easel file the next manifest names (seen with two copies of Cra on one folder, PR #894 review). That is the
+    /// bundle still being written: no fault and no "could not be saved" in Settings, and the next look applies it.
+    @MainActor
+    private static func syncTakesAnEaselRewrittenBetweenItsLookAndItsApplyAtTheNextLook() {
+        let macs = EaselMacs()
+        defer { macs.done() }
+        let id = UUID()
+        saveEasel(Easel(id: id, title: "First"), in: macs.easelsA)
+        macs.syncAToB()
+        expect(loadEasel(id, in: macs.easelsB)?.title == "First", "the second Mac has the easel")
+        // The first Mac writes a second bundle; the second Mac looks at it, and before it applies it the first Mac
+        // writes its third, easel file first.
+        saveEasel(Easel(id: id, title: "Second"), in: macs.easelsA)
+        macs.clockA.advance(by: 10); macs.syncA.poll()
+        macs.syncB.lookedAtBundle = {
+            saveEasel(Easel(id: id, title: "Third"), in: macs.easelsA)
+            macs.clockA.advance(by: 10); macs.syncA.poll()
+        }
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        macs.syncB.lookedAtBundle = {}
+        expect(macs.syncB.error == nil, "a bundle still being written is no error in Settings: \(macs.syncB.error ?? "")")
+        // The next look finds the third bundle whole and applies it.
+        macs.clockB.advance(by: 10); macs.syncB.poll()
+        expect(loadEasel(id, in: macs.easelsB)?.title == "Third", "the next look applies the easel")
+        expect(macs.syncB.error == nil, "and Settings shows no error")
+    }
 
     /// A write copies its pictures on a picture task: the easels, the files and the manifest wait for it.
     @MainActor

@@ -67,6 +67,9 @@ final class SettingsSyncService {
     /// An easel open in a tab changes on its canvas, which is up to 0.4 s ahead of its file: `change` gets
     /// the canvas's easel and returns what it becomes, nil when the other Mac deleted it. False: no tab has it open.
     var changeOpenEasel: @MainActor (UUID, (Easel) -> Easel?) -> Bool = { _, _ in false }
+    /// Runs between a look that found a whole bundle and its apply: a test changes the folder there, as the other Mac
+    /// writing its next bundle can.
+    var lookedAtBundle: @MainActor () -> Void = {}
     /// Library ▸ Easels lists the easels again after a bundle changed them; `removed` are the ones it deleted.
     var easelsChanged: @MainActor (_ removed: Set<UUID>) -> Void = { _ in }
 
@@ -117,6 +120,8 @@ final class SettingsSyncService {
     private var watcherDebounce: ScheduledWork?
     /// A change here, written `SettingsSync.writeSoonDelay` after the last one (#598).
     private var writeSoon: ScheduledWork?
+    /// Use That Sidebar again once the other Mac's next bundle has landed (BundleChanged).
+    private var useRemoteSoon: ScheduledWork?
     /// The bundle last written or applied, without last-active times: a change to those alone waits
     /// for the 30-second look. Kept as values and compared with ==, never encoded: at 5,000 tabs an
     /// encode of the sidebar is a 2 MB main-thread job (#615).
@@ -320,7 +325,13 @@ final class SettingsSyncService {
         case .hashing(let pictures):
             picturesOffMain(pictures) { [weak self] _ in self?.useRemote() }
         case .bundle(let manifest, let bundle):
-            do { try apply(manifest, bundle, merge: false, retry: { [weak self] in self?.useRemote() }) } catch {
+            do { try apply(manifest, bundle, merge: false, retry: { [weak self] in self?.useRemote() }) } catch is BundleChanged {
+                // The other Mac is writing its next bundle: used once it has landed.
+                useRemoteSoon = clock.after(SettingsSync.writeSoonDelay) { [weak self] in
+                    self?.useRemoteSoon = nil
+                    self?.useRemote()
+                }
+            } catch {
                 easelsNotSaved(manifest, error.localizedDescription)
             }
         case .newer: error = Self.newerCraError
@@ -406,6 +417,7 @@ final class SettingsSyncService {
             return
         case .bundle(let manifest, let bundle):
             awaitingDownload = false
+            lookedAtBundle()
             if !hasSynced {
                 // The bundle sync was turned on against has arrived: now the user picks.
                 if manifest.deviceID != deviceID {
@@ -414,7 +426,11 @@ final class SettingsSyncService {
                 }
             } else if SettingsSync.shouldApply(remote: manifest, lastApplied: state.lastApplied, deviceID: deviceID) {
                 // A later bundle, also one iCloud delivered in parts: applied with no question.
-                do { guard try apply(manifest, bundle, retry: { [weak self] in self?.poll() }) else { return } } catch {
+                do { guard try apply(manifest, bundle, retry: { [weak self] in self?.poll() }) else { return } } catch let changed as BundleChanged {
+                    // Its manifest comes last and the watcher looks again then.
+                    CraLog.note("sync: \(manifest.device)'s next bundle is on its way (\(changed.path)); looked at again when it lands")
+                    return
+                } catch {
                     easelsNotSaved(manifest, error.localizedDescription)
                     return
                 }
@@ -1187,6 +1203,13 @@ final class SettingsSyncService {
         return !easels.onCanvas
     }
 
+    /// An easel file that changed since the look found its bundle whole: the other Mac writes its easels before its
+    /// manifest, so this is its next bundle on the way, not a failure. Import says so, as nothing writes an export.
+    struct BundleChanged: LocalizedError {
+        let path: String
+        var errorDescription: String? { "\(path) changed while Cra read it. Try again." }
+    }
+
     /// Settings shows why this Mac stopped syncing: an easel it could not save. The next look tries again; a bundle
     /// Use That Sidebar couldn't apply is not asked about again.
     private func easelsNotSaved(_ manifest: SyncManifest, _ reason: String) {
@@ -1213,9 +1236,7 @@ final class SettingsSyncService {
         var bytes: [UUID: Data] = [:]
         for (path, hash) in paths {
             guard let (id, picture) = SettingsSync.easelPath(path), picture == nil, touched.contains(id) else { continue }
-            guard let data = Self.coordinatedRead(path, in: from), Self.hash(data) == hash else {
-                throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: path])
-            }
+            guard let data = Self.coordinatedRead(path, in: from), Self.hash(data) == hash else { throw BundleChanged(path: path) }
             bytes[id] = data
         }
         let local = localEasels().easels
@@ -1466,6 +1487,8 @@ final class SettingsSyncService {
         watcherDebounce = nil
         writeSoon?.cancel()
         writeSoon = nil
+        useRemoteSoon?.cancel()
+        useRemoteSoon = nil
         watcher?.cancel()
         watcher = nil
         easelWatcher?.cancel()
