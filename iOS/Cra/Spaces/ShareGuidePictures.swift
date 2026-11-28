@@ -1,3 +1,4 @@
+import CraCore
 import SwiftUI
 
 /// The how-to sheet's pictures. Arc Search shows shrunken screenshots of iOS 17's share sheet; Cra
@@ -272,8 +273,8 @@ struct AppsListPicture: View {
                 .overlay(VStack(spacing: 4) { ForEach([Color.blue, .red, .orange], id: \.self) { Circle().fill($0).frame(width: 4, height: 4) } }.offset(x: -6))
                 .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color(white: 0.9))).frame(width: 30, height: 30)
         default:
-            Image("LaunchMark").resizable().scaledToFit().padding(4)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.white))
+            MobileAppIcon(alternateName: UIApplication.shared.alternateIconName).previewImage.resizable()
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color(white: 0.9))).frame(width: 30, height: 30)
         }
     }

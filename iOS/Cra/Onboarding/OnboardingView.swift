@@ -200,7 +200,7 @@ struct OnboardingView: View {
         case .defaultBrowser:
             VStack(spacing: 18) {
                 Spacer().frame(height: 110)
-                Image(model.icon.previewName)
+                model.icon.previewImage
                     .resizable()
                     .frame(width: 128, height: 128)
                     .clipShape(RoundedRectangle(cornerRadius: 29, style: .continuous))
@@ -342,14 +342,14 @@ private struct HowToSheet: View {
             Image(systemName: "gearshape.fill").font(.system(size: 16)).foregroundStyle(.white)
                 .frame(width: 28, height: 28).background(Color(white: 0.55), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         case 2:
-            Image(icon.previewName).resizable().clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            icon.previewImage.resizable().clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         default:
             Color.clear
         }
     }
 }
 
-/// The app's icons in a grid with a radio mark under each: onboarding's step (Cra's own four) and Settings'
+/// The app's icons in a grid with a radio mark under each: onboarding's step (four choices) and Settings'
 /// picker (every icon, scrolling).
 struct AppIconGrid: View {
     var icons = MobileAppIcon.allCases
@@ -380,7 +380,7 @@ struct AppIconGrid: View {
             ForEach(icons) { icon in
                 Button { pick(icon) } label: {
                     VStack(spacing: 10) {
-                        Image(icon.previewName)
+                        icon.previewImage
                             .resizable()
                             .aspectRatio(1, contentMode: .fit)
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))

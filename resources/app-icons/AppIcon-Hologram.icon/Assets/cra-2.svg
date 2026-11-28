@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 64 64" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:affinity="https://www.affinity.studio/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <g transform="matrix(1,0,0,1,3.46183,-0.000794)">
+        <clipPath id="_clip1">
+            <path d="M23.014,9.746C26.084,8.507 29.584,9.993 30.824,13.064C32.063,16.134 30.577,19.634 27.506,20.874C22.838,22.758 19.83,27.389 20.006,32.42C20.122,35.73 17.529,38.511 14.22,38.626C10.91,38.742 8.129,36.149 8.014,32.84C7.662,22.777 13.678,13.516 23.014,9.746Z"/>
+        </clipPath>
+        <g clip-path="url(#_clip1)">
+            <g transform="matrix(1,-0,-0,1,-3.46183,0.000794)">
+                <use xlink:href="#_Image2" x="11.461" y="9.308" width="24px" height="30px"/>
+            </g>
+        </g>
+    </g>
+    <defs>
+        <image id="_Image2" width="24px" height="30px" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAeCAYAAAA2Lt7lAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAALUlEQVRIiWP8EO7/ioGGgImWho9aMGrBqAWjFoxaMGrBqAWjFoxaMGrBYLIAAMbiArzmmeHhAAAAAElFTkSuQmCC"/>
+    </defs>
+</svg>

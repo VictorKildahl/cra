@@ -7,7 +7,13 @@ ribbons that multiply where they overlap, wrapped in a white sticker edge.
 |---|---|
 | `cra-segments.svg` | **Primary mark.** A C cut into four coloured segments. Transparent background: nav, documents, hero. |
 | `cra-segments-mono.svg` | Single colour, inherits `currentColor`: footer, sidebar, favicons on busy backgrounds. |
-| `cra-segments-icon.svg` | App icon: the mark on the sand tile with a soft shadow. Source for `website/src/app/icon.svg` and the macOS `.icns`. |
+| `cra-segments-icon.svg` | The Segments mark on a sand tile with a soft shadow. |
+
+## App icons
+
+Gilad S. designed Cra’s app icons. The [Segments](icons/segments/) and [Original](icons/original/) folders each
+contain two 1024 × 1024 renders. `light.png` shows the Default appearance and `dark.png` shows the Dark appearance.
+The apps use the shared [Segments document](../resources/AppIcon.icon/) and [alternate icon documents](../resources/app-icons/).
 
 ## Colours
 

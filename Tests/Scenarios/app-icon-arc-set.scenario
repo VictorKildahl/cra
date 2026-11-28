@@ -1,6 +1,6 @@
-# Arc's icon set, redrawn around Cra's C by Provok (mat-up/cra-icons): each of the nine is in the Icon tab's
-# list and its picture ships in the app, so the Dock is given it ("given=<id>" needs the bundled PNG; an id the
-# list doesn't know is ignored). The pick never goes on Cra.app itself (#724). appIcon= picks without remembering,
+# The Icon tab offers Gilad S.'s native alternates.
+# For each preset, "given=<id>" confirms Cra loaded the artwork for the Dock.
+# The pick never goes on Cra.app itself (#724). appIcon= picks without remembering,
 # so the run never writes the defaults the installed Cra reads.
 home
 seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true}

@@ -2,6 +2,14 @@ import CraCore
 import Testing
 
 struct AppIconBundleTests {
+    @Test func retiredIconIDsResolveToTheirReplacements() {
+        #expect(AppIconBundle.currentID(for: "midnight") == "segments")
+        #expect(AppIconBundle.currentID(for: "violet") == "colorful")
+        for id in ["segments", "colorful", "mono", "custom", "unknown"] {
+            #expect(AppIconBundle.currentID(for: id) == id)
+        }
+    }
+
     /// GitHub #724: a picked icon on Cra.app (Finder's `Icon\r` file and its com.apple.FinderInfo flag) breaks the
     /// app's signature: `codesign --strict` refuses the attribute, and lsd kept registering the app launch-disabled
     /// with trustd busy. The app never puts an icon on itself, whatever is picked; the Dock tile (applicationIconImage
@@ -47,14 +55,12 @@ struct AppIconBundleTests {
         #expect(AppIconBundle.dockImage(picked: "custom", defaultID: "segments", bundleIconStale: false) == "custom")
     }
 
-    /// GitHub #884: the icon switches with macOS's light and dark (Icon & widget style Auto, or Dark) only when it is
-    /// the bundle's own, Segments, which macOS draws from its Icon Composer icon with a light and a dark look
-    /// (AppIconCatalogTests). The other picks, Original among them, are pictures the Dock draws as given, as Arc's
-    /// are: Arc 1.174.3's AppIcon has no dark appearance in its Assets.car.
-    @Test(.bug("https://github.com/VictorKildahl/cra/issues/884")) func onlyTheBundlesOwnIconSwitchesWithLightAndDark() {
-        for picked in ["segments", "original", "midnight", "custom"] {
-            let switches = AppIconBundle.dockImage(picked: picked, defaultID: "segments", bundleIconStale: false) == nil
-            #expect(switches == (picked == "segments"), "\(picked)")
+    /// macOS draws the primary icon itself. For a native alternate Cra refreshes the image it gives the Dock
+    /// when the system appearance changes (AppIconResourcesTests).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/884")) func onlyThePrimaryIconIsDrawnByTheDockItself() {
+        for picked in ["segments", "canary", "early-birds", "custom"] {
+            let drawnByDock = AppIconBundle.dockImage(picked: picked, defaultID: "segments", bundleIconStale: false) == nil
+            #expect(drawnByDock == (picked == "segments"), "\(picked)")
         }
     }
 

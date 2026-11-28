@@ -17,7 +17,7 @@ Notes for working on the code. How to send a change is in
 `just build debug` runs `scripts/build.sh debug`. CI calls the scripts directly, and so can
 you.
 
-Requirements: macOS 14+ on Apple silicon, Xcode 16+, about 1 GB of disk for the engine and the
+Requirements: macOS 14+ on Apple silicon, Xcode 27+, about 1 GB of disk for the engine and the
 build products. `CRA_ARCH=x86_64 scripts/build.sh` cross-compiles the
 Intel app into `build/x86_64/Cra.app` (another ~1 GB); every release ships both.
 
@@ -151,6 +151,9 @@ time, on one core.
   few production files with `swiftc` against fakes (`Tests/BrowserManagerSupport` stands in
   for CraCEF and the rest of the app). When the manager calls something new from the app, add
   a stub to `AppServices.swift`.
+- `scripts/test-app-icons.sh` requires Xcode 27 or later. It builds a temporary Mac app, verifies
+  the alternate icon helpers’ signatures and architecture, and loads each icon. On macOS 26 or
+  later it also checks appearance refreshes and the Dock’s Clear and Tinted rendering.
 - `scripts/test-site-icons.sh`: `SiteIconLoader` and `FaviconCache` against an HTTP server on
   127.0.0.1: a site that never answers, a dropped connection, redirects, the candidate limit, an
   icon that claims 20000 px, and a PDF served as an icon.
@@ -434,9 +437,11 @@ raw `NSVisualEffectView.Material` value, `alpha` scales the gradient opacity.
 ## Brand assets
 
 Logo sources are in `brand/` (see `brand/README.md`). `resources/brand/*.png` are WebKit
-renders of them (so the multiply blends survive) used by `BrandMark`, and
-`resources/AppIcon.icns` is built from `brand/cra-segments-icon.svg` (render at 1024 px,
-`iconutil`). The marketing site lives in a separate private repository.
+renders of them (so the multiply blends survive) used by `BrandMark`.
+Mac and iOS share the Segments Icon Composer document in `resources/AppIcon.icon` and
+the native alternates in `resources/app-icons/AppIcon-*.icon`. Xcode 27 builds their native catalogs, the iOS picker
+previews and the legacy Mac renditions directly from these documents.
+The marketing site lives in a separate private repository.
 
 ## Releasing
 

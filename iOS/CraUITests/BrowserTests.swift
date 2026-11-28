@@ -2086,7 +2086,7 @@ final class OnboardingTests: BrowserTestCase {
         page.pinch(withScale: 0.5, velocity: -1)
         XCTAssertTrue(check.waitForExistence(timeout: 5), "pinch-done: check appears")
         next.tap()
-        XCTAssertTrue(app.buttons["icon-violet"].waitForExistence(timeout: 3), "icon: grid appears")
+        XCTAssertTrue(app.buttons["icon-colorful"].waitForExistence(timeout: 3), "icon: grid appears")
         next.tap()
         XCTAssertTrue(app.switches["onboarding-blocking"].waitForExistence(timeout: 3), "blocking: switch appears")
         matches("blocking")
@@ -2130,8 +2130,8 @@ final class OnboardingTests: BrowserTestCase {
         func step(_ name: String, showsNext: Bool = true) {
             sleep(1)
             var frames = "\(name): window \(app.windows.firstMatch.frame)\n"
-            let identifiers = ["onboarding-title", "onboarding-check", "onboarding-next", "icon-segments", "icon-midnight",
-                               "icon-mono", "icon-violet", "onboarding-try", "onboarding-blocking", "onboarding-pinch-page",
+            let identifiers = ["onboarding-title", "onboarding-check", "onboarding-next", "icon-segments", "icon-original",
+                               "icon-mono", "icon-colorful", "onboarding-try", "onboarding-blocking", "onboarding-pinch-page",
                                "onboarding-step-skip", "onboarding-skip", "onboarding-howto"]
             for identifier in identifiers {
                 let element = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
@@ -2166,9 +2166,9 @@ final class OnboardingTests: BrowserTestCase {
         XCTAssertTrue(check.waitForExistence(timeout: 5), "pinch-done: check appears")
         step("pinch-done")
         next.tap()
-        XCTAssertTrue(app.buttons["icon-violet"].waitForExistence(timeout: 3), "icon: grid appears")
+        XCTAssertTrue(app.buttons["icon-colorful"].waitForExistence(timeout: 3), "icon: grid appears")
         step("icon")
-        for icon in ["segments", "midnight", "mono", "violet"] {
+        for icon in ["segments", "original", "mono", "colorful"] {
             let button = app.buttons["icon-\(icon)"]
             fits(button, step: "icon")
             XCTAssertLessThanOrEqual(button.frame.maxY, next.frame.minY + 0.5, "icon: \(icon) ends above Next")
@@ -2226,7 +2226,7 @@ final class OnboardingTests: BrowserTestCase {
         keep("onboarding-pinch-done")
         next.tap()
         XCTAssertTrue(app.staticTexts["Pick an icon for your home screen"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["icon-violet"].exists)
+        XCTAssertTrue(app.buttons["icon-colorful"].exists)
         sleep(1)
         keep("onboarding-icon")
         next.tap()
@@ -2750,7 +2750,7 @@ final class AppIconDockTests: BrowserTestCase {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
         let navigationBar = app.navigationBars["App Icon"]
         XCTAssertTrue(navigationBar.waitForExistence(timeout: 5))
-        for icon in ["segments", "midnight", "mono", "violet"] {
+        for icon in ["segments", "original", "mono", "colorful"] {
             XCTAssertTrue(app.buttons["icon-\(icon)"].exists, icon)
         }
         sleep(1)
@@ -2773,7 +2773,7 @@ final class AppIconDockTests: BrowserTestCase {
         XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
         sleep(1)
         let sheet = app.scrollViews.firstMatch.frame
-        for icon in ["segments", "midnight", "mono", "violet"] {
+        for icon in ["segments", "original", "mono", "colorful"] {
             let frame = app.buttons["icon-\(icon)"].frame
             XCTAssertTrue(sheet.contains(frame), "\(icon) at \(frame) is cut off by the picker \(sheet)")
             XCTAssertLessThanOrEqual(frame.width, 200, "\(icon) grew to the iPad sheet's width")
@@ -2784,31 +2784,30 @@ final class AppIconDockTests: BrowserTestCase {
         XCTAssertTrue(last.exists && sheet.contains(last.frame), "the last icon never scrolled into the picker \(sheet)")
     }
 
-    /// Arc's icon set with Cra's C (Provok's, in the Mac's Settings ▸ Icon since 23 Nov 2026) is on the iPhone too,
-    /// asked for on X by Chanan Krivisky: the App Icon picker shows all of it after Cra's own four, and picking one
-    /// changes the app's icon. The picker marks what iOS reports, so after a relaunch Candy is still the one marked.
-    /// The grid is lazy, so it scrolls to an icon before looking for it.
+    /// Reopening the picker reads the active alternate from iOS.
     func testArcIconSetChangesTheAppIcon() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
         XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
         sleep(1)
         keep("app-icon-picker-arc-set")
-        for icon in ["original", "candy", "hologram", "neon", "fluted-glass", "schoolbook", "colorful", "canary", "early-birds"] {
+        let alternates = MobileAppIcon.allCases.filter { $0 != .segments }.map(\.id)
+        for icon in alternates {
             XCTAssertTrue(reveal(icon, down: true), "\(icon) is in the picker")
         }
         keep("app-icon-picker-arc-set-end")
-        XCTAssertTrue(reveal("candy", down: false))
-        app.buttons["icon-candy"].tap()
-        acknowledgeIconChange()
-        XCTAssertTrue(app.buttons["icon-candy"].isSelected, "Candy is marked once picked")
-
-        app.terminate()
-        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
-        XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["icon-segments"].isSelected)
-        XCTAssertTrue(reveal("candy", down: true))
-        XCTAssertTrue(app.buttons["icon-candy"].isSelected, "iOS kept Candy as the app's icon")
-        keep("app-icon-picker-candy")
+        for icon in alternates {
+            XCTAssertTrue(reveal(icon, down: icon != "original"))
+            let button = app.buttons["icon-\(icon)"]
+            button.tap()
+            acknowledgeIconChange()
+            XCTAssertTrue(button.isSelected)
+            app.terminate()
+            launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
+            XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
+            XCTAssertTrue(reveal(icon, down: true))
+            XCTAssertTrue(app.buttons["icon-\(icon)"].isSelected, "iOS kept \(icon) as the app's icon")
+            if icon == "candy" { keep("app-icon-picker-candy") }
+        }
 
         // Back to the app's own icon, so other tests start from it.
         XCTAssertTrue(reveal("segments", down: false))
@@ -2852,7 +2851,7 @@ final class AppIconDockTests: BrowserTestCase {
         scrollUntilHittable(row)
         row.tap()
         XCTAssertTrue(app.staticTexts["App Icon"].waitForExistence(timeout: 5))
-        for icon in ["segments", "midnight", "mono", "violet"] {
+        for icon in ["segments", "original", "mono", "colorful"] {
             XCTAssertTrue(app.buttons["icon-\(icon)"].exists, icon)
         }
         XCTAssertTrue(app.buttons["icon-segments"].isSelected, "the current icon is marked")

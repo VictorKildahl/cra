@@ -99,24 +99,15 @@ if [ "$EXE" = CraEngine ]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier dk.kildahl.cra.engine" -c "Set :CFBundleExecutable $EXE" "$APP/Contents/Info.plist"
 fi
 echo -n "APPL????" > "$APP/Contents/PkgInfo"
-# Cra's icon is Gilad's Icon Composer icon (resources/AppIcon.icon, PR #690). macOS 26 and later draw it in the Dark,
-# Clear and Tinted icon styles only from the bundle's catalog (Assets.car, named by CFBundleIconName, GitHub #739); the
-# .icns actool renders from it is the icon on macOS 14 and 15, the Alerts helper's and the DMG's.
-ICON_OUT="build/app-icon"
-rm -rf "$ICON_OUT"
-scripts/compile-app-icon.sh "$ICON_OUT" > /dev/null
-cp "$ICON_OUT/Assets.car" "$ICON_OUT/AppIcon.icns" "$APP/Contents/Resources/"
-/usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$APP/Contents/Info.plist" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP/Contents/Info.plist"
 # The AppleScript dictionary (Arc's, same terms and codes: Info.plist OSAScriptingDefinition).
 cp resources/Cra.sdef "$APP/Contents/Resources/Cra.sdef"
 [ -d resources/web ] && cp -R resources/web "$APP/Contents/Resources/web"
 [ -d resources/brand ] && cp -R resources/brand "$APP/Contents/Resources/brand"
 [ -d resources/blocklist ] && cp -R resources/blocklist "$APP/Contents/Resources/blocklist"
 [ -d resources/browsers ] && cp -R resources/browsers "$APP/Contents/Resources/browsers"
-[ -d resources/app-icons ] && cp -R resources/app-icons "$APP/Contents/Resources/app-icons"
-# Settings ▸ Icon's Segments tile on macOS 26 is the icon this build carries (#865), rendered with it above.
-cp "$ICON_OUT/segments-glass.png" "$APP/Contents/Resources/app-icons/segments-glass.png"
+mkdir -p "$APP/Contents/Resources/app-icons"
+cp resources/app-icons/*.png "$APP/Contents/Resources/app-icons/"
+scripts/build-app-icons.sh "$APP" "$ARCH" "${CRA_SIGN_IDENTITY:--}" build/app-icon
 [ -d resources/licenses ] && cp -R resources/licenses "$APP/Contents/Resources/licenses"
 [ -d resources/fonts ] && cp -R resources/fonts "$APP/Contents/Resources/fonts"
 cp -R resources/live-folder-plugins "$APP/Contents/Resources/live-folder-plugins"
@@ -124,9 +115,11 @@ cp -R resources/live-folder-plugins "$APP/Contents/Resources/live-folder-plugins
 if [ "$ENGINE" = chromium ]; then
   FW_NAME="Cra Framework"
   ditto "$CRA_ENGINE_FRAMEWORKS/$FW_NAME.framework" "$APP/Contents/Frameworks/$FW_NAME.framework"
-  # Chrome's helpers name Chromium's icon in an asset catalog, which macOS prefers to their app.icns (Cra's, from
-  # engine/chromium/apply.sh): without the catalog they show Cra's icon in notifications and their prompt.
+  # Remove Chromium's icon catalog before installing Cra's icon on the notification helpers.
   for helper in "$APP/Contents/Frameworks/$FW_NAME.framework/Versions/"*/Helpers/*.app; do
+    if [ -f "$helper/Contents/Resources/app.icns" ]; then
+      cp "$APP/Contents/Resources/AppIcon.icns" "$helper/Contents/Resources/app.icns"
+    fi
     rm -f "$helper/Contents/Resources/Assets.car"
     /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$helper/Contents/Info.plist" 2>/dev/null || true
   done
@@ -155,10 +148,17 @@ rm -rf "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" "$APP
   # it under System Settings ▸ Notifications: Cra's name and icon there, like Arc's helper.
   if [ "$NAME_SUFFIX" = " (Alerts)" ]; then
     mkdir -p "$HELPER/Contents/Resources"
-    cp "$ICON_OUT/AppIcon.icns" "$HELPER/Contents/Resources/AppIcon.icns"
+    cp "$APP/Contents/Resources/AppIcon.icns" "$HELPER/Contents/Resources/AppIcon.icns"
     /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Cra" -c "Add :CFBundleIconFile string AppIcon" \
       -c "Add :NSUserNotificationAlertStyle string alert" "$HELPER/Contents/Info.plist"
   fi
+done
+
+# macOS can show an Alerts helper's icon in the notification prompt and on page notifications.
+for helper in "$APP/Contents/Frameworks/Cra Helper (Alerts).app" "$APP/Contents/Frameworks/$FW_NAME.framework/Versions/"*/Helpers/*"Alerts).app"; do
+  [ -d "$helper" ] || continue
+  cp "$APP/Contents/Resources/Assets.car" "$helper/Contents/Resources/Assets.car"
+  plutil -replace CFBundleIconName -string AppIcon "$helper/Contents/Info.plist"
 done
 
 # The Dock tile plug-in (Info.plist NSDockTilePlugIn), a SwiftPM dynamic library in a bundle.
@@ -194,17 +194,18 @@ FW_LINK="$(otool -L "$HELPER_EXE" | grep -o '@executable_path/.*Chromium Embedde
   { echo "Cra Helper doesn't link the framework at launch (${FW_LINK:-no load command})" >&2; exit 1; }
 fi
 
-# Every app in the bundle shows Cra's icon. macOS takes a bundle's icon from its asset catalog (CFBundleIconName)
-# before its .icns, and Chrome's alerts helpers carry Chromium's: the "Cra" notification prompt and every page's
-# notification showed Chromium's icon (0.1.44, a user's screenshot). Cra.app's own catalog is Cra's icon (#739).
+# Notification helpers must identify Cra's primary catalog, never a leftover Chromium icon.
 [ "$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP/Contents/Info.plist" 2>/dev/null)" = AppIcon ] &&
   [ -s "$APP/Contents/Resources/Assets.car" ] || { echo "Cra.app lacks its AppIcon catalog (scripts/compile-app-icon.sh)" >&2; exit 1; }
 for plist in $(find "$APP" -path '*.app/Contents/Info.plist' | tr ' ' '\001'); do
   plist="$(tr '\001' ' ' <<<"$plist")"
   [ "$plist" = "$APP/Contents/Info.plist" ] && continue
+  [[ "$plist" == "$APP/Contents/Helpers/CraIcon-"*.app/Contents/Info.plist ]] && continue
+  if [ "$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$plist" 2>/dev/null)" = AppIcon ] &&
+     cmp -s "$(dirname "$plist")/Resources/Assets.car" "$APP/Contents/Resources/Assets.car"; then continue; fi
   if /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$plist" >/dev/null 2>&1 ||
      [ -e "$(dirname "$plist")/Resources/Assets.car" ]; then
-    echo "An app in the bundle takes its icon from an asset catalog, not Cra's .icns: ${plist#"$APP"/}" >&2
+    echo "An app in the bundle has an unexpected icon catalog: ${plist#"$APP"/}" >&2
     exit 1
   fi
 done

@@ -51,6 +51,13 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         browser?.open(url.absoluteString)
     }
 
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        // UIKit may still report an icon name from an older build.
+        if let icon = MobileAppIcon.replacement(forRetiredAlternateName: UIApplication.shared.alternateIconName) {
+            AppIconPicker.apply(icon)
+        }
+    }
+
     func sceneDidEnterBackground(_ scene: UIScene) {
         browser?.store.saveHistories()
         browser?.store.saveNow()

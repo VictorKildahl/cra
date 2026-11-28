@@ -9,3 +9,5 @@ xcuserdata/
 .DS_Store
 .swiftpm/
 __pycache__/
+/.vscode
+/temp
