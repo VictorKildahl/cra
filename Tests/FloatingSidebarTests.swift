@@ -271,6 +271,7 @@ enum FloatingSidebarTests {
         front.close()
     }
 
+    // promise: #82
     @MainActor
     private static func anExposedEdgeRevealsWithoutFocus(sidebar: FloatingSidebarController) {
         let bounds = sidebar.shell.bounds
