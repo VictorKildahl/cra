@@ -232,6 +232,10 @@ final class KeyBindingRegistry {
             // past the cache. After Arc's two, so "clear" still lists Clear Cache first.
             KeyAction(id: "clearSiteData", name: "Clear Site Data and Refresh", section: .view, shortcuts: [],
                       triggers: ["clear storage", "clear local storage", "reset site", "site data"], symbol: "trash"),
+            // The profile's saved passwords, on the site the window shows (#905): ⌥⌘P, P for Passwords (free in Cra and
+            // in Chrome; Victor chose a key of its own, 28 Nov).
+            KeyAction(id: "openPasswords", name: "Open Passwords", section: .none, shortcuts: [Shortcut("p", cmdOpt)],
+                      triggers: ["passwords", "password manager", "saved passwords", "logins", "keychain"], symbol: "key.fill"),
             // Arc: View ▸ Developer ▸ "Turn on/off Developer Mode for this site" (⌃D).
             KeyAction(id: "toggleDeveloperMode", name: "Toggle Developer Mode for this Site", section: .view, shortcuts: [Shortcut("d", .control)], triggers: ["developer mode", "dev mode"]),
             KeyAction(id: "resetZoom", name: "Zoom to Actual Size", section: .view, shortcuts: [Shortcut("0", cmd)], triggers: ["reset zoom"]),

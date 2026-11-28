@@ -320,6 +320,7 @@ enum ShortcutDescriptions {
         "hardReload": "Reload the page, ignoring cached content.",
         "clearCache": "Clear the browser cache and reload the page.",
         "clearCookies": "Clear this site’s cookies and reload the page.",
+        "openPasswords": "Open this space’s saved passwords, searched for the site you’re on.",
         "toggleDeveloperMode": "Show the full URL and developer tools for this site.",
         "resetZoom": "Return the page to its actual size.",
         "zoomIn": "Make the page larger.",

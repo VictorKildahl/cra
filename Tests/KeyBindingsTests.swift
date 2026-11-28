@@ -47,9 +47,20 @@ enum KeyBindingsTests {
         expect(registry.actions.count == builtIn && registry.action(github.id) == nil, "a disabled plugin's command goes")
 
         priorities(registry, file: file)
+        openPasswordsKey(registry)
 
         print("Key bindings: \(checks) checks, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    // promise: #905
+    /// Open Passwords has ⌥⌘P of its own (#905), and no other built-in command takes that chord.
+    @MainActor
+    static func openPasswordsKey(_ registry: KeyBindingRegistry) {
+        let chord = Shortcut("p", [.command, .option])
+        expect(registry.action("openPasswords")?.shortcuts == [chord], "Open Passwords is ⌥⌘P")
+        let others = registry.actions.filter { $0.id != "openPasswords" && $0.shortcuts.contains(chord) }.map(\.id)
+        expect(others.isEmpty, "no other command is ⌥⌘P: \(others)")
     }
 
     /// Who gets a shortcut's keys, Cra or the page (#374): today's split until the user picks, a pick
