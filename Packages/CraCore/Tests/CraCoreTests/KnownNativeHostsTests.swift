@@ -27,7 +27,38 @@ struct KnownNativeHostsTests {
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/847"))
     func onlyWhenInstalledAndNotAlreadyThere() {
         #expect(KnownNativeHosts.manifests(linked: [], exists: { _ in false }).isEmpty)
-        #expect(KnownNativeHosts.manifests(linked: ["com.1password.1password.json"], exists: { _ in true }).isEmpty)
+        #expect(KnownNativeHosts.manifests(linked: ["com.1password.1password.json"], exists: { $0 == Self.helper }).isEmpty)
         #expect(KnownNativeHosts.manifests(linked: ["com.other.json"], exists: { $0 == Self.helper }).count == 1)
+    }
+
+    static let bitwardenProxy = "/Applications/Bitwarden.app/Contents/MacOS/desktop_proxy"
+
+    /// Bitwarden also writes its manifest only into the browsers it knows, so with nothing imported from Chrome (or
+    /// an import from Zen or Firefox) the extension found no desktop app and "Unlock with biometrics" stayed off.
+    /// With Bitwarden installed Cra writes the manifest Bitwarden writes for Chrome: its `desktop_proxy` and the
+    /// Chrome Web Store, Chrome beta, Edge and Opera extensions (Bitwarden's native-messaging.main.ts, 28 Nov 2026).
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/920"), .bug("https://github.com/VictorKildahl/cra/issues/918"))
+    func bitwardenInstalledGetsItsManifestWithoutAnImport() throws {
+        let written = KnownNativeHosts.manifests(linked: [], exists: { $0 == Self.bitwardenProxy })
+        #expect(written.map(\.file) == ["com.8bit.bitwarden.json"])
+        let data = try #require(written.first?.data)
+        let manifest = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(manifest["name"] as? String == "com.8bit.bitwarden")
+        #expect(manifest["description"] as? String == "Bitwarden desktop <-> browser bridge")
+        #expect(manifest["path"] as? String == Self.bitwardenProxy)
+        #expect(manifest["type"] as? String == "stdio")
+        #expect(manifest["allowed_origins"] as? [String] == [
+            "chrome-extension://nngceckbapebfimnlniiiahkandclblb/", "chrome-extension://hccnnhgbibccigepcmlgppchkpfdophk/",
+            "chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh/", "chrome-extension://ccnckbpmaceehanjmeomladnmlffdjgn/",
+        ])
+    }
+
+    /// A Bitwarden manifest already linked (from an imported Chrome, or the person's own copy) stays; with both apps
+    /// installed and neither linked, both are written.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/920"))
+    func bitwardenLinkedStaysAndBothAppsGetTheirs() {
+        let both: (String) -> Bool = { $0 == Self.helper || $0 == Self.bitwardenProxy }
+        #expect(KnownNativeHosts.manifests(linked: ["com.8bit.bitwarden.json"], exists: both).map(\.file) == ["com.1password.1password.json"])
+        #expect(Set(KnownNativeHosts.manifests(linked: [], exists: both).map(\.file)) == ["com.1password.1password.json", "com.8bit.bitwarden.json"])
     }
 }

@@ -1902,7 +1902,7 @@
 #845   Packages/CraCore/Tests/CraCoreTests/ScriptletsTests.swift::youTubeRulesParseIntoTheCallsScriptletsJSRuns  58678ec5c747
 #845   Tests/Scenarios/filter-page-scripts.scenario  f05e33d47933
 #847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onePasswordInstalledGetsItsManifestWithoutAnImport  6cd3a3b215da
-#847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onlyWhenInstalledAndNotAlreadyThere  1698d6458511
+#847   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::onlyWhenInstalledAndNotAlreadyThere  3c53bd76effa
 #848   Packages/CraCore/Tests/CraCoreTests/ChromiumStartFeaturesTests.swift::macOS27TurnsChromesOcclusionCheckerOff  0b3e301e3c0e
 #848   Packages/CraCore/Tests/CraCoreTests/LittlePageHealthTests.swift::aPageInSightThatDoesntDrawIsStuck  2ca42b58241f
 #848   Tests/Scenarios/little-window-page-shows.scenario  57ca74a564c1
@@ -1978,8 +1978,18 @@
 #896   Tests/Scenarios/downloads-tray-row-hover.scenario  489860ec98f8
 #897   Packages/CraCore/Tests/CraCoreTests/MobileTests.swift::theWayToSyncNamesTheMacsSwitchWhereItIs  1daa34af0a9c
 #897   iOS/CraUITests/BrowserTests.swift::testWithoutSyncTheSpacesViewExplains  bec958d5e3ae
+#905   Packages/CraCore/Tests/CraCoreTests/PasswordManagerPageTests.swift::opensOnTheSitesLogins  f9184a8bd615
+#905   Packages/CraCore/Tests/CraCoreTests/PasswordManagerPageTests.swift::otherwiseTheWholeList  46c09f5d8a0a
+#905   Tests/KeyBindingsTests.swift::openPasswordsKey  91ee4607ffe9
+#905   Tests/Scenarios/open-passwords.scenario  d1d0ce2cf957
+#906   Packages/CraCore/Tests/CraCoreTests/DataFolderPathTests.swift::aLinkedDataFolderIsNamedByWhereItIs  a943cf6cb202
+#906   Packages/CraCore/Tests/CraCoreTests/DataFolderPathTests.swift::resolvedAsChromiumResolvesIt  736cc145cd2c
+#906   Tests/Scenarios/profile-data-folder-symlinked.scenario  a9c48e59fabd
 #909   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::aPinnedSheetsTabDoesNotTakeTheIconOfDocsOpenedLater  babf1d8e86db
 #909   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::appsOnOneAddressKeepTheirOwnIcons  7a3b4a0c90ba
+#918   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::bitwardenInstalledGetsItsManifestWithoutAnImport  cbe1dd4ce306
+#920   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::bitwardenInstalledGetsItsManifestWithoutAnImport  cbe1dd4ce306
+#920   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::bitwardenLinkedStaysAndBothAppsGetTheirs  7ec816df90a9
 #921   Packages/CraCore/Tests/CraCoreTests/SidebarMergeTests.swift::aPageOpenedHereIsKeptWhenTheOtherMacOnlyLookedAtTheTab  79f7bc51ef84
 #921   Packages/CraCore/Tests/CraCoreTests/SidebarMergeTests.swift::aSplitBothMacsLeftOnePaneGivesItsTabBack  1daf3cd95a71
 #921   Packages/CraCore/Tests/CraCoreTests/SidebarMergeTests.swift::aSplitMadeHereKeepsItsPanesWhenTheOtherMacLookedAtThem  f953f4d12842

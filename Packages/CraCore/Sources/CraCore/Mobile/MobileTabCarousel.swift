@@ -38,6 +38,75 @@ public enum MobileTabCarousel {
         return CGRect(origin: area.origin, size: CGSize(width: image.width * scale, height: image.height * scale))
     }
 
+    /// `rect` on screen, in the coordinates of the container placed by `livePage`: where its mask
+    /// goes for the container to show only the card.
+    public static func containerRect(_ rect: CGRect, placed: (center: CGPoint, scale: CGFloat), screen: CGSize) -> CGRect {
+        let scale = max(placed.scale, 0.001)
+        return CGRect(x: screen.width / 2 + (rect.minX - placed.center.x) / scale,
+                      y: screen.height / 2 + (rect.minY - placed.center.y) / scale,
+                      width: rect.width / scale, height: rect.height / scale)
+    }
+
+    /// What a card picked from the row grows into the screen with.
+    public enum Growth: Equatable, Sendable {
+        /// Its picture alone: Browse for Me's loading covers the page, or would once it starts,
+        /// and it is not in the card.
+        case picture
+        /// The live page, under its picture only for WebKit's first frames back in the window
+        /// (`pictureFade`): a page in memory, already showing.
+        case live
+        /// The live page under its picture, which fades out as the card grows: a page made only
+        /// now, or with nothing loaded yet, may be blank for a moment under it.
+        case liveUnderPicture
+    }
+
+    public static func growth(pageInMemory: Bool, hasAddress: Bool, covered: Bool) -> Growth {
+        if covered { return .picture }
+        return pageInMemory && hasAddress ? .live : .liveUnderPicture
+    }
+
+    /// How long the card's picture takes to fade off the live page growing under it, on its own
+    /// clock and eased in, not with the card's spring, which covers a third of its way in the
+    /// first 50 ms and would show the page bare at once. A page already showing only needs
+    /// WebKit's first frames back in the window covered: it is the same picture. A page that may
+    /// still be blank keeps it for `loadingFade`, slowly enough that the page loading under it
+    /// doesn't flicker through, but quickly: it may be gone before the card lands.
+    public static func pictureFade(_ growth: Growth, handOver: TimeInterval) -> TimeInterval {
+        switch growth {
+        case .picture: 0
+        case .live: min(liveCover, handOver)
+        case .liveUnderPicture: loadingFade
+        }
+    }
+
+    /// How long the bar's slab takes to come in as a picked card grows: 0.1 s, so the bar is
+    /// there almost at once, well before the card lands, and never after it (`handOver`).
+    public static func slabFade(handOver: TimeInterval) -> TimeInterval { min(0.1, handOver) }
+
+    /// The picture over a page loading under it leaves over this long.
+    public static let loadingFade: TimeInterval = 0.3
+
+    /// WebKit draws a page put back in the window a frame or two later; the picture covers that.
+    public static let liveCover: TimeInterval = 0.12
+
+    /// When a picked card is on its page to under half a point, so the page is handed back and
+    /// takes touches then, not once UIKit's spring has settled to its own far finer tolerance.
+    /// `travel` is the most any edge of the card moves, in points.
+    public static func handOverTime(spring: MobileMotion.Spring, travel: CGFloat) -> TimeInterval {
+        spring.time(toWithin: 0.5 / Double(max(travel, 0.5)))
+    }
+
+    /// Where the live page's container goes in a card so its page view sits exactly where the
+    /// page's picture would (`pictureFrame`): the container, `screen`-sized, scaled by `scale`
+    /// about its centre, which goes to `center`. `page` is the page view's frame in the container,
+    /// the shape the picture is taken in.
+    public static func livePage(page: CGRect, screen: CGSize, area: CGRect) -> (center: CGPoint, scale: CGFloat) {
+        let shown = pictureFrame(image: page.size, in: area)
+        let scale = shown.width / max(1, page.width)
+        return (CGPoint(x: shown.minX + (screen.width / 2 - page.minX) * scale,
+                        y: shown.minY + (screen.height / 2 - page.minY) * scale), scale)
+    }
+
     /// Where a card sits when it is `relative` cards right of the one in focus (negative: left of
     /// it; fractions while the row is being dragged). `alone`: the only tab, which Arc Search puts in the
     /// middle of the screen (#816); a card with neighbours sits left of centre. `centring` is the
