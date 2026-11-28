@@ -10,9 +10,11 @@ seed settings.json {"hasSeenImportPrompt": true, "toolbarDefaultMigrated": true,
 cra://open?url=${PAGE}?n=shown
 expect-log loaded 127\.0\.0\.1 \(HTTP 200\)
 wait 1
-# Real files: the PDF's tab is seen loading (nothing else here loads a file), not only the drop.
+# Real files: the PDF's tab, below the page and loaded when picked as a dropped link's is, is seen
+# loading (nothing else here loads a file), not only the drop.
 cra://debug?dropLink=file://${FIXTURES}/Pages/drop-file.pdf
-expect-log dropLink: opened file://\S+/drop-file\.pdf in Today
+expect-log dropLink: opened file://\S+/drop-file\.pdf in Today at 1
+cra://action/nextTab
 expect-log loaded file:
 cra://debug?dropLink=file://${FIXTURES}/Pages/icon-blue.png
 expect-log dropLink: opened file://\S+/icon-blue\.png in Today
