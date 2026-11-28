@@ -103,7 +103,7 @@
 #91    Packages/CraCore/Tests/CraCoreTests/ShippedPlatformTests.swift::performanceRecordingIsOnByDefault  259e604ae88e
 #91    Packages/CraCore/Tests/CraCoreTests/SiteNamesTests.swift::everyHostOfTheSessionBecomesASiteNumber  af4a0eac908c
 #91    Packages/CraCore/Tests/CraCoreTests/SiteNamesTests.swift::theSameSiteKeepsItsNameAcrossFiles  c407e12b2fe9
-#91    Tests/PerfTests.swift::aHangIsWrittenWhileItLastsWithItsStack  37bfa3d1acf6
+#91    Tests/PerfTests.swift::aHangIsWrittenWhileItLastsWithItsStack  9f527373b86d
 #91    Tests/PerfTests.swift::aSecondCraWritesNothing  04cba6852f8e
 #91    Tests/PerfTests.swift::aSessionThatNeverQuitIsAbnormalNextLaunch  09333be9e42e
 #91    Tests/PerfTests.swift::recordingOffStopsSamplingAndWriting  cfed737c8876

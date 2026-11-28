@@ -13,20 +13,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Tests
-    # No Chromium download: Packages/CraCore and the harnesses compile only the files they test.
+  # The tests run in parts on separate runners at once (scripts/coverage.py --part): one runner had
+  # about 1,600 s of suites queued on its few cores. The Tests job below merges their coverage and
+  # applies the gates, so it is the one check that says whether the tests passed.
+  test-core:
+    name: Tests (CraCore)
     runs-on: xcode-27
     permissions:
       contents: read
-      pull-requests: write
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Lint
         run: scripts/lint.py
+
+      # A failing test fails this step with its output, after the part has written what it measured.
+      - name: CraCore with coverage
+        run: scripts/coverage.py --part core --emit coverage-core.json
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-core
+          path: coverage-core.json
+          if-no-files-found: ignore
+
+  test-harnesses:
+    name: Tests (harnesses ${{ matrix.share }}/2)
+    # No Chromium download: the harnesses compile only the files they test.
+    runs-on: xcode-27
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        share: [1, 2]
+    steps:
+      - uses: actions/checkout@v7
 
       # CraCore as the harnesses link it (scripts/harness-cracore.sh), kept between runs: a change that
       # leaves CraCore alone links the last one instead of building it. The script checks the sources,
@@ -44,28 +67,60 @@ jobs:
             !build/harness-cracore/.building.*
           key: harness-cracore-${{ runner.arch }}-${{ steps.swift.outputs.hash }}-${{ hashFiles('Packages/CraCore/Sources/CraCore/*.swift', 'Packages/CraCore/Sources/CraCore/Perf/*.swift', 'scripts/harness-cracore.sh') }}
 
-      # Every test once, compiled with coverage; a failing test fails this step with its output.
-      # Gates: changed lines under test >= 70 %, CraCore >= 85 % (docs/testing.md).
-      - name: CraCore, harnesses and coverage
-        if: github.event_name == 'pull_request' || github.event.before != '0000000000000000000000000000000000000000'
-        run: |
-          set -o pipefail
-          scripts/coverage.py --base "${{ github.event.pull_request.base.sha || github.event.before }}" | tee coverage.md
+      - name: Harnesses with coverage
+        run: scripts/coverage.py --part "harnesses:${{ matrix.share }}/2" --emit "coverage-harnesses-${{ matrix.share }}.json"
 
-      # A new branch's first push has no base to measure changed lines against.
-      - name: CraCore and harnesses
-        if: github.event_name != 'pull_request' && github.event.before == '0000000000000000000000000000000000000000'
-        run: scripts/test.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-harnesses-${{ matrix.share }}
+          path: coverage-harnesses-${{ matrix.share }}.json
+          if-no-files-found: ignore
 
-      # Also when a test failed: the library was built either way.
+      # Also when a test failed: the library was built either way. One share saves it; both built the same.
       - name: Keep CraCore for the harnesses
-        if: always() && steps.cracore.outputs.cache-hit != 'true'
+        if: always() && matrix.share == 1 && steps.cracore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: |
             build/harness-cracore
             !build/harness-cracore/.building.*
           key: ${{ steps.cracore.outputs.cache-primary-key }}
+
+  test:
+    name: Tests
+    needs: [test-core, test-harnesses]
+    if: always()
+    # Only git and Python: the parts' lines, merged. Gates: changed lines under test >= 70 %,
+    # CraCore >= 85 % (docs/testing.md).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Parts
+        if: needs.test-core.result != 'success' || needs.test-harnesses.result != 'success'
+        run: |
+          echo "A part failed (CraCore: ${{ needs.test-core.result }}, harnesses: ${{ needs.test-harnesses.result }}); its log has the failing suite's output."
+          exit 1
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      # A new branch's first push has no base: no changed lines to measure, the CraCore gate still applies.
+      - name: Coverage
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -o pipefail
+          [ "$BASE" != 0000000000000000000000000000000000000000 ] || BASE=HEAD
+          python3 -I scripts/coverage.py --report coverage-core.json coverage-harnesses-1.json coverage-harnesses-2.json --base "$BASE" | tee coverage.md
 
       # Fork pull requests get a read-only token: the job summary has the same table.
       - name: Coverage comment

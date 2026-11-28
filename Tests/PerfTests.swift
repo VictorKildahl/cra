@@ -139,16 +139,18 @@ enum PerfTests {
         var seenDuring = false
         // The watchdog writes from its own thread while the main thread is still busy. The block
         // lasts until the stack is in the file, however long `sample` takes to attach (a CI runner
-        // is slower than a desk Mac).
+        // is slower than a desk Mac: on a 3-core runner running other suites it took over 15 s, and
+        // sampled the main thread back in `spin`). The limit only stops a `sample` that never comes.
         DispatchQueue.main.async {
-            busyMainThreadForPerfTest(atLeast: 1, limit: 15) {
+            busyMainThreadForPerfTest(atLeast: 1, limit: 60) {
                 files.hangFiles().first.flatMap { files.read(PerfHang.self, from: $0) }.map { $0.stackNote != "sampling" } ?? false
             }
             seenDuring = !files.hangFiles().isEmpty
         }
         // `sample` takes about 2 s here and longer on a CI runner: wait for the stack, not a time.
+        // Up to 70 s, past the block's own 60 s limit.
         var hang: PerfHang?
-        for _ in 0..<100 {
+        for _ in 0..<350 {
             spin(0.2)
             hang = files.hangFiles().first.flatMap { files.read(PerfHang.self, from: $0) }
             if hang?.stackNote != "sampling", hang?.endedMs != nil { break }
