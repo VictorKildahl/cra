@@ -178,11 +178,15 @@ public struct SyncHistory: Codable, Equatable {
         /// The bundle's settings, what SettingsMerge merges against. Nil in a history an older Cra wrote: that bundle's
         /// settings replace this Mac's whole, as before.
         public var settings: AppSettings?
+        /// The bundle's easels without their pictures, what Easel.merge merges against. Nil for a bundle without
+        /// easels and in a history an older Cra wrote: then no easel is deleted.
+        public var easels: [Easel]?
 
-        public init(id: UUID, document: SidebarDocument, settings: AppSettings? = nil) {
+        public init(id: UUID, document: SidebarDocument, settings: AppSettings? = nil, easels: [Easel]? = nil) {
             self.id = id
             self.document = document
             self.settings = settings
+            self.easels = easels
         }
     }
 
@@ -192,9 +196,9 @@ public struct SyncHistory: Codable, Equatable {
 
     public init() {}
 
-    public mutating func remember(_ id: UUID, _ document: SidebarDocument, settings: AppSettings? = nil) {
+    public mutating func remember(_ id: UUID, _ document: SidebarDocument, settings: AppSettings? = nil, easels: [Easel]? = nil) {
         entries.removeAll { $0.id == id }
-        entries.insert(Entry(id: id, document: document, settings: settings), at: 0)
+        entries.insert(Entry(id: id, document: document, settings: settings, easels: easels), at: 0)
         if entries.count > Self.limit { entries.removeLast(entries.count - Self.limit) }
     }
 
@@ -215,6 +219,12 @@ public struct SyncHistory: Codable, Equatable {
         baseEntry(for: manifest)?.settings
     }
 
+    /// The easels of the newest of the manifest's `easelParentIDs` remembered with easels; nil when there is none.
+    public func baseEasels(for manifest: SyncManifest) -> [Easel]? {
+        for id in manifest.easelParentIDs ?? [] { if let easels = entries.first(where: { $0.id == id })?.easels { return easels } }
+        return nil
+    }
+
     private func baseEntry(for manifest: SyncManifest) -> Entry? {
         for id in manifest.parentIDs ?? [] { if let e = entries.first(where: { $0.id == id }) { return e } }
         return nil
@@ -222,4 +232,8 @@ public struct SyncHistory: Codable, Equatable {
 
     /// The ids a bundle written now names as its parents (`SyncManifest.parentIDs`).
     public var ids: [UUID] { entries.map(\.id) }
+    /// Whether a remembered bundle held the easel, so a Mac may merge against it.
+    public func remembers(easel id: UUID) -> Bool { entries.contains { $0.easels?.contains { $0.id == id } == true } }
+    /// The bundles remembered with their easels, newest first: a manifest's `easelParentIDs`.
+    public var easelIDs: [UUID] { entries.filter { $0.easels != nil }.map(\.id) }
 }

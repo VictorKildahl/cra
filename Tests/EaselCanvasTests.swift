@@ -690,6 +690,19 @@ enum EaselCanvasTests {
         sheet.deleteSelected()
         precondition(!sheet.document.items.contains { if case .link = $0.kind { return true }; return false }, "the link card deletes")
 
+        // A page read after the easel was deleted fills nothing in, so it can't make the easel again.
+        var late: ((EaselLinkMetadata?, Data?, Data?) -> Void)?
+        EaselHooks.fetchLink = { _, done in late = done }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("https://example.com/late", forType: .string)
+        sheet.paste(nil)
+        let deletedEasel = sheet.document
+        EaselFiles.deleted.insert(deletedEasel.id)
+        late?(EaselLinkMetadata(title: "Late post", summary: "Text"), nil, nil)
+        EaselFiles.deleted.remove(deletedEasel.id)
+        precondition(sheet.document == deletedEasel, "a page read after the easel was deleted changes nothing")
+        sheet.deleteSelected()
+
         // Alignment guides: a move that ends 4 pt off another item's left edge lines up with it.
         let other = sheet.document.items.first { $0.id == rect.id }!
         let movedFrom = sheet.document.items.first { $0.id == pasted.id }!

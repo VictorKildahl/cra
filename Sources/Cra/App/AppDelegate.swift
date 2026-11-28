@@ -169,6 +169,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         MCPServer.shared.start(app: self)
         composition.startPeriodicWork(autoArchived: { [weak self] in self?.noteAutoArchived($0) }) { [weak self] in self?.sleepIdleTabs() }
         composition.sync.keybindingsChanged = { [weak self] in self?.bindings.reloadOverrides() }
+        composition.sync.changeOpenEasel = { EaselFiles.changeOpen($0, $1) }
+        composition.sync.easelsChanged = { [weak self] removed in
+            EaselFiles.synced()
+            guard let self else { return }
+            for id in removed { self.closeEasel(id) { self.main?.closeTab($0) } }
+        }
         composition.sync.start()
         SharingService.shared.start(store: store, clock: composition.clock)
         observeSystemWake()
@@ -1210,6 +1216,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return w
     }
 
+    /// An easel going (Library ▸ Easels ▸ Delete, or deleted on another Mac): its tabs close through
+    /// `closeTab`, and so does every Peek and Little Window showing it. None writes it back.
+    func closeEasel(_ id: UUID, closingTabs closeTab: (UUID) -> Void) {
+        EaselFiles.closeTabs(of: id, in: store, close: closeTab)
+        for w in littleWindows where w.currentURL == Easel(id: id).url { w.closeWindow() }
+    }
+
     /// Arc's Peek: a Little Window over `parent` that closes when a click lands past it.
     /// One per tab (#242): a Peek another tab left waiting stays.
     func openPeek(url: String, over parent: MainWindowController, fromTab tabID: UUID? = nil) {
@@ -1852,15 +1865,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 return
             }
             // easelTileHover=1|0: the pointer over Library ▸ Easels' first tile, or gone; cra.log says
-            // how large it is drawn and how bright its backing is.
-            if let on = dict["easelTileHover"] {
+            // how large it is drawn and how bright its backing is. easelTile=open|delete: a click on that
+            // tile (its Peek), or its menu's Delete (answered with answerDialog=Delete).
+            if dict["easelTileHover"] != nil || dict["easelTile"] != nil {
                 func first(in view: NSView) -> EaselTile? {
                     if let tile = view as? EaselTile, !tile.isHiddenOrHasHiddenAncestor { return tile }
                     for sub in view.subviews { if let found = first(in: sub) { return found } }
                     return nil
                 }
                 guard let tile = main.window?.contentView.flatMap(first(in:)) else { CraLog.note("easel tile: none"); return }
-                tile.debugHover(on == "1") { CraLog.note("easel tile: \($0)") }
+                if let what = dict["easelTile"] { tile.debugPress(what); return }
+                tile.debugHover(dict["easelTileHover"] == "1") { CraLog.note("easel tile: \($0)") }
                 return
             }
             // easelLink=<url>: the open easel gets a link card for <url>, as a paste does; cra.log says what it read.
@@ -4454,7 +4469,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case "newBoost": main.openBoostEditor()
         case "newEasel":
             guard !main.isIncognito else { break }
-            let easel = Easel()
+            let easel = EaselFiles.create()
             _ = store.createTab(url: easel.url, title: easel.title, select: true, window: main.windowID)
         case NewDocumentApp.commandID:
             // The profile's "New documents" app, in a new tab of the current space (#375).

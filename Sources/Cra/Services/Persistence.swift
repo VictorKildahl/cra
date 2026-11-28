@@ -95,6 +95,30 @@ final class JSONStore<T: Codable> {
         persistenceQueue.sync { write(value) }
     }
 
+    /// Writes a save still waiting out its delay now, after any write in flight, as saveNow does: a test that reads the
+    /// file next, as a relaunch would, waits for nothing.
+    func flush() {
+        guard let item = pending else { return }
+        pending = nil
+        // On the queue the timer can't run it in between, and cancelled it never runs again.
+        persistenceQueue.sync {
+            item.perform()
+            item.cancel()
+        }
+    }
+
+    /// Writes `data` over the file at `url` atomically, the copy it replaces kept as `<name>.bak`. Every save does,
+    /// and sync when it writes an easel's file.
+    static func replace(_ url: URL, with data: Data) throws {
+        let fm = FileManager.default
+        let bak = url.appendingPathExtension("bak")
+        if fm.fileExists(atPath: url.path) {
+            try? fm.removeItem(at: bak)
+            try? fm.copyItem(at: url, to: bak)
+        }
+        try data.write(to: url, options: .atomic)
+    }
+
     private func write(_ value: T) {
         let started = Perf.now()
         defer { Perf.time(.jsonSave, ms: Perf.ms(since: started)) }
@@ -103,14 +127,8 @@ final class JSONStore<T: Codable> {
             CraLog.fault("\(url.lastPathComponent) not saved, encoding failed: \(error)")
             return
         }
-        let fm = FileManager.default
-        let bak = url.appendingPathExtension("bak")
-        if fm.fileExists(atPath: url.path) {
-            try? fm.removeItem(at: bak)
-            try? fm.copyItem(at: url, to: bak)
-        }
         do {
-            try data.write(to: url, options: .atomic)
+            try Self.replace(url, with: data)
             Perf.count(.fileSaved, url.lastPathComponent)
         } catch {
             CraLog.fault("\(url.lastPathComponent) not saved: \(error.localizedDescription)")

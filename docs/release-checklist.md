@@ -522,6 +522,11 @@ built release app with a test profile. Note anything that fails in the release's
   shows "Synced" on both and never asks which sidebar to keep after the first answer. Needs
   real iCloud: the harness only stands in for a file that is still downloading.
 - **PR #289:** the same with a folder in Dropbox, OneDrive or a similar service instead of iCloud.
+- **Easels in sync:** with a signed build on two Macs and Sync with iCloud on, an easel with a
+  few pictures and captures made on one Mac opens on the other with every picture, within about
+  a minute; a title changed on each Mac shows on both; deleting it in Library ▸ Easels removes it
+  on the other Mac and closes its tab there. Needs real iCloud: the harness doesn't download
+  pictures in a subfolder file by file.
 
 ### iPhone
 

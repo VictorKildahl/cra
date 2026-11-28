@@ -12,6 +12,10 @@ enum PageEngines {
     static var isNativePage: ((String) -> Bool)?
 }
 
+enum SettingsSync {
+    static let easelsName = "Easels"
+}
+
 enum AppPaths {
     static let supportDir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["CRA_DATA_DIR"]!)
 }
@@ -27,6 +31,17 @@ final class JSONStore<T: Codable> {
     func saveNow(_ value: T) { try! JSONEncoder().encode(value).write(to: url) }
 }
 
-extension EaselFiles {
-    static var deleted: Set<UUID> = []
+enum EaselFolder {
+    static func remove(_ id: UUID, in folder: URL) {
+        for name in [id.uuidString + ".json", id.uuidString] { try? FileManager.default.removeItem(at: folder.appendingPathComponent(name)) }
+    }
+}
+
+struct TabData { var url: String }
+struct SidebarItem { var id = UUID(); var tab: TabData? }
+
+@MainActor
+final class SidebarStore {
+    var tabs: [SidebarItem] = []
+    func allTabs() -> [SidebarItem] { tabs }
 }

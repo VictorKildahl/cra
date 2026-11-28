@@ -224,6 +224,122 @@ struct SettingsSyncTests {
                 "its own manifest it writes again: sync was turned off and on on the Mac that wrote it")
     }
 
+    // MARK: Easels in the bundle
+
+    let easelID = UUID(uuidString: "9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F")!
+    var easelJSON: String { "Easels/\(easelID.uuidString).json" }
+    var easelPicture: String { "Easels/\(easelID.uuidString)/D0D0D0D0-0000-4000-8000-000000000000.png" }
+    /// `written`, carrying one easel and its picture.
+    var withEasel: SyncManifest {
+        var m = written
+        m.easels = [easelJSON: "e", easelPicture: "p"]
+        return m
+    }
+    var withEaselFiles: [String: SyncFileState] {
+        wholeFiles.merging([easelJSON: .present(hash: "e"), easelPicture: .present(hash: "p")]) { a, _ in a }
+    }
+
+    /// Easels go under their own key, so an older Cra, which reads only the three names in `files`,
+    /// still finds its bundle whole; a manifest without the key comes from such a Cra.
+    @Test func aManifestCarriesItsEaselsBesideItsFiles() throws {
+        let e = JSONEncoder(); e.dateEncodingStrategy = .iso8601
+        let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601
+        #expect(try d.decode(SyncManifest.self, from: e.encode(withEasel)) == withEasel)
+        #expect(withEasel.files == written.files && withEasel.version == 1)
+        let older = try d.decode(SyncManifest.self, from: e.encode(written))
+        #expect(older.easels == nil)
+        let json = try #require(JSONSerialization.jsonObject(with: e.encode(written)) as? [String: Any])
+        #expect(json["easels"] == nil, "nothing new in a manifest without easels")
+        #expect(SyncManifest(device: "Studio", deviceID: "id-Studio", writtenAt: t0, files: [:], easels: [easelJSON: "e"]).easels == [easelJSON: "e"])
+    }
+
+    @Test func aBundlePathNamesAnEaselOrOneOfItsPictures() throws {
+        let json = try #require(SettingsSync.easelPath(easelJSON))
+        #expect(json.id == easelID && json.picture == nil)
+        let picture = try #require(SettingsSync.easelPath(easelPicture))
+        #expect(picture.id == easelID && picture.picture == "D0D0D0D0-0000-4000-8000-000000000000.png")
+    }
+
+    /// The service reads and writes only what this lets through, so a manifest can't name a file
+    /// outside the bundle's easels or the data folder's.
+    @Test(arguments: [
+        "Easels/../sidebar.json", "Easels/9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F/../../x", "Easels/9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F/..",
+        "/Easels/9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F.json", "Easels//9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F.json",
+        "Easels/9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F//a.png", "Easels/9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F/a/b.png",
+        "Easels/9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F/", "Easels/9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F/.a.png.icloud",
+        "Easels/9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F.json.bak", "Easels/9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F",
+        "Easels/9b1c6c2e-3e9a-4d2b-9d7e-1a2b3c4d5e6f.json", "Easels/Board.json", "Easels/Board/a.png", "Easels/.json",
+        "Easels", "Easels/", "sidebar.json", "Pictures/9B1C6C2E-3E9A-4D2B-9D7E-1A2B3C4D5E6F.json", "",
+    ])
+    func anyOtherPathIsNoEasel(path: String) {
+        #expect(SettingsSync.easelPath(path) == nil)
+    }
+
+    @Test func aBundleWithEaselsIsCompleteOnlyWhenTheyMatchToo() {
+        let hashes = ["sidebar.json": "a", "settings.json": "b", "keybindings.json": "c", easelJSON: "e", easelPicture: "p"]
+        #expect(SettingsSync.isComplete(withEasel, hashes: hashes))
+        #expect(!SettingsSync.isComplete(withEasel, hashes: hashes.filter { $0.key != easelPicture }))
+        #expect(!SettingsSync.isComplete(withEasel, hashes: hashes.merging([easelJSON: "old"]) { _, b in b }))
+        var bad = withEasel
+        bad.easels?["Easels/../sidebar.json"] = "a"
+        #expect(!SettingsSync.isComplete(bad, hashes: hashes.merging(["Easels/../sidebar.json": "a"]) { _, b in b }))
+    }
+
+    @Test func aWholeBundleWithEaselsIsApplied() {
+        #expect(folder(withEasel, withEaselFiles) == .whole)
+        #expect(SettingsSync.folderState(manifest: .read(withEasel), files: withEaselFiles, readable: false) == .newer)
+    }
+
+    @Test func anEaselOnItsWayIsWaitedFor() {
+        var files = withEaselFiles
+        files[easelPicture] = .downloading
+        #expect(folder(withEasel, files) == .arriving, "a picture iCloud has not downloaded yet")
+        #expect(!SettingsSync.isLacking(manifest: .read(withEasel), files: files))
+        files[easelPicture] = .missing
+        #expect(folder(withEasel, files) == .arriving)
+        files[easelPicture] = nil
+        #expect(folder(withEasel, files) == .arriving)
+    }
+
+    @Test func anEaselWithNothingOnItsWayIsLacking() {
+        #expect(!SettingsSync.isLacking(manifest: .read(withEasel), files: withEaselFiles))
+        var files = withEaselFiles
+        files[easelJSON] = .missing
+        #expect(SettingsSync.isLacking(manifest: .read(withEasel), files: files))
+        files[easelJSON] = nil
+        #expect(SettingsSync.isLacking(manifest: .read(withEasel), files: files))
+    }
+
+    @Test func anEaselFromAnotherWriteIsAMix() {
+        var files = withEaselFiles
+        files[easelJSON] = .present(hash: "from-the-other-write")
+        #expect(folder(withEasel, files) == .mixed)
+    }
+
+    /// A manifest path that is no easel's is never read: it counts as missing, so the bundle is
+    /// waited for and then written over, which leaves the path out.
+    @Test func aPathThatIsNoEaselsCountsAsMissing() {
+        var bad = withEasel
+        bad.easels?["Easels/../sidebar.json"] = "a"
+        var files = withEaselFiles
+        files["Easels/../sidebar.json"] = .present(hash: "a")
+        #expect(folder(bad, files) == .arriving)
+        #expect(SettingsSync.isLacking(manifest: .read(bad), files: files))
+    }
+
+    /// A bundle an older Cra wrote names no easels: it is whole on its three files, whatever easel
+    /// files the folder still holds.
+    @Test func aManifestWithoutEaselsLooksAsBefore() {
+        #expect(written.easels == nil)
+        #expect(folder(written, withEaselFiles) == .whole)
+        var files = withEaselFiles
+        files[easelJSON] = .missing
+        files[easelPicture] = .present(hash: "changed")
+        #expect(folder(written, files) == .whole)
+        #expect(!SettingsSync.isLacking(manifest: .read(written), files: files))
+        #expect(SettingsSync.isComplete(written, hashes: ["sidebar.json": "a", "settings.json": "b", "keybindings.json": "c"]))
+    }
+
     @Test func anICloudPlaceholderHasTheFilesNameWithADotAndIcloud() {
         #expect(SettingsSync.placeholderName(for: "sidebar.json") == ".sidebar.json.icloud")
     }
@@ -289,5 +405,44 @@ struct SettingsSyncTests {
         var muted = switched
         if case .tab(var t) = muted.items[0].data { t.muted = true; muted.items[0].data = .tab(t) }
         #expect(muted.withoutActivity() != switched.withoutActivity())
+    }
+
+    // MARK: An easel file on this Mac, as a write sends it
+
+    @Test func anEaselReadNowIsSent() {
+        #expect(SettingsSync.easelChoice(readable: true, lastCopy: true, remembered: true) == .send)
+    }
+
+    /// Read mid-save, or bytes that don't decode: never sent as deleted while a copy from before is at hand.
+    @Test func anEaselNotReadNowCarriesItsLastCopy() {
+        #expect(SettingsSync.easelChoice(readable: false, lastCopy: true, remembered: true) == .carry)
+    }
+
+    /// Left out, an easel a remembered bundle holds would be deleted on the other Mac.
+    @Test func anEaselNotReadWithNoCopyThatABundleHeldHoldsTheWrite() {
+        #expect(SettingsSync.easelChoice(readable: false, lastCopy: false, remembered: true) == .hold)
+    }
+
+    /// No bundle held it, so no Mac merges against it: leaving it out deletes nothing.
+    @Test func anEaselNotReadThatNoBundleHeldIsLeftOut() {
+        #expect(SettingsSync.easelChoice(readable: false, lastCopy: false, remembered: false) == .leaveOut)
+    }
+
+    /// A listing that failed is not proof that every easel was deleted: the other Mac would delete its copies.
+    @Test func anEaselFolderThatCannotBeListedHoldsTheWrite() {
+        #expect(SettingsSync.unlistedEaselsChoice(missing: false) == .hold)
+    }
+
+    /// No easel made yet: the folder isn't there, and that is no easels.
+    @Test func aMissingEaselFolderListsAsNoEasels() {
+        #expect(SettingsSync.unlistedEaselsChoice(missing: true) == .leaveOut)
+    }
+
+    @Test func theHistoryKnowsTheEaselsItsBundlesHeld() {
+        var history = SyncHistory()
+        let held = Easel(title: "Held"), other = UUID()
+        history.remember(UUID(), .fresh(), easels: [held])
+        history.remember(UUID(), .fresh())
+        #expect(history.remembers(easel: held.id) && !history.remembers(easel: other))
     }
 }

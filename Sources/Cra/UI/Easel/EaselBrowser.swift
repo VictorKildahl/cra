@@ -134,35 +134,40 @@ extension EaselBrowser {
 @MainActor
 enum EaselFiles {
     static var folder: URL {
-        let u = AppPaths.supportDir.appendingPathComponent("Easels", isDirectory: true)
+        let u = AppPaths.supportDir.appendingPathComponent(SettingsSync.easelsName, isDirectory: true)
         try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
         return u
     }
     static func store(_ id: UUID) -> JSONStore<Easel> {
         _ = folder
-        return JSONStore<Easel>("Easels/\(id.uuidString).json")
+        return JSONStore<Easel>("\(SettingsSync.easelsName)/\(id.uuidString).json")
     }
     static func load(_ id: UUID) -> Easel { store(id).load(or: { Easel(id: id) }) }
 
     // MARK: Easels open in tabs
 
     /// A canvas holds what its easel is now; its file follows 0.4 s after an edit (JSONStore.save)
-    /// and is written over when the tab closes. So whatever reads or changes an easel that is open
-    /// goes through its canvas.
+    /// and, after an edit, is written again when the tab closes. So whatever reads or changes an easel that is open
+    /// goes through its canvas. One easel can be open on several (a tab and a Peek).
     private final class Open { weak var canvas: EaselCanvasView? }
-    private static var open: [UUID: Open] = [:]
+    private static var open: [UUID: [Open]] = [:]
 
     static func opened(_ canvas: EaselCanvasView) {
         let entry = Open()
         entry.canvas = canvas
-        open[canvas.document.id] = entry
+        open[canvas.document.id] = (open[canvas.document.id] ?? []).filter { $0.canvas != nil } + [entry]
     }
 
     static func closed(_ canvas: EaselCanvasView) {
-        if open[canvas.document.id]?.canvas === canvas { open[canvas.document.id] = nil }
+        let id = canvas.document.id
+        open[id]?.removeAll { $0.canvas == nil || $0.canvas === canvas }
+        if open[id]?.isEmpty == true { open[id] = nil }
     }
 
-    static func canvas(for id: UUID) -> EaselCanvasView? { open[id]?.canvas }
+    /// Every canvas showing the easel, the one opened last at the end.
+    static func canvases(for id: UUID) -> [EaselCanvasView] { open[id]?.compactMap(\.canvas) ?? [] }
+
+    static func canvas(for id: UUID) -> EaselCanvasView? { canvases(for: id).last }
 
     /// The easel as it is now: its canvas's, or its file's.
     static func current(_ id: UUID) -> Easel { canvas(for: id)?.document ?? load(id) }
@@ -175,6 +180,59 @@ enum EaselFiles {
     }
 
     static func listChanged() { Changes.shared.count += 1 }
+
+    /// Sync's change to an easel open in a tab, made on each of its canvases: `change` gets what that canvas
+    /// shows and returns the easel it shows next, nil to delete it. False when no tab has it open, or it
+    /// was deleted here: that canvas saves nothing, so the service writes the file.
+    static func changeOpen(_ id: UUID, _ change: (Easel) -> Easel?) -> Bool {
+        let shown = canvases(for: id)
+        guard !deleted.contains(id), !shown.isEmpty else { return false }
+        for each in shown {
+            // Deleted on the other Mac (nil for every canvas): the closing canvases write nothing back;
+            // their tabs close with `closeTabs`.
+            guard let new = change(each.document) else { delete(id); return true }
+            if new != each.document { each.replace(with: new) }
+        }
+        return true
+    }
+
+    /// After sync changed the easels: Library lists them again, and one deleted here that a bundle
+    /// brought back (Import) saves again, its canvases still loaded (a Favorite) showing Import's copy.
+    static func synced() {
+        let back = deleted.filter { FileManager.default.fileExists(atPath: store($0).url.path) }
+        deleted.subtract(back)
+        for id in back {
+            let easel = load(id)
+            for canvas in canvases(for: id) { canvas.replace(with: easel) }
+        }
+        listChanged()
+    }
+
+    /// Easels deleted this session: a tab still closing must not write one back.
+    static var deleted: Set<UUID> = []
+
+    /// Runs the removal a second after a delete; a test runs it when it chooses.
+    static var afterDelete: (@escaping @MainActor @Sendable () -> Void) -> Void = {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: $0)
+    }
+
+    /// Deleting from Library ▸ Easels: the easel's file and its pictures.
+    static func delete(_ id: UUID) {
+        deleted.insert(id)
+        EaselFolder.remove(id, in: folder)
+        // An edit made just before is written 0.4 s later (JSONStore.save): remove what it writes too, unless Import or
+        // a drawing brought the easel back since.
+        afterDelete { if deleted.contains(id) { EaselFolder.remove(id, in: folder) } }
+        listChanged()
+    }
+
+    /// An easel going (Library ▸ Easels ▸ Delete, or deleted on another Mac): every tab showing it
+    /// closes through `close`, and none writes it back.
+    static func closeTabs(of id: UUID, in store: SidebarStore, close: (UUID) -> Void) {
+        deleted.insert(id)
+        let url = Easel(id: id).url
+        for tab in store.allTabs() where tab.tab?.url == url { close(tab.id) }
+    }
 
     /// Arc's capture menu ▸ Send To…: the capture added below what the easel holds. With `source`
     /// (the page it came from) it is a capture that can go live, else a plain picture.
@@ -192,6 +250,14 @@ enum EaselFiles {
         easel.items.append(item)
         store(id).saveNow(easel)
         return true
+    }
+
+    /// File ▸ New Easel: an empty easel, on disk before its tab opens (a canvas writes none), so Library ▸ Easels lists it.
+    static func create() -> Easel {
+        let easel = Easel()
+        store(easel.id).saveNow(easel)
+        listChanged()
+        return easel
     }
 
     /// Arc's capture menu ▸ New Easel: an easel with the capture on it, under the title.
@@ -227,8 +293,8 @@ enum EaselFiles {
             // An easel open in a tab has the name on its canvas; its file gets it a moment later.
             return (e.id, canvas(for: e.id)?.document.title ?? e.title, date)
         }
-        for (id, entry) in open where !deleted.contains(id) && !listed.contains(where: { $0.id == id }) {
-            if let canvas = entry.canvas { listed.append((id, canvas.document.title, Date())) }
+        for id in open.keys where !deleted.contains(id) && !listed.contains(where: { $0.id == id }) {
+            if let canvas = canvas(for: id) { listed.append((id, canvas.document.title, Date())) }
         }
         return listed.sorted { $0.edited > $1.edited }
     }
