@@ -178,7 +178,7 @@ compared" and refuses `CRA_SNAPSHOT_RECORD=1`.
 `CRA_SNAPSHOTS=strict`: a snapshot that differs, or couldn't be compared, fails even though budgets are
 only noted; a scenario that fails runs once more, and one that passes then is listed as "passed only the second
 time" (sidebar-parity's dark tiles drew a pixel apart once in about ten runs). It opens the copies on a 2x display: `CRA_TEST_SCREEN` when it names one, else the first one
-connected, else the virtual 2x "Cra Test Display" (`scripts/test-display.sh`), taken away afterwards.
+connected, else the virtual 2x "Cra Test Display" (`scripts/virtual-display.sh`), taken away afterwards.
 `scripts/release.sh` runs it after the web features, while Apple notarizes, and stops the release on a
 failure (`CRA_SKIP_SNAPSHOTS="<why>"` releases anyway; say why in the notes). Before it, nothing ran these
 scenarios before a release: two references went stale on main unseen when PR #678 gave the Arc fixture its

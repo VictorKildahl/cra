@@ -1,5 +1,5 @@
 #!/bin/bash
-# test-display.sh: a virtual 1728x1117 pt Retina display (a 16" MacBook Pro, the Macs the scenarios were set on) ("Cra Test Display") below the main one, for scenarios, kept
+# virtual-display.sh: a virtual 1728x1117 pt Retina display (a 16" MacBook Pro, the Macs the scenarios were set on) ("Cra Test Display") below the main one, for scenarios, kept
 # by a background vdisplay process until it is killed (or the CI job ends). Then run scenarios on it with
 #   CRA_TEST_SCREEN="Cra Test Display" scripts/scenario.sh …
 # GitHub's macOS runners have one small 1x screen: a scenario's 1200x800 window didn't fit (the page came out
@@ -10,7 +10,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build
 clang -fobjc-arc -framework Foundation -framework CoreGraphics -Wno-objc-property-no-attribute \
-  scripts/test-display/vdisplay.m -o build/vdisplay || exit 1
+  scripts/virtual-display/vdisplay.m -o build/vdisplay || exit 1
 nohup build/vdisplay "$@" > build/vdisplay.log 2>&1 &
 echo $! > build/vdisplay.pid
 for _ in $(seq 1 60); do
@@ -24,6 +24,6 @@ for _ in $(seq 1 60); do
   fi
   sleep 0.5
 done
-echo "test-display: no display after 30 s" >&2
+echo "virtual-display: no display after 30 s" >&2
 cat build/vdisplay.log >&2
 exit 1

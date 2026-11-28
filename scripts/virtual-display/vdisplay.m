@@ -1,7 +1,7 @@
 // vdisplay: a virtual Retina display for test copies of Cra, alive as long as this process runs.
 //   vdisplay [width-points height-points]     default 1728 1117 (a 16" MacBook Pro), at 2x, named "Cra Test Display"
 // Prints "ready <id> <x>,<y> <w>x<h>" once the display is extended (not mirrored) below the main one, then waits.
-// Scenarios run on it with CRA_TEST_SCREEN="Cra Test Display" (scripts/test-display.sh): GitHub's macOS runners have
+// Scenarios run on it with CRA_TEST_SCREEN="Cra Test Display" (scripts/virtual-display.sh): GitHub's macOS runners have
 // one small 1x screen, where a 1200x800 window doesn't fit and the scenarios' geometry and 2x snapshots fail.
 // macOS's CGVirtualDisplay is private API (what screen-sharing apps use); this declares the part it needs.
 #import <CoreGraphics/CoreGraphics.h>
