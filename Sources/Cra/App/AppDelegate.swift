@@ -2576,8 +2576,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     // seeThrough: the window shows the blurred desktop under the sidebar, through the material
                     // (dark vibrant) or the backdrop layer (light vibrant, one colour), not an opaque fill (#643).
                     // ground: the backdrop layer's flat grey (0–255) while it draws no capture, an inactive window's (#876);
-                    // "blur" or "tint" while it does, "-" off the layer path.
-                    let ground = m.shell.drawnBackdrop.map { $0.source == .none ? String(format: "%.0f", 255 * $0.liftTop) : $0.source == .blur ? "blur" : "tint" } ?? "-"
+                    // "blur:<b>/<w>" while it blurs, the material over a black and a white backdrop (#876); "tint" in
+                    // full screen, "-" off the layer path.
+                    let ground = m.shell.drawnBackdrop.map { b -> String in
+                        switch b.source {
+                        case .none: return String(format: "%.0f", 255 * b.liftTop)
+                        case .blur: return String(format: "blur:%.0f/%.0f", 255 * b.liftTop, 255 * ((1 - b.dim) * (1 - b.liftTop) + b.liftTop))
+                        case .desktopTint: return "tint"
+                        }
+                    } ?? "-"
                     NSLog("Cra theme shown %@: space=%@ follows=%d theme=%@ shell=%@ sidebar=%@ library=%@ material=%@ seeThrough=%d vibrant=%d intensity=%.2f active=%d ground=%@",
                           label, space.title, space.theme.followsSystem ? 1 : 0,
                           side(space.theme.shown.isDark), side(m.shell.isDarkTheme), drawn, m.sidebarUI.libraryPage.map { "\($0)" } ?? "-", material,

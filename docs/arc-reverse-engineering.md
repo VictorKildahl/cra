@@ -4754,6 +4754,32 @@ Sidebar sampled 5 pt in, 6 × 6 px means.
   `company.thebrowser.Browser` defaults exported first and imported back (View ▸ Appearance writes `appearance` =
   `NSAppearanceNameDarkAqua` there).
 
+## An active window's one-colour sidebar on macOS Dark (Arc 1.174, 28 Nov 2026, #876, offline Arc on a fake home)
+
+Same rig as above (macOS 26 on Dark, Arc's View ▸ Appearance on Automatic, no `appearance` key), but the window active, with a
+borderless white window behind it that turns black on a signal (`backdrop.swift`), and `screencapture -R` of the window's
+area on the built-in 2x display. A `-l` capture of the window doesn't do here: it read the same flat value over white and
+black, the CABackdropLayer's substitute colour, not the blur. Sidebar sampled 148 pt in, 60 × 60 pt means, where no row
+sits.
+
+| Theme (content dark) | over black | over white | material under the colour |
+|---|---|---|---|
+| black at 1.0 (α 0.742) | 9 | 32 | 35 → 124 |
+| #26456B at 1.0 | 42/60/86 | 66/83/110 | about 37 → 128 (P3 capture) |
+| black at 0.5 (α 0.465) | 18 | 68 | 34 → 127 |
+
+- [O] Active on macOS Dark, a one-colour space sits at `solidAlpha(intensity)` over about 35 + 0.35 · backdrop, a
+  little darker than the dark gradient's 40 + 0.35 · backdrop (20 Nov); within 2/255 of every neutral reading. The 17 Nov 63 + 0.529 · backdrop
+  (View ▸ Appearance ▸ Dark) was then most likely macOS on Light, as with the inactive 207 above.
+- [O] Arc's sidebar never goes opaque: at full intensity a white backdrop shows 23/255 brighter than a black one, at 0.5
+  50/255. A reporter on #876 expected the top of the slider to be solid with Translucent sidebar off; it isn't in Arc.
+- Cra (#876): `SidebarBackdrop.resolve` takes `solidActiveDarkOneColour` (dim 0.5955, lift 0.137) for an active
+  one-colour space while macOS shows Dark; `solidActive` with macOS on Light, `solidActiveLight` under the light material. Pinned by
+  `activeOneColourOnMacOSDarkUsesTheDarkMaterial` and `theme-inactive-ground` (`ground=blur:<over black>/<over white>`).
+  Captured the same way: Cra before 19 / 51 (black at 1), 52/69/95 / 84/101/127 (navy), 39 / 105 (black at 0.5); with
+  the dark gradient's material 11 / 33, 45/61/87 / 66/84/109, 24 / 68; with `solidActiveDarkOneColour` 10 / 32,
+  43/60/86 / 65/82/108, 20 / 66 (Arc 9 / 32, 42/60/86 / 66/83/110, 18 / 68).
+
 ## Theme editor hover, tab-on-tab drops, Download location (Arc 1.171, static, 5 Nov 2026, #189–#191)
 Read from the arm64 slice's Swift field metadata (`__swift5_fieldmd`, case and field names only; no numbers).
 - [O metadata] SpaceStyleEditor module: `ColorPillButtonStyle { colorSet, _isHovered, addComplimentary }` (the preset

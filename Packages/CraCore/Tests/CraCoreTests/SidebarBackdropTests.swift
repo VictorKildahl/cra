@@ -80,8 +80,8 @@ struct SidebarBackdropTests {
         for (c, seen) in zip([0x66, 0x67, 0x89], [54, 54, 67]) {
             #expect(abs(0.355 * Double(c) + 0.645 * gradientGround - Double(seen)) < 2)
         }
-        // Darker than the active material over any backdrop (63 + 0.529 · backdrop, 40 + 0.35 · backdrop under a dark
-        // gradient), as in the reporter's recording of Arc.
+        // Darker than the active material over any backdrop (40 + 0.35 · backdrop on macOS Dark), as in the reporter's
+        // recording of Arc.
         #expect(ground < 40 && gradientGround < 40)
         // Unchanged: a light gradient (#6CBAD9 / #7F7EDC read 146/193/215, about 210 below), the light material,
         // and macOS Light.
@@ -89,11 +89,43 @@ struct SidebarBackdropTests {
         #expect(inactive(macOSDark: true, oneColour: true, lightMaterial: true) == SidebarBackdrop.solidInactiveLight)
         #expect(inactive(macOSDark: false, oneColour: true) == SidebarBackdrop.solidInactive)
         #expect(inactive(macOSDark: false, darkGradient: true) == SidebarBackdrop.solidInactive)
-        // The active look and Reduce transparency don't change.
-        #expect(SidebarBackdrop.resolve(solid: true, active: true, fullscreen: false, reduceTransparency: false, tintAvailable: true,
-                                        vibrant: vibrant, oneColour: true, macOSDark: true) == SidebarBackdrop.solidActive)
+        // Reduce transparency doesn't change.
         #expect(SidebarBackdrop.resolve(solid: true, active: false, fullscreen: false, reduceTransparency: true, tintAvailable: true,
                                         vibrant: vibrant, oneColour: true, macOSDark: true) == SidebarBackdrop.solidReduced)
+    }
+
+    /// An active window on macOS Dark: Arc 1.174 (offline, 28 Nov 2026, macOS 26 on Dark, View ▸ Appearance on Automatic)
+    /// draws a one-colour space over a dark material, about 35 + 0.35 · backdrop, not the 63 + 0.529 · backdrop measured
+    /// on 17 Nov (with macOS on Light). Read off screen captures with a plain white or black
+    /// window behind Arc: black at full intensity (α 0.742) 9 over black and 32 over white, black at 0.5 (α 0.465) 18 and
+    /// 68, navy #26456B at full 42/60/86 and 66/83/110. Cra drew them over the lighter material, so at full intensity
+    /// its sidebar came out lighter than Arc's and passed half as much again of the desktop (#876, "even with the
+    /// slider all the way up it still appears semi-translucent"). Arc's doesn't go opaque either: 23/255 between a white
+    /// and a black backdrop at full intensity.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/876"))
+    func activeOneColourOnMacOSDarkUsesTheDarkMaterial() {
+        func active(macOSDark: Bool, oneColour: Bool = true, lightMaterial: Bool = false) -> SidebarBackdrop {
+            SidebarBackdrop.resolve(solid: true, active: true, fullscreen: false, reduceTransparency: false, tintAvailable: true,
+                                    vibrant: vibrant, lightMaterial: lightMaterial, oneColour: oneColour, macOSDark: macOSDark)
+        }
+        let b = active(macOSDark: true)
+        #expect(b.source == .blur)
+        // Black at full intensity and at 0.5, over a black and a white backdrop.
+        for (alpha, overBlack, overWhite) in [(SpaceTheme.solidAlpha(intensity: 1), 9.0, 32.0),
+                                              (SpaceTheme.solidAlpha(intensity: 0.5), 18.0, 68.0)] {
+            #expect(abs((1 - alpha) * material(b, over: 0) - overBlack) < 2.5)
+            #expect(abs((1 - alpha) * material(b, over: 255) - overWhite) < 2.5)
+        }
+        // How much of the backdrop shows through at full intensity: Arc 23/255, Cra had 35.
+        let a1 = SpaceTheme.solidAlpha(intensity: 1)
+        #expect(abs((1 - a1) * (material(b, over: 255) - material(b, over: 0)) - 23) < 2)
+        // Full screen still swaps in the desktop tint.
+        #expect(SidebarBackdrop.resolve(solid: true, active: true, fullscreen: true, reduceTransparency: false, tintAvailable: true,
+                                        vibrant: vibrant, oneColour: true, macOSDark: true).source == .desktopTint)
+        // Unchanged: macOS Light, the light material (Arc's View ▸ Appearance ▸ Light), and a light gradient.
+        #expect(active(macOSDark: false) == SidebarBackdrop.solidActive)
+        #expect(active(macOSDark: true, lightMaterial: true) == SidebarBackdrop.solidActiveLight)
+        #expect(active(macOSDark: true, oneColour: false) == SidebarBackdrop.solidActive)
     }
 
     /// The material follows the space's Light or Dark, as Arc's follows its own appearance, and Auto
