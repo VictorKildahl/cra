@@ -1985,6 +1985,9 @@
 #906   Packages/CraCore/Tests/CraCoreTests/DataFolderPathTests.swift::aLinkedDataFolderIsNamedByWhereItIs  a943cf6cb202
 #906   Packages/CraCore/Tests/CraCoreTests/DataFolderPathTests.swift::resolvedAsChromiumResolvesIt  736cc145cd2c
 #906   Tests/Scenarios/profile-data-folder-symlinked.scenario  a9c48e59fabd
+#907   Packages/CraCore/Tests/CraCoreTests/IncognitoLinkClickTests.swift::onlyShiftClicksOpenAnIncognitoTab  591729ca4ce5
+#907   Tests/BrowserManagerLifecycleTests.swift::incognitoShiftClickCase  abe273c2d353
+#907   Tests/Scenarios/incognito-shift-click.scenario  21f5f2724446
 #909   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::aPinnedSheetsTabDoesNotTakeTheIconOfDocsOpenedLater  babf1d8e86db
 #909   Packages/CraCore/Tests/CraCoreTests/FaviconKeyTests.swift::appsOnOneAddressKeepTheirOwnIcons  7a3b4a0c90ba
 #918   Packages/CraCore/Tests/CraCoreTests/KnownNativeHostsTests.swift::bitwardenInstalledGetsItsManifestWithoutAnImport  cbe1dd4ce306

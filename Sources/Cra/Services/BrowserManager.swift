@@ -2527,7 +2527,16 @@ final class BrowserManager: NSObject, @preconcurrency CraBrowserDelegate, WebKit
     }
 
     func browser(_ browser: CraBrowser, opensPeekForURL url: String, shiftClick: Bool, newTab: Bool) -> Bool {
-        guard let id = tabID(of: browser), !browser.isIncognito else { return false }
+        guard let id = tabID(of: browser) else { return false }
+        if browser.isIncognito {
+            guard IncognitoLinkClick.opensTab(shiftClick: shiftClick, newTab: newTab) else { return false }
+            log(id, "Shift-click in incognito opens a tab")
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.store.isIncognito(item: id) else { return }
+                self.openLinkTab(url, from: id, inBackground: false)
+            }
+            return true
+        }
         return delegate?.browserManagerOpensPeek(url: url, fromTab: id, pageURL: browser.currentURL, shiftClick: shiftClick, newTab: newTab) ?? false
     }
 
