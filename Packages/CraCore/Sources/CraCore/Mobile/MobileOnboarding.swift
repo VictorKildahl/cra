@@ -1,7 +1,6 @@
 import Foundation
 
-/// The iPhone app's icons: the Mac app's, in its order (Settings ▸ Icon, AppIconManager.presets): Segments, Arc's
-/// own icon set redrawn around Cra's C by Provok (brand/arc-icons), then Cra's earlier alternates.
+/// The iPhone and Mac share their presets. Gilad S. designed the native icons in Icon Composer.
 public enum MobileAppIcon: String, CaseIterable, Identifiable {
     // Cra's own four first: the sheet is one row that scrolls sideways, and the icons onboarding offered stay in
     // reach without scrolling. Arc's set follows in the Mac's order.
@@ -15,14 +14,13 @@ public enum MobileAppIcon: String, CaseIterable, Identifiable {
 
     public var label: String {
         switch self {
-        case .segments: return "Cra"
         case .flutedGlass: return "Fluted Glass"
         case .earlyBirds: return "Early Birds"
         default: return rawValue.prefix(1).uppercased() + rawValue.dropFirst()
         }
     }
 
-    /// The alternate icon's name for iOS (its set in the asset catalog, `AppIcon-<Label>`); nil is the app's own icon.
+    /// The alternate icon's name for iOS. The primary app icon uses nil.
     public var alternateName: String? {
         self == .segments ? nil : "AppIcon-" + label.replacingOccurrences(of: " ", with: "")
     }

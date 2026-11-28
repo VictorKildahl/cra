@@ -2028,7 +2028,7 @@ struct MobileOnboardingTests {
             "schoolbook", "colorful", "canary", "early-birds",
         ])
         #expect(MobileAppIcon.allCases.map(\.label) == [
-            "Cra", "Midnight", "Mono", "Violet", "Original", "Candy", "Hologram", "Neon", "Fluted Glass", "Schoolbook",
+            "Segments", "Midnight", "Mono", "Violet", "Original", "Candy", "Hologram", "Neon", "Fluted Glass", "Schoolbook",
             "Colorful", "Canary", "Early Birds",
         ])
         #expect(Array(MobileAppIcon.allCases.prefix(4)) == MobileAppIcon.onboardingChoices)

@@ -1,7 +1,7 @@
 // Renders Arc's icon set with Cra's C (brand/arc-icons/<id>.svg, 1024 × 1024 on Apple's icon grid) into
 // resources/app-icons/<id>.png at 512 px with its transparency, as brand/arc-icons/README.md says. WebKit draws the
 // SVG filters (shadows, blurs, glows) and masks.
-//   swift scripts/make-arc-icons.swift [id …]      all nine without ids
+//   swift scripts/make-arc-icons.swift [id …]      all SVG alternates without ids
 //   swift scripts/make-arc-icons.swift --out <dir> [id …]   writes there instead (to compare)
 // With --ios it renders them for the iPhone app instead: the tile alone, square to its corners (iOS cuts them
 // itself, and the in-app picker rounds them less), 1024 px and opaque, into iOS/Cra/Resources/Assets.xcassets as
@@ -19,13 +19,11 @@ if let i = args.firstIndex(of: "--out"), i + 1 < args.count {
 }
 let forIOS = args.contains("--ios")
 args.removeAll { $0 == "--ios" }
-let all = ["original", "candy", "hologram", "neon", "fluted-glass", "schoolbook", "colorful", "canary", "early-birds"]
-let ids = args.isEmpty ? all : args
-
 /// Each icon's name in the iPhone app's asset catalog (MobileAppIcon.alternateName).
-let iosNames = ["original": "AppIcon-Original", "candy": "AppIcon-Candy", "hologram": "AppIcon-Hologram", "neon": "AppIcon-Neon",
-                "fluted-glass": "AppIcon-FlutedGlass", "schoolbook": "AppIcon-Schoolbook", "colorful": "AppIcon-Colorful",
-                "canary": "AppIcon-Canary", "early-birds": "AppIcon-EarlyBirds"]
+let iosNames = ["canary": "AppIcon-Canary", "early-birds": "AppIcon-EarlyBirds"]
+let ids = args.isEmpty ? iosNames.keys.sorted() : args
+precondition(ids.allSatisfy { iosNames[$0] != nil }, "SVG alternates: \(iosNames.keys.sorted().joined(separator: ", "))")
+
 /// The rounded tile every icon draws once (824 px on the grid), and the square that replaces it for iOS.
 let squircle = "M100 396C100 292.4 100 240.6 120.2 201C137.9 166.2 166.2 137.9 201 120.2C240.6 100 292.4 100 396 100H628C731.6 100 783.4 100 823 120.2C857.8 137.9 886.1 166.2 903.8 201C924 240.6 924 292.4 924 396V628C924 731.6 924 783.4 903.8 823C886.1 857.8 857.8 886.1 823 903.8C783.4 924 731.6 924 628 924H396C292.4 924 240.6 924 201 903.8C166.2 886.1 137.9 857.8 120.2 823C100 783.4 100 731.6 100 628V396Z"
 
@@ -73,8 +71,6 @@ final class Renderer: NSObject, WKNavigationDelegate {
             sized = sized.replacingOccurrences(of: squircle, with: "M100 100H924V924H100Z")
                 .replacingOccurrences(of: #"viewBox="0 0 1024 1024""#, with: #"viewBox="100 100 824 824""#)
         }
-        // Original's tile is frosted glass (white at 51-75 %) that shows the Mac's desktop through it. An iPhone icon
-        // is opaque, so there it lies on iOS's light system grey, which keeps its rim and the C's white edge visible.
         let backdrop = forIOS ? "#c7c7cc" : "transparent"
         view.loadHTMLString("<!doctype html><html><body style='margin:0;background:\(backdrop);overflow:hidden'>\(sized)</body></html>", baseURL: nil)
     }

@@ -94,16 +94,18 @@ let package = Package(
             ]
         ),
     ]) + [
+        .target(name: "CraAppIcons"),
         // Dock tile plug-in: keeps the icon picked in Settings after Cra quits.
         .target(
             name: "CraDockTile",
+            dependencies: ["CraAppIcons"],
             path: "Sources/CraDockTile",
             linkerSettings: [.linkedFramework("AppKit")]
         ),
         // The browser itself: AppKit window, SwiftUI sidebar and command bar.
         .executableTarget(
             name: "Cra",
-            dependencies: ["CraCEF", .product(name: "CraCore", package: "CraCore")],
+            dependencies: ["CraAppIcons", "CraCEF", .product(name: "CraCore", package: "CraCore")],
             path: "Sources/Cra",
             swiftSettings: [.unsafeFlags(["-F", sparkleRoot]), .unsafeFlags(["-Onone"], .when(configuration: .debug))],
             linkerSettings: [.unsafeFlags(["-F", sparkleRoot, "-framework", "Sparkle",

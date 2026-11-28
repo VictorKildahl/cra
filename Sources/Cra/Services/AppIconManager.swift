@@ -1,4 +1,5 @@
 import AppKit
+import CraAppIcons
 import Security
 import Observation
 import UniformTypeIdentifiers
@@ -21,9 +22,8 @@ final class AppIconManager {
 
     static let defaultID = "segments"
     static let customID = "custom"
-    /// Segments, then Arc's own icon set in Arc's order (its AppIcon cases: original, candy, hologram, neon,
-    /// flutedGlass, schoolbook, colorful, and the canary and Early Birds channel icons), redrawn around Cra's C
-    /// by Provok (github.com/mat-up/cra-icons, MIT; sources in brand/arc-icons), then Cra's earlier alternates.
+    /// Gilad S. designed Segments and the native alternates in Icon Composer.
+    /// Canary and Early Birds use Provok's SVG artwork (MIT, in brand/arc-icons).
     static let presets = [
         Option(id: defaultID, name: "Segments"),
         Option(id: "original", name: "Original"),
@@ -49,6 +49,9 @@ final class AppIconManager {
         Notification.Name((Bundle.main.bundleIdentifier ?? "dk.kildahl.cra") + ".appIconChanged")
     }
 
+    private var nativeImages = NSCache<NSString, NSImage>()
+    @ObservationIgnored private var appearanceObservation: AppIconAppearanceObservation?
+
     private(set) var selectedID: String
     /// The user's own icon, kept even while a preset is selected.
     private(set) var customImage: NSImage?
@@ -61,6 +64,13 @@ final class AppIconManager {
         let known = Self.presets.contains { $0.id == stored } || (stored == Self.customID && custom != nil)
         selectedID = known ? stored : Self.defaultID
         customImage = custom
+        if #available(macOS 26, *) {
+            appearanceObservation = AppIconAppearanceObservation { [weak self] in
+                guard let self else { return }
+                self.nativeImages = NSCache()
+                if AppIconResources.nativeAlternateIDs.contains(self.selectedID) { self.setDockImage() }
+            }
+        }
     }
 
     /// The picked icon as the Dock tile gets it, nil while the Dock draws the bundle's own (Segments, in the
@@ -92,16 +102,21 @@ final class AppIconManager {
     }
 
     func image(for id: String) -> NSImage? {
-        // app-icons/segments.png (macOS 14, 15) and segments-glass.png (macOS 26, the Icon Composer icon) are the bundled
-        // icon on the grid, for the picker; the Dock draws the bundle's own icon itself (apply(), #865).
-        id == Self.customID ? customImage : imageURL(for: id).flatMap(NSImage.init(contentsOf:))
-    }
-
-    private func imageURL(for id: String) -> URL? {
-        id == Self.customID ? Self.customURL
-            : Bundle.main.url(forResource: AppIconBundle.previewName(for: id, defaultID: Self.defaultID,
-                                                                     macOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
-                              withExtension: "png", subdirectory: "app-icons")
+        if id == Self.customID { return customImage }
+        // An old Finder override can still be in IconServices' cache. Read the compiled primary artwork directly.
+        if id == Self.defaultID && bundleIconStale {
+            return Bundle.main.url(forResource: "AppIcon", withExtension: "icns").flatMap(NSImage.init(contentsOf:))
+        }
+        if id == Self.defaultID || AppIconResources.nativeAlternateIDs.contains(id) {
+            if let image = nativeImages.object(forKey: id as NSString) { return image }
+            if let image = AppIconResources.image(named: id, in: .main) {
+                nativeImages.setObject(image, forKey: id as NSString)
+                return image
+            }
+        }
+        let name = AppIconBundle.previewName(for: id, defaultID: Self.defaultID,
+                                             macOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)
+        return Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "app-icons").flatMap(NSImage.init(contentsOf:))
     }
 
     /// `remember` false (cra://debug?appIcon=) shows the icon without writing the defaults, which a test
@@ -166,7 +181,7 @@ final class AppIconManager {
     /// and 0.1.55 did, so a scenario can check that a launch takes it off again.
     func putBundleIconForTest(_ id: String) {
         let bundle = Bundle.main.bundleURL
-        let image = imageURL(for: id).flatMap(NSImage.init(contentsOf:))
+        let image = self.image(for: id)
         Self.bundleQueue.async {
             let done = image.map { NSWorkspace.shared.setIcon($0, forFile: bundle.path, options: []) } ?? false
             CraLog.note("app icon: \(id) \(done ? "put on the app for a test" : "not put on the app")")

@@ -1,6 +1,20 @@
 import CraCore
 import SwiftUI
 
+extension MobileAppIcon {
+    // Xcode exports the Icon Composer previews as bundle files. Other previews are catalog images.
+    private static let nativePreviews: [Self: UIImage] = allCases.reduce(into: [:]) { images, icon in
+        if let url = Bundle.main.url(forResource: icon.previewName, withExtension: "png") {
+            images[icon] = UIImage(contentsOfFile: url.path)
+        }
+    }
+
+    var previewImage: Image {
+        if let image = Self.nativePreviews[self] { return Image(uiImage: image) }
+        return Image(previewName)
+    }
+}
+
 /// App Settings ▸ Change App Icon: Arc Search's bottom sheet, from 60fps.design's "App Icon Dock
 /// Picker" clip. "App Icon" over a row of icons standing on a glass shelf that scrolls sideways;
 /// the current one sits a little larger and higher with a blue dot under it. Picking one changes
@@ -70,7 +84,7 @@ struct AppIconDock: View {
                 LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.9)], startPoint: .top, endPoint: .bottom)
                 HStack(spacing: Self.gap) {
                     ForEach(MobileAppIcon.allCases) { icon in
-                        Image(icon.previewName).resizable().frame(width: Self.icon, height: Self.icon)
+                        icon.previewImage.resizable().frame(width: Self.icon, height: Self.icon)
                             .clipShape(RoundedRectangle(cornerRadius: Self.icon * 0.225, style: .continuous))
                             .scaleEffect(x: 1, y: -1)
                             .opacity(0.13).blur(radius: 1.5)
@@ -97,7 +111,7 @@ struct AppIconDock: View {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) { selected = icon }
             AppIconPicker.apply(icon)
         } label: {
-            Image(icon.previewName).resizable().frame(width: Self.icon, height: Self.icon)
+            icon.previewImage.resizable().frame(width: Self.icon, height: Self.icon)
                 .clipShape(RoundedRectangle(cornerRadius: Self.icon * 0.225, style: .continuous))
                 .shadow(color: .black.opacity(0.18), radius: 6, y: 4)
                 .scaleEffect(isSelected ? 1.08 : 1)

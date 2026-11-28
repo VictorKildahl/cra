@@ -27,6 +27,8 @@
 	<string>__VERSION__</string>
 	<key>CFBundleVersion</key>
 	<string>__BUILD__</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<!-- Keeps the icon picked in Settings in the Dock while Cra is not running. -->

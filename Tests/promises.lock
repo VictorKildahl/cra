@@ -1705,8 +1705,8 @@
 #739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::aLaunchWithSegmentsLeavesTheApplicationIconAlone  25e46ecec582
 #739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::segmentsIsGivenToTheDockWhileItsCacheMayBeStale  9ac039c2814c
 #739   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::segmentsIsLeftToTheDockSoItFollowsTheIconStyle  d6d0d50c159d
-#739   Packages/CraCore/Tests/CraCoreTests/AppIconCatalogTests.swift::theBundledIconHasALightADarkAndATintedLook  73b359c41e16
-#739   Packages/CraCore/Tests/CraCoreTests/AppIconCatalogTests.swift::theIconKeepsGiladsMacOS27Features  8b2eccb42cac
+#739   Packages/CraCore/Tests/CraCoreTests/AppIconCatalogTests.swift::theBundledIconHasALightADarkAndATintedLook  7466c9f0b8e6
+#739   Packages/CraCore/Tests/CraCoreTests/AppIconCatalogTests.swift::theIconKeepsGiladsMacOS27Features  ee91c8bd51e0
 #739   Packages/CraCore/Tests/CraCoreTests/AppIconGridTests.swift::theBundledIconSitsOnApplesGrid  46b9e330c383
 #739   Tests/Scenarios/app-icon-segments-dock.scenario  25c9642c4b70
 #740   Packages/CraCore/Tests/CraCoreTests/CloseSuccessorTests.swift::closeTabInAFavoritesMenuLetsItsPageGo  37f7421f67ad
@@ -1964,7 +1964,7 @@
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::nowhereIsSilentAndComingBackTicks  b0622ee05ea5
 #883   Packages/CraCore/Tests/CraCoreTests/SidebarReorderHapticsTests.swift::theSamePlaceTicksOnce  20e7ead609e3
 #883   Tests/Scenarios/sidebar-reorder-haptics.scenario  a67cbf7b9082
-#884   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::onlyTheBundlesOwnIconSwitchesWithLightAndDark  b32d18164fe2
+#884   Packages/CraCore/Tests/CraCoreTests/AppIconBundleTests.swift::onlyThePrimaryIconIsDrawnByTheDockItself  720a5c46cd19
 #885   Packages/CraCore/Tests/CraCoreTests/MobileSpaceBarTests.swift::eightSpacesScrollOnAMini  e6cb437f094e
 #885   Packages/CraCore/Tests/CraCoreTests/MobileSpaceBarTests.swift::whatFitsStaysStill  c3c40ac4d337
 #885   iOS/CraUITests/BrowserTests.swift::testManySpacesKeepTheSheetOnScreen  983d85777c2d

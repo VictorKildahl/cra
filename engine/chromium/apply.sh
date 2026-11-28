@@ -22,8 +22,11 @@ cp "$HERE/hooks/cra_permission_hook.h" "$SRC/chrome/browser/cra_permission_hook.
 # the Alerts helper macOS lists notifications under). Written only when different, so a rerun rebuilds nothing.
 cmp -s "$HERE/branding/BRANDING" "$SRC/chrome/app/theme/chromium/BRANDING" ||
   cp "$HERE/branding/BRANDING" "$SRC/chrome/app/theme/chromium/BRANDING"
-cmp -s "$HERE/../../resources/AppIcon.icns" "$SRC/chrome/app/theme/chromium/mac/app.icns" ||
-  cp "$HERE/../../resources/AppIcon.icns" "$SRC/chrome/app/theme/chromium/mac/app.icns"
+icon_out="$(mktemp -d)"
+trap 'rm -rf "$icon_out"' EXIT
+"$HERE/../../scripts/compile-app-icon.sh" "$icon_out"
+cmp -s "$icon_out/AppIcon.icns" "$SRC/chrome/app/theme/chromium/mac/app.icns" ||
+  cp "$icon_out/AppIcon.icns" "$SRC/chrome/app/theme/chromium/mac/app.icns"
 # Google's Widevine signer isn't in public checkouts; an official build of Chrome's framework runs it.
 if [ ! -f "$SRC/third_party/widevine/scripts/signature_generator.py" ]; then
   mkdir -p "$SRC/third_party/widevine/scripts"

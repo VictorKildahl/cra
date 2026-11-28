@@ -2635,10 +2635,7 @@ final class AppIconDockTests: BrowserTestCase {
         XCTAssertTrue(last.exists && sheet.contains(last.frame), "the last icon never scrolled into the picker \(sheet)")
     }
 
-    /// Arc's icon set with Cra's C (Provok's, in the Mac's Settings ▸ Icon since 23 Nov 2026) is on the iPhone too,
-    /// asked for on X by Chanan Krivisky: the App Icon picker shows all of it after Cra's own four, and picking one
-    /// changes the app's icon. The picker marks what iOS reports, so after a relaunch Candy is still the one marked.
-    /// The grid is lazy, so it scrolls to an icon before looking for it.
+    /// Reopening the picker reads the active alternate from iOS.
     func testArcIconSetChangesTheAppIcon() {
         launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
         XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
@@ -2648,18 +2645,19 @@ final class AppIconDockTests: BrowserTestCase {
             XCTAssertTrue(reveal(icon, down: true), "\(icon) is in the picker")
         }
         keep("app-icon-picker-arc-set-end")
-        XCTAssertTrue(reveal("candy", down: false))
-        app.buttons["icon-candy"].tap()
-        acknowledgeIconChange()
-        XCTAssertTrue(app.buttons["icon-candy"].isSelected, "Candy is marked once picked")
-
-        app.terminate()
-        launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
-        XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["icon-segments"].isSelected)
-        XCTAssertTrue(reveal("candy", down: true))
-        XCTAssertTrue(app.buttons["icon-candy"].isSelected, "iOS kept Candy as the app's icon")
-        keep("app-icon-picker-candy")
+        for icon in ["original", "candy", "hologram", "neon", "fluted-glass", "schoolbook", "colorful"] {
+            XCTAssertTrue(reveal(icon, down: icon != "original"))
+            let button = app.buttons["icon-\(icon)"]
+            button.tap()
+            acknowledgeIconChange()
+            XCTAssertTrue(button.isSelected)
+            app.terminate()
+            launch(["-CraOpenURL", Self.page("First"), "-CraSearch", "NO", "-CraShortcut", "change-icon"])
+            XCTAssertTrue(app.navigationBars["App Icon"].waitForExistence(timeout: 5))
+            XCTAssertTrue(reveal(icon, down: true))
+            XCTAssertTrue(app.buttons["icon-\(icon)"].isSelected, "iOS kept \(icon) as the app's icon")
+            if icon == "candy" { keep("app-icon-picker-candy") }
+        }
 
         // Back to the app's own icon, so other tests start from it.
         XCTAssertTrue(reveal("segments", down: false))

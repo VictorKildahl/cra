@@ -33,7 +33,6 @@ bootstrap() {
       -c "Delete :UTExportedTypeDeclarations" "$APP/Contents/Info.plist"
   $PB -c "Delete :SUFeedURL" "$APP/Contents/Info.plist"
   echo -n "APPL????" > "$APP/Contents/PkgInfo"
-  [ -f resources/AppIcon.icns ] && cp resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
   local fw="$APP/Contents/Frameworks/Chromium Embedded Framework.framework"
   cp -R "$ROOT/vendor/cef/Release/Chromium Embedded Framework.framework" "$APP/Contents/Frameworks/" || return 1
   find "$fw/Libraries" -name '*.dylib' -exec codesign --force --sign - {} \; 2>/dev/null || return 1
@@ -86,6 +85,25 @@ build() {
      ! cmp -s "$ROOT/vendor/sparkle/VERSION" "$APP/Contents/Resources/sparkle-version"; then
     bootstrap || return 1
   fi
+  local catalog="$APP/Contents/Resources/Assets.car"
+  local source id missing_helper=false
+  for source in resources/app-icons/AppIcon-*.icon; do
+    id=$(basename "${source##*/AppIcon-}" .icon | tr '[:upper:]' '[:lower:]')
+    if [ ! -x "$APP/Contents/Helpers/CraIcon-$id.app/Contents/MacOS/CraIcon" ]; then missing_helper=true; break; fi
+  done
+  if [ "$missing_helper" = true ] || [ ! -s "$catalog" ] ||
+     [ -n "$(find resources/AppIcon.icon resources/app-icons/AppIcon-*.icon scripts/{build-app-icons,compile-app-icon}.sh -newer "$catalog" -print -quit)" ]; then
+    scripts/build-app-icons.sh "$APP" "$(uname -m)" || return 1
+    local alerts="$APP/Contents/Frameworks/$NAME Helper (Alerts).app"
+    mkdir -p "$alerts/Contents/Resources" || return 1
+    cp "$catalog" "$APP/Contents/Resources/AppIcon.icns" "$alerts/Contents/Resources/" || return 1
+    plutil -replace CFBundleIconName -string AppIcon "$alerts/Contents/Info.plist" || return 1
+    plutil -replace CFBundleIconFile -string AppIcon "$alerts/Contents/Info.plist" || return 1
+    if [ -x "$alerts/Contents/MacOS/$NAME Helper (Alerts)" ]; then
+      codesign --force --sign - --entitlements resources/CraHelper.entitlements "$alerts" || return 1
+    fi
+    plutil -replace CFBundleIconName -string AppIcon "$APP/Contents/Info.plist" || return 1
+  fi
   for entry in "${HELPERS[@]}"; do
     local ns="${entry%%|*}"
     local helper="$APP/Contents/Frameworks/$NAME Helper$ns.app"
@@ -94,10 +112,17 @@ build() {
       codesign --force --sign - --entitlements resources/CraHelper.entitlements "$helper" || return 1
     fi
   done
+  local plugin="$APP/Contents/PlugIns/CraDockTile.docktileplugin"
+  mkdir -p "$plugin/Contents/MacOS" || return 1
+  cp "$bin/libCraDockTile.dylib" "$plugin/Contents/MacOS/CraDockTile" || return 1
+  sed -e 's/__VERSION__/0.0.0-dev/' -e 's/__BUILD__/0/' -e 's/dk.kildahl.cra.docktile/dk.kildahl.cra.dev.docktile/' resources/DockTile-Info.plist > "$plugin/Contents/Info.plist" || return 1
+  codesign --force --sign - "$plugin" || return 1
   cp "$bin/Cra" "$APP/Contents/MacOS/$NAME" || return 1
   cp "$bin/CraPluginHost" "$APP/Contents/MacOS/CraPluginHost" || return 1
   codesign --force --sign - "$APP/Contents/MacOS/CraPluginHost" || return 1
-  for d in web brand blocklist browsers app-icons licenses fonts live-folder-plugins; do
+  mkdir -p "$APP/Contents/Resources/app-icons" || return 1
+  rsync -a --delete --exclude='*.icon' --exclude='segments-glass.png' resources/app-icons/ "$APP/Contents/Resources/app-icons/" || return 1
+  for d in web brand blocklist browsers licenses fonts live-folder-plugins; do
     if [ -d "resources/$d" ]; then
       rsync -a --delete "resources/$d/" "$APP/Contents/Resources/$d/" || return 1
     fi
