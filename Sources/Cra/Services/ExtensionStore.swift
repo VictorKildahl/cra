@@ -399,6 +399,17 @@ final class ExtensionStore {
     func pushManagedExtensions() {
         guard Self.canShare else { return }
         CraCEFRuntime.setManagedExtensionIDs(shares.managedIDs(allProfiles: Self.profileFolders))
+        // Shares that use one profile's data (discussion #595's follow-up): the engine routes their chrome.storage.
+        if Self.canShareData {
+            CraCEFRuntime.setSharedExtensionStorage(shares.storageHomes(allProfiles: Self.profileFolders)
+                .mapValues { ["home": $0.home, "profiles": $0.profiles] as [String: Any] })
+        }
+    }
+
+    /// Whether this engine shares an extension's data between profiles and has its one switch: engines from before
+    /// the follow-up on discussion #595 keep each profile's own data, and Settings says so.
+    static var canShareData: Bool {
+        CraCEFRuntime.responds(to: #selector(CraCEFRuntime.setSharedExtensionStorage(_:)))
     }
 
     /// The extensions a profile's extensions.settings holds, of any install location.
@@ -507,6 +518,42 @@ final class ExtensionStore {
         reconcileLoadedProfiles()
     }
 
+    /// Settings ▸ Extensions ▸ Share across Profiles… (discussion #595's follow-up): the extension set up in `home`
+    /// goes into exactly `profiles`, each using home's data; a profile that had its own install keeps it, now on home's
+    /// data (Settings asked first). Profiles made later don't get it.
+    func share(_ e: Entry, from home: String, with profiles: [String]) {
+        var next = shares
+        next.share(e.extensionID, from: home, with: profiles)
+        askStoreAgain(e.extensionID)
+        saveShared(next)
+        CraLog.note("shared extension \(e.extensionID): shared from \(home) with \(next.profiles(of: e.extensionID, allProfiles: Self.profileFolders).joined(separator: ", "))")
+        reconcileLoadedProfiles()
+        applySharedSwitch(e.extensionID)
+    }
+
+    /// Settings' switch for a shared extension: on or off in every profile it is in.
+    func setSharedOn(_ e: Entry, _ on: Bool) {
+        var next = shares
+        guard next.setOn(e.extensionID, on) else { return }
+        saveShared(next)
+        CraLog.note("shared extension \(e.extensionID): turned \(on ? "on" : "off") in all its profiles")
+        applySharedSwitch(e.extensionID)
+    }
+
+    /// Chrome's switch in each loaded profile follows the shared one; a profile turned the other way in
+    /// chrome://extensions turns them all (SharedExtensions.followSwitch).
+    private func applySharedSwitch(_ id: String, changed: Set<String> = []) {
+        guard Self.canShareData, shares.isShared(id), let e = entries.first(where: { $0.extensionID == id }) else { return }
+        let loaded = Self.profileFolders.filter { CraCEFRuntime.loadState(ofProfile: Self.profilePath($0)) == 2 }
+        var next = shares
+        let result = next.followSwitch(id, offIn: e.disabledProfiles, changed: changed, loaded: loaded, allProfiles: Self.profileFolders)
+        saveShared(next)
+        for (profile, on) in result.apply.sorted(by: { $0.key < $1.key }) {
+            let done = CraCEFRuntime.setExtensionEnabled(id, enabled: on, profilePath: Self.profilePath(profile))
+            CraLog.note("shared extension \(id): \(on ? "on" : "off") in \(profile)\(done ? "" : " failed")")
+        }
+    }
+
     /// A profile's checkmark under a shared extension: put in (installed there) or taken out (removed there, with its
     /// data in that profile).
     func setShared(_ e: Entry, profile: String, included: Bool) {
@@ -522,8 +569,13 @@ final class ExtensionStore {
         reconcileLoadedProfiles()
     }
 
-    /// Stop Sharing: every install stays where it is, each profile's own again.
+    /// Stop Sharing: every install stays where it is, each profile's own again. A share that uses one profile's data
+    /// stops only when that profile is the last one in it (SharedExtensions.canStopSharing).
     func stopSharing(_ e: Entry) {
+        guard shares.home(of: e.extensionID) == nil || shares.canStopSharing(e.extensionID, allProfiles: Self.profileFolders) else {
+            CraLog.note("shared extension \(e.extensionID): still shared with more than one profile; not stopped")
+            return
+        }
         var next = shares
         next.stopSharing(e.extensionID)
         saveShared(next)
@@ -661,7 +713,16 @@ final class ExtensionStore {
             for p in e.disabledProfiles.subtracting(old.disabledProfiles).sorted() { CraLog.note("extension \(e.extensionID) turned off in \(p)") }
             for p in old.disabledProfiles.subtracting(e.disabledProfiles).sorted() { CraLog.note("extension \(e.extensionID) turned on in \(p)") }
         }
+        let before = entries
         entries = next
+        // A shared extension turned on or off in one profile's chrome://extensions: the same in all of them. Only a
+        // profile that had it before and switched since counts; one that just loaded follows (#595 follow-up).
+        for e in next where shares.isShared(e.extensionID) {
+            let old = before.first { $0.extensionID == e.extensionID }
+            let flipped = e.disabledProfiles.symmetricDifference(old?.disabledProfiles ?? [])
+                .intersection(old?.profiles ?? []).intersection(e.profiles ?? [])
+            applySharedSwitch(e.extensionID, changed: flipped)
+        }
         pinned.removeAll { id in !entries.contains { $0.extensionID == id } }
         noteProxyControllers(settings: settings)
         settleShared(live: live)

@@ -306,6 +306,21 @@ struct ModelFixtureTests {
                 == .init(uninstall: ["cjpalhdlnbpafiamejdnhcphjbkeiagm"]))
     }
 
+    /// shared-extensions.json after discussion #595's follow-up: an opt-in share (its profiles, the profile whose data
+    /// it uses, switched off) beside a share from before (every profile but the excluded), which keeps its shape.
+    @Test(.bug("https://github.com/VictorKildahl/cra/issues/595"))
+    func optInSharedExtensionsLoadAsRecorded() throws {
+        let (loaded, recorded) = try Self.load("shared-extensions-opt-in.json", as: SharedExtensions.self)
+        #expect(loaded == recorded)
+        #expect(try Self.roundTrips(loaded))
+        let all = ["Default", "Profile B0000000-0000-0000-0000-000000000001", "Profile B0000000-0000-0000-0000-000000000002"]
+        #expect(loaded.profiles(of: "bpoadfkcbjbfhfodiogcnhhhpibjhbnh", allProfiles: all) == Array(all.prefix(2)))
+        #expect(loaded.home(of: "bpoadfkcbjbfhfodiogcnhhhpibjhbnh") == all[1])
+        #expect(!loaded.isOn("bpoadfkcbjbfhfodiogcnhhhpibjhbnh"))
+        #expect(loaded.profiles(of: "cjpalhdlnbpafiamejdnhcphjbkeiagm", allProfiles: all) == Array(all.prefix(2)))
+        #expect(loaded.home(of: "cjpalhdlnbpafiamejdnhcphjbkeiagm") == nil)
+    }
+
     /// imported-browsers.json (#757): the browsers imported from, whose own folders Cra may read
     /// at launch; a browser listed twice loads once, and it saves as a plain array.
     @Test(.bug("https://github.com/VictorKildahl/cra/issues/757"))

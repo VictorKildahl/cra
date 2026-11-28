@@ -341,6 +341,32 @@ enum ExtensionStoreMigrationTests {
             check(!savedShares().isShared(install.id) && CraCEFRuntime.managed.isEmpty, "and stops sharing it")
         }
 
+        // Discussion #595's follow-up: shared from the profile it was set up in, with the profiles picked.
+        try run("shared-from-a-home") { install in
+            let store = try setUp(install)
+            CraCEFRuntime.storage = [:]
+            CraCEFRuntime.switched = []
+            guard let e = store.entries.first(where: { $0.extensionID == install.id }) else { return check(false, "listed") }
+            store.share(e, from: "Default", with: [work])
+            check(savedShares().home(of: install.id) == "Default", "the share keeps where it was set up")
+            check(CraCEFRuntime.managed == ["Default": [install.id], work: [install.id]], "Chrome keeps it in both picked profiles")
+            check((CraCEFRuntime.storage[install.id]?["home"] as? String) == "Default"
+                  && (CraCEFRuntime.storage[install.id]?["profiles"] as? [String]) == ["Default", work],
+                  "the engine is told whose data both profiles use")
+            check(CraCEFRuntime.installs.map(\.profile) == [workPath()], "Work gets the store's install")
+            store.stopSharing(e)
+            check(savedShares().isShared(install.id), "Stop Sharing waits while two profiles use Default's data")
+            store.setSharedOn(e, false)
+            check(Set(CraCEFRuntime.switched.filter { !$0.on }.map(\.profile)) == ["Default", workPath()],
+                  "one switch: off in both loaded profiles")
+            store.setSharedOn(e, true)
+            try install.liveSettings(install.settings(), profile: work)  // the store installed it there
+            store.setShared(e, profile: work, included: false)
+            check(!liveIDs(workPath()).contains(install.id), "taken out of Work: removed there")
+            store.stopSharing(e)
+            check(!savedShares().isShared(install.id) && CraCEFRuntime.storage.isEmpty, "with Default alone it stops, on its own data")
+        }
+
         try run("stop-sharing-keeps-installs") { install in
             let store = try setUp(install)
             guard let e = store.entries.first(where: { $0.extensionID == install.id }) else { return check(false, "listed") }

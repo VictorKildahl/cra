@@ -116,6 +116,12 @@ CI runs the same tests on every pull request and push to main (no CEF download),
 `scripts/coverage.py` plus `scripts/lint.py`, and the smoke test on the app it builds. A change
 to Markdown or `docs/` alone runs nothing.
 
+A harness that needs CraCore sources `scripts/harness-cracore.sh` and puts `"${CRACORE[@]}"` on
+its `swiftc` line instead of CraCore's files. CraCore is then built once as a library, with the
+harness's `CRA_TEST_SWIFTC_FLAGS`, and kept in `build/harness-cracore/` until its sources, those
+flags or the compiler change. Compiling CraCore's 370 files inside each harness took most of CI's
+time, on one core.
+
 - `Packages/CraCore` (`swift test --package-path Packages/CraCore`): a package of its own, so
   its tests build without `vendor/cef`. Code that decides something without a window or a
   page belongs here, with a test: a layout rule, a mapping from Arc's or Chromium's files,

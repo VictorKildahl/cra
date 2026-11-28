@@ -10,13 +10,52 @@ import Foundation
 /// one profile's own, managed in chrome://extensions as before.
 ///
 /// `{"shared": {"<id>": {"excluded": ["Profile <uuid>"]}}, "removals": {"Profile <uuid>": ["<id>"]}}`
+///
+/// Since the follow-up on discussion #595 (Anoninz, 27 Nov 2026) a share is opt-in and shares the extension's own
+/// data: `{"included": ["Default", "Profile <uuid>"], "home": "Default", "off": true}`. `included` names exactly the
+/// profiles it is in (profiles made later are not), `home` is the profile it was set up in, whose chrome.storage (local
+/// and sync) every included profile reads and writes (the engine routes it; websites' cookies and logins stay each
+/// profile's own), and `off` turns it off in all of them at once. A share from before has neither: every profile but
+/// the excluded ones, each with its own data.
 public struct SharedExtensions: Codable, Equatable, Sendable {
     public struct Share: Codable, Equatable, Sendable {
-        /// Profile folders ("Default", "Profile <uuid>") the person took it out of.
+        /// Profile folders ("Default", "Profile <uuid>") the person took it out of (a share from before the opt-in).
         public var excluded: [String]
+        /// The profiles it is in, picked when it was shared (nil: every profile but `excluded`, as shares from before).
+        public var included: [String]?
+        /// The profile it was set up in: its data is the one every included profile uses (nil: each its own).
+        public var home: String?
+        /// Turned off in every profile it is in.
+        public var off: Bool
 
-        public init(excluded: [String] = []) {
+        public init(excluded: [String] = [], included: [String]? = nil, home: String? = nil, off: Bool = false) {
             self.excluded = excluded
+            self.included = included
+            self.home = home
+            self.off = off
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            excluded = try c.decodeIfPresent([String].self, forKey: .excluded) ?? []
+            included = try c.decodeIfPresent([String].self, forKey: .included)
+            home = try c.decodeIfPresent(String.self, forKey: .home)
+            off = try c.decodeIfPresent(Bool.self, forKey: .off) ?? false
+        }
+
+        /// A share from before writes what it read: only `excluded`.
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            if included == nil || !excluded.isEmpty { try c.encode(excluded, forKey: .excluded) }
+            try c.encodeIfPresent(included, forKey: .included)
+            try c.encodeIfPresent(home, forKey: .home)
+            if off { try c.encode(off, forKey: .off) }
+        }
+
+        private enum CodingKeys: String, CodingKey { case excluded, included, home, off }
+
+        func contains(_ profile: String) -> Bool {
+            included.map { $0.contains(profile) } ?? !excluded.contains(profile)
         }
     }
 
@@ -39,7 +78,7 @@ public struct SharedExtensions: Codable, Equatable, Sendable {
     /// The profiles a shared extension belongs in, in `allProfiles` order; none when it isn't shared.
     public func profiles(of id: String, allProfiles: [String]) -> [String] {
         guard let share = shared[id] else { return [] }
-        return allProfiles.filter { !share.excluded.contains($0) }
+        return allProfiles.filter(share.contains)
     }
 
     /// The extensions Chrome keeps installed in each profile (CraCEFRuntime.setManagedExtensionIDs): the shared
@@ -47,7 +86,7 @@ public struct SharedExtensions: Codable, Equatable, Sendable {
     public func managedIDs(allProfiles: [String]) -> [String: [String]] {
         var byProfile: [String: [String]] = [:]
         for profile in allProfiles {
-            let ids = shared.filter { !$0.value.excluded.contains(profile) }.keys.sorted()
+            let ids = shared.filter { $0.value.contains(profile) }.keys.sorted()
             if !ids.isEmpty { byProfile[profile] = ids }
         }
         return byProfile
@@ -72,7 +111,7 @@ public struct SharedExtensions: Codable, Equatable, Sendable {
     /// owed there that it still has.
     public func plan(profile: String, installed: Set<String>, refused: WebStoreRefusals = WebStoreRefusals()) -> Plan {
         let install = shared.filter { id, share in
-            !share.excluded.contains(profile) && !installed.contains(id) && !refused.isRefused(folder: id, inProfile: profile)
+            share.contains(profile) && !installed.contains(id) && !refused.isRefused(folder: id, inProfile: profile)
         }.keys.sorted()
         // One shared there again since is left alone (setIncluded drops it, this makes sure).
         let owed = (removals[profile] ?? []).filter { id in
@@ -91,10 +130,81 @@ public struct SharedExtensions: Codable, Equatable, Sendable {
         return self != before
     }
 
-    /// Whether the person may take `id` out of `profile`: not out of the last profile it is in (that is Remove).
+    /// Shares `id` from `home`, the profile it was set up in, with exactly `profiles` (home always among them): each
+    /// gets the store's install and uses home's data for it (discussion #595's follow-up). Profiles made later don't
+    /// get it. True when anything changed.
+    @discardableResult
+    public mutating func share(_ id: String, from home: String, with profiles: [String]) -> Bool {
+        let before = self
+        let included = Array(Set(profiles + [home])).sorted()
+        shared[id] = Share(included: included, home: home)
+        for profile in included { dropRemoval(id, profile: profile) }
+        return self != before
+    }
+
+    /// The profiles `share(_:from:with:)` would give home's data although they have the extension already, their own
+    /// install with their own data, which Settings asks about first. In `profiles`' order, home left out.
+    public static func replacedInstalls(home: String, profiles: [String], installedIn: Set<String>) -> [String] {
+        profiles.filter { $0 != home && installedIn.contains($0) }
+    }
+
+    /// The profile whose data a shared extension uses everywhere, nil when each profile keeps its own.
+    public func home(of id: String) -> String? { shared[id]?.home }
+
+    /// Shared extensions whose data comes from one profile, for the engine (CraCEFRuntime.setSharedExtensionStorage):
+    /// by extension ID, its home and the profiles that use it (home among them).
+    public func storageHomes(allProfiles: [String]) -> [String: (home: String, profiles: [String])] {
+        var homes: [String: (home: String, profiles: [String])] = [:]
+        for (id, share) in shared {
+            guard let home = share.home else { continue }
+            homes[id] = (home, profiles(of: id, allProfiles: allProfiles))
+        }
+        return homes
+    }
+
+    /// Whether the person may take `id` out of `profile`: not out of the last profile it is in (that is Remove), and
+    /// not out of its home while it is in others: the data they use lives there.
     public func canExclude(_ id: String, profile: String, allProfiles: [String]) -> Bool {
         let inProfiles = profiles(of: id, allProfiles: allProfiles)
-        return inProfiles.contains(profile) && inProfiles.count > 1
+        return inProfiles.contains(profile) && inProfiles.count > 1 && shared[id]?.home != profile
+    }
+
+    /// Stop Sharing is offered once one profile is left: that profile keeps the extension as its own, with the data
+    /// it was using (the home's, which is that profile's own). With more, the person takes the others out first, so
+    /// nobody's data has to be guessed.
+    public func canStopSharing(_ id: String, allProfiles: [String]) -> Bool {
+        isShared(id) && profiles(of: id, allProfiles: allProfiles).count <= 1
+    }
+
+    /// Whether a shared extension is on (in every profile it is in) or off (in all of them).
+    public func isOn(_ id: String) -> Bool { !(shared[id]?.off ?? false) }
+
+    /// Turns a shared extension on or off in all its profiles. True when anything changed.
+    @discardableResult
+    public mutating func setOn(_ id: String, _ on: Bool) -> Bool {
+        guard var share = shared[id], share.off == on else { return false }
+        share.off = !on
+        shared[id] = share
+        return true
+    }
+
+    /// One switch for a shared extension: Chrome says which of its profiles have it turned off now (`offIn`), and in
+    /// which the switch changed since Cra last looked (`changed`: the person used chrome://extensions there). A change
+    /// is the shared state for every profile it is in; otherwise each loaded profile follows the shared state (one that
+    /// has just loaded, say). Returns the state and the profiles Chrome must switch (profile → on). Profiles that
+    /// haven't loaded aren't in `loaded`: they follow as they load.
+    public mutating func followSwitch(_ id: String, offIn: Set<String>, changed: Set<String> = [], loaded: [String],
+                                      allProfiles: [String]) -> (on: Bool, apply: [String: Bool]) {
+        guard isShared(id) else { return (true, [:]) }
+        let members = profiles(of: id, allProfiles: allProfiles).filter(loaded.contains)
+        var on = isOn(id)
+        if let flipped = members.first(where: { changed.contains($0) && offIn.contains($0) == on }) {
+            on = !offIn.contains(flipped)
+        }
+        setOn(id, on)
+        var apply: [String: Bool] = [:]
+        for profile in members where offIn.contains(profile) == on { apply[profile] = on }
+        return (on, apply)
     }
 
     /// Puts a shared extension in `profile` or takes it out. Taking it out owes an uninstall there; putting it back
@@ -105,9 +215,11 @@ public struct SharedExtensions: Codable, Equatable, Sendable {
         let before = self
         if included {
             share.excluded.removeAll { $0 == profile }
+            if let list = share.included, !list.contains(profile) { share.included = (list + [profile]).sorted() }
             dropRemoval(id, profile: profile)
-        } else if !share.excluded.contains(profile) {
-            share.excluded = (share.excluded + [profile]).sorted()
+        } else if share.contains(profile) {
+            if let list = share.included { share.included = list.filter { $0 != profile } }
+            else { share.excluded = (share.excluded + [profile]).sorted() }
             removals[profile] = Array(Set((removals[profile] ?? []) + [id])).sorted()
         }
         shared[id] = share

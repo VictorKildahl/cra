@@ -5,8 +5,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cra-key-bindings.XXXXXX")"
 trap 'rm -rf "$TEST_DIR"' EXIT
+source scripts/harness-cracore.sh
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} \
-  Packages/CraCore/Sources/CraCore/*.swift Packages/CraCore/Sources/CraCore/Perf/*.swift Sources/Cra/Perf/Perf.swift \
+  "${CRACORE[@]}" Sources/Cra/Perf/Perf.swift \
   Sources/Cra/App/KeyBindings.swift Sources/Cra/Services/KeyboardLayoutCharacters.swift \
   Sources/Cra/Services/Persistence.swift Sources/Cra/Services/CraLog.swift \
   Tests/KeyBindingsTests.swift -o "$TEST_DIR/key-binding-tests"

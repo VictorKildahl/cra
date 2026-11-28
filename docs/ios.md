@@ -110,6 +110,11 @@ Create other iPads (13-inch, mini) by hand with `xcrun simctl create "<name>" <t
 
 ### On the iPhone Duo
 
+The Duo needs the app linked against the iOS 27.1 SDK or newer. iOS keeps an app linked on an older SDK in
+compatibility mode there: App Store 0.1.2 (build 1478, iOS 26.5 SDK, Xcode 26.6) showed a black column beside every
+page on the closed screen and a phone-sized window in the middle of the open one, while builds from source filled
+both. `scripts/ios-testflight.sh` runs `scripts/ios-sdk-check.sh` on the archive and won't upload an older one.
+
 On the Duo, the Spaces sheet's backgrounds (sync intro, Connecting, share prompt, icon bar) run under the status column, while its content stays in the safe area.
 
 The open Duo is treated like a small iPad (#866, Victor's call on 0xJeu's proposal, 27 Nov 2026), decided by
@@ -144,7 +149,13 @@ CRA_IOS_SIM="Cra Duo" scripts/ios.sh test CraUITests/GestureTests CraUITests/Set
 ```
 
 `scripts/ios.sh` would otherwise create an iPhone 17 under that name. Set posture (closed,
-half open, open) in Simulator, not in the script. The harness takes geometry from the app's
+half open, open) in Simulator, not in the script. With Xcode 27.2, `xcodebuild -downloadPlatform iOS` also installs
+the Duo's own runtime (`com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4`), Simulator is
+`Xcode.app/Contents/Applications/DeviceHub.app`, and its posture buttons (help "Closed", "Partially Open", "Open") can
+be pressed through Accessibility without the pointer. The closed and open screens are separate `--display` UUIDs in
+`simctl io <udid> enumerate` (1398 × 2034 and 2007 × 2853 px), listed once DeviceHub shows the device. To see what an
+older SDK does, stamp a copy of the built app with `vtool -set-build-version iossim 17.0 26.5 -replace` and re-sign it
+ad hoc with its entitlements. The harness takes geometry from the app's
 window because `app.frame` is portrait-swapped when open. XCTest screenshots can be black on
 the inner screen; `CRA_IOS_SIM="Cra Duo" scripts/ios.sh shot /tmp/duo.png` is the picture to
 trust. Pass `--display` to `simctl io screenshot` too, or it can return the Duo's unlit display.

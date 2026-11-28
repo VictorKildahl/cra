@@ -1527,7 +1527,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // target=floating: the sidebar sliding out at the edge, in its own panel (#424).
             if let g = dict["clickAt"]?.split(separator: ",").compactMap({ Double($0) }), g.count == 2,
                let w = dict["target"] == "little" ? littleWindows.last?.window
-                    : dict["target"] == "floating" ? main.floatingSidebar?.panelWindow : main.window {
+                    : dict["target"] == "floating" ? main.floatingSidebar?.panelWindow
+                    : dict["target"] == "historyMenu" ? main.backForwardMenu.content?.window : main.window {
                 let point = NSPoint(x: g[0], y: w.frame.height - g[1])
                 if let b = dict["button"], let button = ["back": MouseButtonSpaceSwitch.back, "forward": MouseButtonSpaceSwitch.forward][b] {
                     let taken = TestGesture.otherMouseUp(at: point, in: w).map { main.mouseButtonSwitchesSpace(button, $0) } ?? false
@@ -1547,7 +1548,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 // clicks=2: a double-click there (a favorite's Back to Pinned Page, #264); mods=<modifier
                 // bits>: keys held through it (524288, Option: a link opens in Split View, #298);
-                // button=right: a right-click (Back's history menu, #416).
+                // button=right: a right-click (Back's history menu, #416). target=historyMenu: in that menu's window.
                 TestGesture.click(at: point, in: w, clicks: dict["clicks"].flatMap(Int.init) ?? 1,
                                   modifiers: NSEvent.ModifierFlags(rawValue: dict["mods"].flatMap(UInt.init) ?? 0),
                                   right: dict["button"] == "right")
@@ -1979,8 +1980,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 }
                 if let profile = dict["profile"] {
                     ExtensionStore.shared.setShared(e, profile: profile, included: dict["included"] != "0")
+                } else if let home = dict["home"] {
+                    // &home=<folder>&with=<folder>,<folder>: Share across Profiles… (discussion #595's follow-up).
+                    let with = (dict["with"] ?? "").split(separator: ",").map(String.init)
+                    ExtensionStore.shared.share(e, from: home, with: with)
                 } else {
                     ExtensionStore.shared.share(e)
+                }
+                return
+            }
+            // extensionOn=<id>&on=0|1: a shared extension's switch in Settings, for all its profiles.
+            if let id = dict["extensionOn"], let e = ExtensionStore.shared.entries.first(where: { $0.extensionID == id }) {
+                ExtensionStore.shared.setSharedOn(e, dict["on"] != "0")
+                return
+            }
+            // extensionSections=<label>: Settings ▸ Extensions' sections and rows (discussion #595's follow-up).
+            if let label = dict["extensionSections"] {
+                ExtensionStore.shared.reload()
+                let profiles = [("Default", store.profileName(nil))] + store.profiles.map { ($0.directoryName, $0.name) }
+                let sections = ExtensionsLayout.sections(
+                    items: ExtensionStore.shared.entries.map {
+                        ExtensionsLayout.Item(id: $0.extensionID, name: $0.name, installedByChrome: $0.managedByChrome, profiles: $0.profiles)
+                    },
+                    shares: ExtensionStore.shared.shares, allProfiles: profiles.map(\.0),
+                    names: Dictionary(profiles, uniquingKeysWith: { a, _ in a }))
+                let text = sections.map { section in
+                    section.title + " [" + section.rows.map { $0.id + ($0.profile.map { "@" + $0 } ?? "") }.joined(separator: ", ") + "]"
+                }.joined(separator: "; ")
+                CraLog.note("extension sections \(label): \(text)")
+                for (id, home) in ExtensionStore.shared.shares.storageHomes(allProfiles: profiles.map(\.0)) {
+                    CraLog.note("extension sections \(label): \(id) home \(home.home) on=\(ExtensionStore.shared.shares.isOn(id) ? 1 : 0)")
                 }
                 return
             }
@@ -2548,8 +2577,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     // seeThrough: the window shows the blurred desktop under the sidebar, through the material
                     // (dark vibrant) or the backdrop layer (light vibrant, one colour), not an opaque fill (#643).
                     // ground: the backdrop layer's flat grey (0–255) while it draws no capture, an inactive window's (#876);
-                    // "blur" or "tint" while it does, "-" off the layer path.
-                    let ground = m.shell.drawnBackdrop.map { $0.source == .none ? String(format: "%.0f", 255 * $0.liftTop) : $0.source == .blur ? "blur" : "tint" } ?? "-"
+                    // "blur:<b>/<w>" while it blurs, the material over a black and a white backdrop (#876); "tint" in
+                    // full screen, "-" off the layer path.
+                    let ground = m.shell.drawnBackdrop.map { b -> String in
+                        switch b.source {
+                        case .none: return String(format: "%.0f", 255 * b.liftTop)
+                        case .blur: return String(format: "blur:%.0f/%.0f", 255 * b.liftTop, 255 * ((1 - b.dim) * (1 - b.liftTop) + b.liftTop))
+                        case .desktopTint: return "tint"
+                        }
+                    } ?? "-"
                     NSLog("Cra theme shown %@: space=%@ follows=%d theme=%@ shell=%@ sidebar=%@ library=%@ material=%@ seeThrough=%d vibrant=%d intensity=%.2f active=%d ground=%@",
                           label, space.title, space.theme.followsSystem ? 1 : 0,
                           side(space.theme.shown.isDark), side(m.shell.isDarkTheme), drawn, m.sidebarUI.libraryPage.map { "\($0)" } ?? "-", material,

@@ -1,0 +1,133 @@
+diff --git a/extensions/browser/api/storage/storage_api.cc b/extensions/browser/api/storage/storage_api.cc
+--- a/extensions/browser/api/storage/storage_api.cc
++++ b/extensions/browser/api/storage/storage_api.cc
+@@ -17,6 +17,7 @@
+ #include "base/trace_event/memory_usage_estimator.h"
+ #include "base/trace_event/trace_event.h"
+ #include "base/values.h"
++#include "chrome/browser/cra_engine_hooks.h"  // nogncheck: Cra's layer (engine/chromium)
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
+@@ -158,6 +159,19 @@
+   return true;
+ }
+ 
++// Cra: the frontend a shared extension's local and sync storage go through. Shared with other profiles from the
++// one it was set up in (GitHub discussion #595), it reads and writes that profile's data from every profile it is in;
++// session storage, managed storage and everything else stay this profile's.
++StorageFrontend* SettingsFunction::CraStorageFrontend() {
++  content::BrowserContext* context = browser_context();
++  if (cra::g_extension_storage_context && extension() &&
++      (storage_area() == StorageAreaNamespace::kLocal ||
++       storage_area() == StorageAreaNamespace::kSync)) {
++    context = cra::g_extension_storage_context(context, extension()->id());
++  }
++  return StorageFrontend::Get(context);
++}
++
+ bool SettingsFunction::IsAccessToStorageAllowed(
+     StorageAreaNamespace storage_area) {
+   api::storage::AccessLevel access_level = storage_utils::GetAccessLevelForArea(
+@@ -231,7 +245,7 @@
+       return RespondNow(BadMessage());
+   }
+ 
+-  StorageFrontend* frontend = StorageFrontend::Get(browser_context());
++  StorageFrontend* frontend = CraStorageFrontend();
+   frontend->GetValues(
+       extension(), storage_area(), std::move(keys),
+       base::BindOnce(&StorageStorageAreaGetFunction::OnGetOperationFinished,
+@@ -286,7 +300,7 @@
+ }
+ 
+ ExtensionFunction::ResponseAction StorageStorageAreaGetKeysFunction::Run() {
+-  StorageFrontend* frontend = StorageFrontend::Get(browser_context());
++  StorageFrontend* frontend = CraStorageFrontend();
+   frontend->GetKeys(
+       extension(), storage_area(),
+       base::BindOnce(
+@@ -342,7 +356,7 @@
+       return RespondNow(BadMessage());
+   }
+ 
+-  StorageFrontend* frontend = StorageFrontend::Get(browser_context());
++  StorageFrontend* frontend = CraStorageFrontend();
+   frontend->GetBytesInUse(
+       extension(), storage_area(), keys,
+       base::BindOnce(&StorageStorageAreaGetBytesInUseFunction::
+@@ -376,7 +390,7 @@
+   base::Value input = std::move(mutable_args[0]);
+   mutable_args.erase(args().begin());
+ 
+-  StorageFrontend* frontend = StorageFrontend::Get(browser_context());
++  StorageFrontend* frontend = CraStorageFrontend();
+   frontend->Set(
+       extension(), storage_area(), std::move(input).TakeDict(),
+       base::BindOnce(&StorageStorageAreaSetFunction::OnWriteOperationFinished,
+@@ -411,7 +425,7 @@
+       return RespondNow(BadMessage());
+   }
+ 
+-  StorageFrontend* frontend = StorageFrontend::Get(browser_context());
++  StorageFrontend* frontend = CraStorageFrontend();
+   frontend->Remove(
+       extension(), storage_area(), keys,
+       base::BindOnce(
+@@ -426,7 +440,7 @@
+ }
+ 
+ ExtensionFunction::ResponseAction StorageStorageAreaClearFunction::Run() {
+-  StorageFrontend* frontend = StorageFrontend::Get(browser_context());
++  StorageFrontend* frontend = CraStorageFrontend();
+   frontend->Clear(
+       extension(), storage_area(),
+       base::BindOnce(&StorageStorageAreaClearFunction::OnWriteOperationFinished,
+diff --git a/extensions/browser/api/storage/storage_api.h b/extensions/browser/api/storage/storage_api.h
+--- a/extensions/browser/api/storage/storage_api.h
++++ b/extensions/browser/api/storage/storage_api.h
+@@ -32,6 +32,9 @@
+ 
+   StorageAreaNamespace storage_area() const { return storage_area_; }
+ 
++  // Cra: where a shared extension's local and sync storage live (storage_api.cc).
++  StorageFrontend* CraStorageFrontend();
++
+   void OnWriteOperationFinished(StorageFrontend::ResultStatus status);
+ 
+  private:
+diff --git a/extensions/browser/api/storage/storage_frontend.cc b/extensions/browser/api/storage/storage_frontend.cc
+--- a/extensions/browser/api/storage/storage_frontend.cc
++++ b/extensions/browser/api/storage/storage_frontend.cc
+@@ -32,6 +32,7 @@
+ #include "extensions/browser/event_router.h"
+ #include "extensions/browser/extension_registry.h"
+ #include "extensions/browser/extension_system.h"
++#include "chrome/browser/cra_engine_hooks.h"  // nogncheck: Cra's layer (engine/chromium)
+ #include "extensions/common/api/storage.h"
+ #include "extensions/common/event_args.h"
+ #include "extensions/common/extension_id.h"
+@@ -659,6 +660,23 @@
+   base::strlcpy(extension_id_str, extension_id.c_str(),
+                 std::size(extension_id_str));
+   base::debug::Alias(extension_id_str);
++
++  // Cra: a shared extension's data is one profile's, used from every profile it is in (GitHub discussion #595); a
++  // change there reaches storage.onChanged in each of them. Only the frontend that owns the data relays.
++  static bool cra_relaying = false;
++  if (!cra_relaying && cra::g_extension_storage_peers &&
++      (storage_area == StorageAreaNamespace::kLocal ||
++       storage_area == StorageAreaNamespace::kSync)) {
++    cra_relaying = true;
++    for (BrowserContext* peer :
++         cra::g_extension_storage_peers(browser_context_, extension_id)) {
++      if (peer != browser_context_) {
++        StorageFrontend::Get(peer)->OnSettingsChanged(
++            extension_id, storage_area, std::nullopt, changes.Clone());
++      }
++    }
++    cra_relaying = false;
++  }
+ 
+   const std::string namespace_string = StorageAreaToString(storage_area);
+   EventRouter* event_router = EventRouter::Get(browser_context_);

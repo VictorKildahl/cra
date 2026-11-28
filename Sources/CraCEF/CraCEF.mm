@@ -3809,6 +3809,8 @@ static void MarkProfileExitedCleanly(NSString* profileDir) {
     completion(@"not on CEF");
 }
 + (BOOL)uninstallExtension:(NSString*)extensionID profilePath:(NSString*)profilePath { return NO; }
++ (void)setSharedExtensionStorage:(NSDictionary<NSString*, NSDictionary<NSString*, id>*>*)homes {}
++ (BOOL)setExtensionEnabled:(NSString*)extensionID enabled:(BOOL)enabled profilePath:(NSString*)profilePath { return NO; }
 + (NSString*)extensionSettingsForProfile:(NSString*)profilePath {
     // Quitting: the contexts are going away, and ProfileContext would make a new one.
     if (!g_contextInitialized || g_quitting) return nil;

@@ -158,6 +158,7 @@
 #include "components/url_formatter/url_formatter.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/common/api/extension_action/action_info.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_registrar.h"
 #include "chrome/browser/extensions/menu_manager.h"
 #include "extensions/browser/extension_system.h"
@@ -4814,6 +4815,42 @@ views::View* PageHostBrowserView(BrowserWindowInterface* browser) {
   std::u16string error;
   return extensions::ExtensionRegistrar::Get(profile)->UninstallExtension(
       base::SysNSStringToUTF8(extensionID), extensions::UNINSTALL_REASON_USER_INITIATED, &error);
+}
++ (void)setSharedExtensionStorage:(NSDictionary<NSString*, NSDictionary<NSString*, id>*>*)homes {
+  std::map<std::string, cra::SharedStorage> map;
+  for (NSString* extensionID in homes) {
+    NSDictionary* entry = homes[extensionID];
+    NSString* home = [entry[@"home"] isKindOfClass:NSString.class] ? entry[@"home"] : nil;
+    if (!home.length) {
+      continue;
+    }
+    cra::SharedStorage& shared = map[base::SysNSStringToUTF8(extensionID)];
+    shared.home = base::SysNSStringToUTF8(home);
+    for (id profile in [entry[@"profiles"] isKindOfClass:NSArray.class] ? entry[@"profiles"] : @[]) {
+      if ([profile isKindOfClass:NSString.class]) {
+        shared.profiles.insert(base::SysNSStringToUTF8(profile));
+      }
+    }
+  }
+  cra::SetSharedExtensionStorage(std::move(map));
+}
++ (BOOL)setExtensionEnabled:(NSString*)extensionID enabled:(BOOL)enabled profilePath:(NSString*)profilePath {
+  Profile* profile = [self loadedProfile:profilePath];
+  if (!profile) {
+    return NO;
+  }
+  const std::string id = base::SysNSStringToUTF8(extensionID);
+  extensions::ExtensionRegistry* registry = extensions::ExtensionRegistry::Get(profile);
+  if (!registry || !registry->GetInstalledExtension(id)) {
+    return NO;
+  }
+  extensions::ExtensionRegistrar* registrar = extensions::ExtensionRegistrar::Get(profile);
+  if (enabled) {
+    registrar->EnableExtension(id);
+  } else {
+    registrar->DisableExtension(id, {extensions::disable_reason::DISABLE_USER_ACTION});
+  }
+  return YES;
 }
 + (NSString*)preference:(NSString*)name forProfile:(NSString*)profilePath {
   return cra::PreferenceJSON([self loadedProfile:profilePath], name);

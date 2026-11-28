@@ -119,4 +119,17 @@ struct BackForwardMenuTests {
         #expect(!BackForwardMenu.opensNewTab(commandHeld: true, byMouse: false), "⌘[ goes back in the tab")
         #expect(!BackForwardMenu.opensNewTab(commandHeld: false, byMouse: true))
     }
+
+    /// ⌘-click (or ⌘Return) on a row of the history menu: that page opens in a new tab, as ⌘-click on
+    /// the button opens the nearest one (#797), with the entry's own title; a plain pick goes there in the tab.
+    @Test func commandPickedRowOpensItsPageInANewTab() {
+        #expect(BackForwardMenu.pick(commandHeld: false) == .goThere)
+        #expect(BackForwardMenu.pick(commandHeld: true) == .newTab)
+        #expect(BackForwardMenu.newTabPage(history: Self.history, entryID: 11) == .init(entryID: 11, title: "A", url: "https://a.com/"),
+                "the farther page, not only the nearest")
+        #expect(BackForwardMenu.newTabPage(history: Self.history, entryID: 12)?.title == "", "its own title, not the row's address")
+        #expect(BackForwardMenu.newTabPage(history: Self.history, entryID: 14)?.title == "  D  ")
+        #expect(BackForwardMenu.newTabPage(history: Self.history, entryID: 99) == nil)
+        #expect(BackForwardMenu.newTabPage(history: "not json", entryID: 11) == nil)
+    }
 }

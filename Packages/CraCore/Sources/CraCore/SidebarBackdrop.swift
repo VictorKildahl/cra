@@ -44,7 +44,8 @@ public struct SidebarBackdrop: Equatable, Sendable {
 
     /// Solid themes: Arc's material is grey 66 passing 52 % of the backdrop, flat 212 while inactive.
     /// That is its dark material, the one under View ▸ Appearance ▸ Dark (re-fitted 17 Nov 2026: 63 +
-    /// 0.529 · backdrop), and Cra's for a space on Dark.
+    /// 0.529 · backdrop), and Cra's for a space on Dark, with macOS on Light. On macOS Dark a one-colour space
+    /// takes `solidActiveDarkOneColour` instead (#876).
     public static let solidActive = SidebarBackdrop(source: .blur, dim: 0.30, liftTop: 0.26, liftBottom: 0.26)
     /// Arc's light material, under View ▸ Appearance ▸ Light: grey 166 passing 31.5 % of the backdrop
     /// (offline Arc 1.172, 17 Nov 2026, navy, red and pastel over white and black, within 1/255), for a
@@ -56,6 +57,11 @@ public struct SidebarBackdrop: Equatable, Sendable {
     /// #7F6589 at 0.8: 112/112/134 over white, 79/78/100 over black at the top, every channel within 2/255 of
     /// solidAlpha(0.8) of the colour over it; #643).
     public static let solidActiveDarkGradient = SidebarBackdrop(source: .blur, dim: 0.585, liftTop: 0.157, liftBottom: 0.157)
+    /// Arc's material under a one-colour space while macOS shows Dark: grey 35 passing 35 % of the backdrop, a little
+    /// darker than the dark gradient's (Arc 1.174 on a fake home, 28 Nov 2026, View ▸ Appearance on Automatic, a white
+    /// or black window behind: black at full intensity 9 over black and 32 over white, at 0.5 18 and 68, navy #26456B at
+    /// full 42/60/86 and 66/83/110; #876). Cra had macOS Light's 63 + 0.529 · backdrop there: 19 and 51 for that black.
+    public static let solidActiveDarkOneColour = SidebarBackdrop(source: .blur, dim: 0.5955, liftTop: 0.137, liftBottom: 0.137)
     /// Its inactive look, flat 252 (Light) where the dark one is 212 (same run: 252 over navy, red and
     /// pastel, 207 under Dark).
     public static let solidInactiveLight = SidebarBackdrop(source: .none, dim: 1, liftTop: 0.99, liftBottom: 0.99)
@@ -86,7 +92,10 @@ public struct SidebarBackdrop: Equatable, Sendable {
                 if macOSDark && darkGradient { return solidInactiveDarkGradient }
                 return macOSDark && oneColour ? solidInactiveDark : solidInactive
             }
-            var b = lightMaterial ? solidActiveLight : darkGradient ? solidActiveDarkGradient : solidActive
+            // On macOS Dark a one-colour space is drawn over a darker material (Arc 1.174, 28 Nov 2026, #876); the
+            // 63 + 0.529 · backdrop one is macOS Light's.
+            var b = lightMaterial ? solidActiveLight : darkGradient ? solidActiveDarkGradient
+                : macOSDark && oneColour ? solidActiveDarkOneColour : solidActive
             if fullscreen && tintAvailable { b.source = .desktopTint }
             return b
         }

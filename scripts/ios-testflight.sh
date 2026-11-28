@@ -33,6 +33,8 @@ xcodebuild -project iOS/Cra.xcodeproj -scheme Cra -configuration Release \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" "${auth[@]}" archive 2>&1 |
   grep -E "error|ARCHIVE (SUCCEEDED|FAILED)" || true
 [ -d "$ARCHIVE" ] || { echo "archive failed" >&2; exit 1; }
+# An SDK older than the newest iPhones' puts the app in compatibility mode on them (0.1.2 on the Duo).
+scripts/ios-sdk-check.sh "$ARCHIVE/Products/Applications/Cra.app"
 
 options="$(mktemp -t cra-export).plist"
 trap 'rm -f "$options"' EXIT

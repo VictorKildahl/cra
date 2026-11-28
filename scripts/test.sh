@@ -34,6 +34,7 @@ if [ "${1:-}" != core ]; then
   suite "Ask on Page service" scripts/test-ask-on-page-service.sh
   suite "Ask on Page lifecycle" scripts/test-ask-on-page-lifecycle.sh
   suite "iOS popup ownership" scripts/test-mobile-popup.sh
+  suite "iPhone SDK check" scripts/test-ios-sdk-check.sh
   suite "Floating sidebar" scripts/test-floating-sidebar.sh
   suite "Space pages mask" scripts/test-pager-mask.sh
   suite "Extension popup candidate" scripts/test-extension-popup-candidate.sh
