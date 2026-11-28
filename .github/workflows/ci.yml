@@ -28,6 +28,22 @@ jobs:
       - name: Lint
         run: scripts/lint.py
 
+      # CraCore as the harnesses link it (scripts/harness-cracore.sh), kept between runs: a change that
+      # leaves CraCore alone links the last one instead of building it. The script checks the sources,
+      # flags and compiler itself, so a copy that doesn't match is rebuilt, never used.
+      - name: Compiler version
+        id: swift
+        run: echo "hash=$(xcrun swiftc --version 2>&1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore CraCore for the harnesses
+        id: cracore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            build/harness-cracore
+            !build/harness-cracore/.building.*
+          key: harness-cracore-${{ runner.arch }}-${{ steps.swift.outputs.hash }}-${{ hashFiles('Packages/CraCore/Sources/CraCore/*.swift', 'Packages/CraCore/Sources/CraCore/Perf/*.swift', 'scripts/harness-cracore.sh') }}
+
       # Every test once, compiled with coverage; a failing test fails this step with its output.
       # Gates: changed lines under test >= 70 %, CraCore >= 85 % (docs/testing.md).
       - name: CraCore, harnesses and coverage
@@ -40,6 +56,16 @@ jobs:
       - name: CraCore and harnesses
         if: github.event_name != 'pull_request' && github.event.before == '0000000000000000000000000000000000000000'
         run: scripts/test.sh
+
+      # Also when a test failed: the library was built either way.
+      - name: Keep CraCore for the harnesses
+        if: always() && steps.cracore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            build/harness-cracore
+            !build/harness-cracore/.building.*
+          key: ${{ steps.cracore.outputs.cache-primary-key }}
 
       # Fork pull requests get a read-only token: the job summary has the same table.
       - name: Coverage comment

@@ -17,6 +17,11 @@ Runs every harness (scripts/test-*.sh, Tests/test-*.sh) compiled with coverage, 
 It is also CI's one run of those tests: a failing test fails it, with that suite's output, after
 every suite has run. Lint is separate (scripts/lint.py).
 
+Suites run CRA_TEST_JOBS at a time (default: one per core), CraCore's `swift test` among them;
+most of a harness's time is waiting, not computing. The longest start first (FIRST), the harnesses
+that link CraCore once its library is built (scripts/harness-cracore.sh), and the ones in SERIAL
+(on screen, sheets, git) run alone afterwards.
+
 The summary goes to stdout and, in CI, to the job summary (GITHUB_STEP_SUMMARY). Progress and
 test failures go to stderr.
 """
@@ -27,11 +32,23 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHANGED_MIN = 70.0
 CORE_MIN = 85.0
 NOT_HARNESSES = {"scripts/test-update.sh", "scripts/test.sh"}
+JOBS = max(1, int(os.environ.get("CRA_TEST_JOBS") or os.cpu_count() or 1))
+# Run alone, after the others: windows ordered on screen or sheets that need the key window,
+# and the two that failed while another run of every suite shared the Mac.
+SERIAL = ["scripts/test-dialogs.sh", "scripts/test-display.sh", "scripts/test-pager-mask.sh",
+          "scripts/test-pip-overlay.sh", "scripts/test-chromium-window-corners.sh", "scripts/test-feed-counts.sh"]
+# Started first, so none of them is what is left running at the end: the longest on CI (28 Nov 2026).
+LIBRARY = "CraCore library for the harnesses"
+FIRST = ["CraCore", LIBRARY, "scripts/test-store.sh", "Tests/test-browser-manager.sh", "scripts/test-easel-canvas.sh",
+         "scripts/test-link-summary-image.sh"]
+PRINT = threading.Lock()
 
 
 def run(cmd, **kw):
@@ -39,34 +56,86 @@ def run(cmd, **kw):
 
 
 def suite(name, cmd, failures, **kw):
-    """Runs one test suite; a failure is kept with its output and the next suite still runs."""
-    print(f"==> {name}", file=sys.stderr, flush=True)
+    """Runs one test suite; a failure is kept with its output and the next suite still runs.
+    Safe from several threads: a suite's lines print together, when it ends."""
+    start = time.monotonic()
     r = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True, **kw)
-    if r.returncode != 0:
-        failures.append(name)
-        print(f"{r.stdout}{r.stderr}\n{name} failed", file=sys.stderr, flush=True)
+    with PRINT:
+        print(f"==> {name} ({time.monotonic() - start:.0f} s)", file=sys.stderr, flush=True)
+        if r.returncode != 0:
+            failures.append(name)
+            print(f"{r.stdout}{r.stderr}\n{name} failed", file=sys.stderr, flush=True)
 
 
-def harness_coverage(work, failures):
-    """{file: {line: count}} over every harness binary."""
+def run_all(tasks, jobs):
+    """Runs (name, fn, needs) tasks on `jobs` threads. A free thread takes the first task in the list
+    whose `needs` (a task name or None) has finished. Returns {name: fn's result}; raises the first
+    exception a task raised, after every task has run."""
+    pending, done, results, errors = list(tasks), set(), {}, []
+    cond = threading.Condition()
+
+    def worker():
+        while True:
+            with cond:
+                while True:
+                    if not pending:
+                        return
+                    task = next((t for t in pending if t[2] is None or t[2] in done), None)
+                    if task:
+                        pending.remove(task)
+                        break
+                    cond.wait()
+            try:
+                results[task[0]] = task[1]()
+            except Exception as e:  # noqa: BLE001 (raised again below)
+                errors.append(e)
+            finally:
+                with cond:
+                    done.add(task[0])
+                    cond.notify_all()
+
+    threads = [threading.Thread(target=worker) for _ in range(max(1, jobs))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    if errors:
+        raise errors[0]
+    return results
+
+
+def links_cracore(harness):
+    with open(os.path.join(ROOT, harness)) as f:
+        return "harness-cracore.sh" in f.read()
+
+
+def all_coverage(work, failures):
+    """({file: {line: count}} over every harness binary, the same for CraCore's own tests)."""
     keep = os.path.join(work, "bin")
     os.makedirs(keep)
     env = dict(os.environ, CRA_TEST_SWIFTC_FLAGS="-profile-generate -profile-coverage-mapping",
                CRA_TEST_KEEP=keep, LLVM_PROFILE_FILE=os.path.join(work, "%p-%m.profraw"))
     scripts = sorted(glob.glob(os.path.join(ROOT, "scripts/test-*.sh")) + glob.glob(os.path.join(ROOT, "Tests/test-*.sh")))
-    for s in scripts:
-        rel = os.path.relpath(s, ROOT)
-        if rel in NOT_HARNESSES:
-            continue
-        suite(rel, ["bash", s], failures, env=env)
+    harnesses = [os.path.relpath(s, ROOT) for s in scripts]
+    harnesses = [h for h in harnesses if h not in NOT_HARNESSES]
+    # CraCore's library once, before the harnesses that link it, so they don't all build it at once.
+    tasks = [("CraCore", lambda: core_coverage(failures), None),
+             (LIBRARY, lambda: suite(LIBRARY, ["bash", "-c", "source scripts/harness-cracore.sh"], failures, env=env), None)]
+    tasks += [(h, lambda h=h: suite(h, ["bash", h], failures, env=env), LIBRARY if links_cracore(h) else None)
+              for h in harnesses if h not in SERIAL]
+    tasks.sort(key=lambda t: FIRST.index(t[0]) if t[0] in FIRST else len(FIRST))  # stable: the rest stay in order
+    core = run_all(tasks, JOBS)["CraCore"]
+    for h in harnesses:
+        if h in SERIAL:
+            suite(h, ["bash", h], failures, env=env)
     raws = glob.glob(os.path.join(work, "*.profraw"))
     binaries = sorted(glob.glob(os.path.join(keep, "*")))
     if not raws or not binaries:
-        return {}
+        return {}, core
     merged = os.path.join(work, "merged.profdata")
     run(["xcrun", "llvm-profdata", "merge", "-sparse", "-o", merged] + raws)
     objects = [binaries[0]] + [a for b in binaries[1:] for a in ("-object", b)]
-    return lcov_lines(run(["xcrun", "llvm-cov", "export", "-format=lcov", "-instr-profile", merged] + objects))
+    return lcov_lines(run(["xcrun", "llvm-cov", "export", "-format=lcov", "-instr-profile", merged] + objects)), core
 
 
 def core_coverage(failures):
@@ -123,8 +192,7 @@ def main():
     work = tempfile.mkdtemp(prefix="cra-coverage.")
     failures = []
     try:
-        cov = harness_coverage(work, failures)
-        core = core_coverage(failures)
+        cov, core = all_coverage(work, failures)
     finally:
         shutil.rmtree(work, ignore_errors=True)
     if failures:

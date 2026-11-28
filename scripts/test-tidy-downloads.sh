@@ -4,10 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 TEST_DIR="$(mktemp -d /tmp/cra-tidy-downloads-tests.XXXXXX)"
 trap 'rm -rf "$TEST_DIR"' EXIT
+source scripts/harness-cracore.sh
 xcrun swiftc -swift-version 5 -parse-as-library -emit-module -emit-object -module-name CraCEF \
   Tests/Support/TidyDownloadsCEF.swift -emit-module-path "$TEST_DIR/CraCEF.swiftmodule" -o "$TEST_DIR/CraCEF.o"
 xcrun swiftc -swift-version 5 -parse-as-library ${CRA_TEST_SWIFTC_FLAGS:-} -I "$TEST_DIR" "$TEST_DIR/CraCEF.o" \
-  Packages/CraCore/Sources/CraCore/*.swift Packages/CraCore/Sources/CraCore/Perf/*.swift Sources/Cra/Perf/Perf.swift \
+  "${CRACORE[@]}" Sources/Cra/Perf/Perf.swift \
   Sources/Cra/Services/Import/*.swift \
   Sources/Cra/Services/SidebarStore.swift Sources/Cra/Services/SidebarIntegrity.swift Sources/Cra/Services/Persistence.swift \
   Sources/Cra/Services/SettingsSyncService.swift \
